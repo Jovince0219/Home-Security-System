@@ -1,0 +1,603 @@
+{% extends "base.html" %}
+
+{% block title %}CCTV Controls - Security System{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Camera Controls -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold mb-6 flex items-center">
+            <i class="fas fa-video mr-3 text-blue-600"></i>
+            Camera Controls
+        </h2>
+        
+        <!-- Pan/Tilt Controls -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Pan/Tilt Control</h3>
+            <div class="grid grid-cols-3 gap-2 max-w-xs mx-auto">
+                <div></div>
+                <button id="tiltUp" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded">
+                    <i class="fas fa-chevron-up"></i>
+                </button>
+                <div></div>
+                
+                <button id="panLeft" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <button id="centerCamera" class="bg-green-600 hover:bg-green-700 text-white p-3 rounded">
+                    <i class="fas fa-home"></i>
+                </button>
+                <button id="panRight" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+                
+                <div></div>
+                <button id="tiltDown" class="bg-blue-600 hover:bg-blue-700 text-white p-3 rounded">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <div></div>
+            </div>
+            
+            <!-- Speed Control -->
+            <div class="mt-4">
+                <label class="block text-sm font-medium mb-2">Movement Speed</label>
+                <input type="range" id="speedControl" min="1" max="10" value="5" 
+                       class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer">
+                <div class="flex justify-between text-xs text-gray-500 mt-1">
+                    <span>Slow</span>
+                    <span>Fast</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Current Position -->
+        <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h4 class="font-semibold mb-2">Current Position</h4>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>Pan: <span id="currentPan" class="font-mono">0°</span></div>
+                <div>Tilt: <span id="currentTilt" class="font-mono">0°</span></div>
+            </div>
+        </div>
+        
+        <!-- Camera Settings -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Camera Settings</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium mb-1">Brightness</label>
+                    <input type="range" id="brightness" min="0" max="100" value="50" class="w-full">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Contrast</label>
+                    <input type="range" id="contrast" min="0" max="100" value="50" class="w-full">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium mb-1">Zoom</label>
+                    <input type="range" id="zoom" min="100" max="500" value="100" class="w-full">
+                </div>
+                <div class="flex items-center space-x-4">
+                    <label class="flex items-center">
+                        <input type="checkbox" id="nightVision" class="mr-2">
+                        Night Vision
+                    </label>
+                    <label class="flex items-center">
+                        <input type="checkbox" id="autoTracking" class="mr-2">
+                        Auto Tracking
+                    </label>
+                </div>
+            </div>
+            <button id="saveSettings" class="mt-4 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                Save Settings
+            </button>
+        </div>
+    </div>
+    
+    <!-- Audio Controls -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold mb-6 flex items-center">
+            <i class="fas fa-microphone mr-3 text-green-600"></i>
+            Audio Controls
+        </h2>
+        
+        <!-- Audio Recording -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Audio Recording</h3>
+            <div class="flex space-x-4 mb-4">
+                <button id="startAudioRecording" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-record-vinyl mr-2"></i>Start Recording
+                </button>
+                <button id="stopAudioRecording" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-stop mr-2"></i>Stop Recording
+                </button>
+            </div>
+            <div id="audioRecordingStatus" class="text-sm text-gray-600"></div>
+        </div>
+        
+        <!-- Pre-recorded Messages -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Quick Messages</h3>
+            <div class="grid grid-cols-2 gap-2">
+                <button class="play-message bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm" data-message="warning">
+                    <i class="fas fa-exclamation-triangle mr-1"></i>Warning
+                </button>
+                <button class="play-message bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm" data-message="greeting">
+                    <i class="fas fa-hand-wave mr-1"></i>Greeting
+                </button>
+                <button class="play-message bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm" data-message="police">
+                    <i class="fas fa-shield-alt mr-1"></i>Police Alert
+                </button>
+                <button class="play-message bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm" data-message="stop">
+                    <i class="fas fa-hand mr-1"></i>Stop
+                </button>
+            </div>
+        </div>
+        
+        <!-- Custom Message -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Custom Message</h3>
+            <textarea id="customMessage" class="w-full p-3 border rounded-lg" rows="3" 
+                      placeholder="Enter custom message to broadcast..."></textarea>
+            <button id="playCustomMessage" class="mt-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded">
+                <i class="fas fa-bullhorn mr-2"></i>Broadcast Message
+            </button>
+        </div>
+        
+        <!-- Two-Way Communication -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Two-Way Communication</h3>
+            <div class="flex space-x-4">
+                <button id="startTwoWay" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-phone mr-2"></i>Start Communication
+                </button>
+                <button id="stopTwoWay" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-phone-slash mr-2"></i>End Communication
+                </button>
+            </div>
+            <div id="twoWayStatus" class="mt-2 text-sm text-gray-600"></div>
+        </div>
+        
+        <!-- Audio Status -->
+        <div class="p-4 bg-gray-50 rounded-lg">
+            <h4 class="font-semibold mb-2">Audio System Status</h4>
+            <div class="grid grid-cols-2 gap-4 text-sm">
+                <div>Recording: <span id="recordingStatus" class="font-mono">Stopped</span></div>
+                <div>Playing: <span id="playingStatus" class="font-mono">Idle</span></div>
+                <div>Two-Way: <span id="communicationStatus" class="font-mono">Inactive</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Camera Presets -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <h2 class="text-xl font-bold mb-4 flex items-center">
+        <i class="fas fa-bookmark mr-3 text-purple-600"></i>
+        Camera Presets
+    </h2>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <!-- Save New Preset -->
+        <div>
+            <h3 class="text-lg font-semibold mb-3">Save Current Position</h3>
+            <div class="flex space-x-2">
+                <input type="text" id="presetName" class="flex-1 p-2 border rounded" 
+                       placeholder="Enter preset name...">
+                <button id="savePreset" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-save mr-2"></i>Save
+                </button>
+            </div>
+        </div>
+        
+        <!-- Load Presets -->
+        <div>
+            <h3 class="text-lg font-semibold mb-3">Saved Presets</h3>
+            <div id="presetsList" class="space-y-2 max-h-40 overflow-y-auto">
+                <!-- Presets will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Audio Recordings -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <h2 class="text-xl font-bold mb-4 flex items-center">
+        <i class="fas fa-music mr-3 text-green-600"></i>
+        Audio Recordings
+    </h2>
+    
+    <div class="overflow-x-auto">
+        <table class="min-w-full table-auto">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="px-4 py-2 text-left">Timestamp</th>
+                    <th class="px-4 py-2 text-left">Duration</th>
+                    <th class="px-4 py-2 text-left">File Size</th>
+                    <th class="px-4 py-2 text-left">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="audioRecordingsTable">
+                <!-- Audio recordings will be loaded here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentPosition = { pan: 0, tilt: 0 };
+let audioStatus = { recording: false, playing: false, twoWay: false };
+
+// Camera control event listeners
+document.getElementById('panLeft').addEventListener('click', () => moveCamera('pan_left'));
+document.getElementById('panRight').addEventListener('click', () => moveCamera('pan_right'));
+document.getElementById('tiltUp').addEventListener('click', () => moveCamera('tilt_up'));
+document.getElementById('tiltDown').addEventListener('click', () => moveCamera('tilt_down'));
+document.getElementById('centerCamera').addEventListener('click', () => moveCamera('center'));
+
+// Audio control event listeners
+document.getElementById('startAudioRecording').addEventListener('click', startAudioRecording);
+document.getElementById('stopAudioRecording').addEventListener('click', stopAudioRecording);
+document.getElementById('playCustomMessage').addEventListener('click', playCustomMessage);
+document.getElementById('startTwoWay').addEventListener('click', startTwoWayAudio);
+document.getElementById('stopTwoWay').addEventListener('click', stopTwoWayAudio);
+
+// Settings and presets
+document.getElementById('saveSettings').addEventListener('click', saveCameraSettings);
+document.getElementById('savePreset').addEventListener('click', savePreset);
+
+// Quick message buttons
+document.querySelectorAll('.play-message').forEach(button => {
+    button.addEventListener('click', function() {
+        playMessage(this.dataset.message);
+    });
+});
+
+function moveCamera(action) {
+    const speed = document.getElementById('speedControl').value;
+    
+    fetch('/api/camera_control', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `action=${action}&speed=${speed}`
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.result.position) {
+            currentPosition = data.result.position;
+            updatePositionDisplay();
+        }
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showMessage('Camera control error', 'error');
+    });
+}
+
+function updatePositionDisplay() {
+    document.getElementById('currentPan').textContent = currentPosition.pan + '°';
+    document.getElementById('currentTilt').textContent = currentPosition.tilt + '°';
+}
+
+function saveCameraSettings() {
+    const settings = {
+        brightness: document.getElementById('brightness').value,
+        contrast: document.getElementById('contrast').value,
+        zoom: document.getElementById('zoom').value,
+        night_vision: document.getElementById('nightVision').checked,
+        auto_tracking: document.getElementById('autoTracking').checked
+    };
+    
+    const formData = new FormData();
+    Object.keys(settings).forEach(key => {
+        formData.append(key, settings[key]);
+    });
+    
+    fetch('/api/camera_settings', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function startAudioRecording() {
+    fetch('/api/start_audio_recording', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            audioStatus.recording = true;
+            updateAudioButtons();
+            document.getElementById('audioRecordingStatus').textContent = 'Recording in progress...';
+        }
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function stopAudioRecording() {
+    fetch('/api/stop_audio_recording', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            audioStatus.recording = false;
+            updateAudioButtons();
+            document.getElementById('audioRecordingStatus').textContent = 'Recording stopped';
+            loadAudioRecordings(); // Refresh the recordings list
+        }
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function playMessage(messageType) {
+    const formData = new FormData();
+    formData.append('message_type', messageType);
+    
+    fetch('/api/play_audio_message', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function playCustomMessage() {
+    const customText = document.getElementById('customMessage').value.trim();
+    if (!customText) {
+        showMessage('Please enter a message', 'error');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('message_type', 'custom');
+    formData.append('custom_text', customText);
+    
+    fetch('/api/play_audio_message', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            document.getElementById('customMessage').value = '';
+        }
+    });
+}
+
+function startTwoWayAudio() {
+    fetch('/api/start_two_way_audio', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            audioStatus.twoWay = true;
+            updateAudioButtons();
+            document.getElementById('twoWayStatus').textContent = 'Two-way communication active';
+        }
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function stopTwoWayAudio() {
+    fetch('/api/stop_two_way_audio', { method: 'POST' })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            audioStatus.twoWay = false;
+            updateAudioButtons();
+            document.getElementById('twoWayStatus').textContent = 'Two-way communication inactive';
+        }
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function updateAudioButtons() {
+    document.getElementById('startAudioRecording').disabled = audioStatus.recording;
+    document.getElementById('stopAudioRecording').disabled = !audioStatus.recording;
+    document.getElementById('startTwoWay').disabled = audioStatus.twoWay;
+    document.getElementById('stopTwoWay').disabled = !audioStatus.twoWay;
+    
+    // Update status displays
+    document.getElementById('recordingStatus').textContent = audioStatus.recording ? 'Active' : 'Stopped';
+    document.getElementById('playingStatus').textContent = audioStatus.playing ? 'Playing' : 'Idle';
+    document.getElementById('communicationStatus').textContent = audioStatus.twoWay ? 'Active' : 'Inactive';
+}
+
+function savePreset() {
+    const presetName = document.getElementById('presetName').value.trim();
+    if (!presetName) {
+        showMessage('Please enter a preset name', 'error');
+        return;
+    }
+    
+    const formData = new FormData();
+    formData.append('action', 'save');
+    formData.append('preset_name', presetName);
+    
+    fetch('/api/camera_preset', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            document.getElementById('presetName').value = '';
+            loadPresets();
+        }
+    });
+}
+
+function loadPreset(presetName) {
+    const formData = new FormData();
+    formData.append('action', 'load');
+    formData.append('preset_name', presetName);
+    
+    fetch('/api/camera_preset', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success && data.result.position) {
+            currentPosition = data.result.position;
+            updatePositionDisplay();
+        }
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+    });
+}
+
+function deletePreset(presetName) {
+    if (!confirm(`Delete preset "${presetName}"?`)) return;
+    
+    fetch(`/api/delete_preset/${encodeURIComponent(presetName)}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        showMessage(data.result.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            loadPresets();
+        }
+    });
+}
+
+function loadPresets() {
+    fetch('/api/get_presets')
+    .then(response => response.json())
+    .then(data => {
+        const presetsList = document.getElementById('presetsList');
+        presetsList.innerHTML = '';
+        
+        if (data.success && data.presets.length > 0) {
+            data.presets.forEach(preset => {
+                const presetDiv = document.createElement('div');
+                presetDiv.className = 'flex items-center justify-between p-2 bg-gray-50 rounded';
+                presetDiv.innerHTML = `
+                    <span class="font-medium">${preset.name}</span>
+                    <div class="space-x-2">
+                        <button onclick="loadPreset('${preset.name}')" 
+                                class="bg-blue-600 hover:bg-blue-700 text-white px-2 py-1 rounded text-sm">
+                            Load
+                        </button>
+                        <button onclick="deletePreset('${preset.name}')" 
+                                class="bg-red-600 hover:bg-red-700 text-white px-2 py-1 rounded text-sm">
+                            Delete
+                        </button>
+                    </div>
+                `;
+                presetsList.appendChild(presetDiv);
+            });
+        } else {
+            presetsList.innerHTML = '<p class="text-gray-500 text-sm">No presets saved</p>';
+        }
+    });
+}
+
+function loadAudioRecordings() {
+    fetch('/api/get_audio_recordings')
+    .then(response => response.json())
+    .then(data => {
+        const tbody = document.getElementById('audioRecordingsTable');
+        tbody.innerHTML = '';
+        
+        if (data.success && data.recordings.length > 0) {
+            data.recordings.forEach(recording => {
+                const row = tbody.insertRow();
+                row.innerHTML = `
+                    <td class="px-4 py-2">${new Date(recording.timestamp).toLocaleString()}</td>
+                    <td class="px-4 py-2">${recording.duration ? recording.duration.toFixed(1) + 's' : 'N/A'}</td>
+                    <td class="px-4 py-2">${recording.file_size ? (recording.file_size / 1024).toFixed(1) + ' KB' : 'N/A'}</td>
+                    <td class="px-4 py-2">
+                        <div class="space-x-2">
+                            <a href="/${recording.file_path}" target="_blank" 
+                               class="text-blue-600 hover:underline text-sm">
+                                <i class="fas fa-play mr-1"></i>Play
+                            </a>
+                            <button onclick="deleteAudioRecording(${recording.id})" 
+                                    class="text-red-600 hover:underline text-sm">
+                                <i class="fas fa-trash mr-1"></i>Delete
+                            </button>
+                        </div>
+                    </td>
+                `;
+            });
+        } else {
+            const row = tbody.insertRow();
+            row.innerHTML = '<td colspan="4" class="px-4 py-2 text-center text-gray-500">No audio recordings found</td>';
+        }
+    });
+}
+
+function deleteAudioRecording(recordingId) {
+    if (!confirm('Delete this audio recording?')) return;
+    
+    fetch(`/api/delete_audio_recording/${recordingId}`, {
+        method: 'DELETE'
+    })
+    .then(response => response.json())
+    .then(data => {
+        showMessage(data.message, data.success ? 'success' : 'error');
+        if (data.success) {
+            loadAudioRecordings();
+        }
+    });
+}
+
+function showMessage(message, type) {
+    // Create and show a temporary message
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 ${
+        type === 'success' ? 'bg-green-600' : 'bg-red-600'
+    }`;
+    messageDiv.textContent = message;
+    
+    document.body.appendChild(messageDiv);
+    
+    setTimeout(() => {
+        document.body.removeChild(messageDiv);
+    }, 3000);
+}
+
+// Load initial data
+document.addEventListener('DOMContentLoaded', function() {
+    loadPresets();
+    loadAudioRecordings();
+    
+    // Load camera settings
+    fetch('/api/camera_settings')
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            const settings = data.settings.settings;
+            const position = data.settings.position;
+            
+            document.getElementById('brightness').value = settings.brightness || 50;
+            document.getElementById('contrast').value = settings.contrast || 50;
+            document.getElementById('zoom').value = settings.zoom || 100;
+            document.getElementById('nightVision').checked = settings.night_vision || false;
+            document.getElementById('autoTracking').checked = settings.auto_tracking || false;
+            
+            currentPosition = position;
+            updatePositionDisplay();
+        }
+    });
+    
+    // Update audio status periodically
+    setInterval(() => {
+        fetch('/api/audio_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                audioStatus = data.status;
+                updateAudioButtons();
+            }
+        });
+    }, 5000);
+});
+</script>
+{% endblock %}

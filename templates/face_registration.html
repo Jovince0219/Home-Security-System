@@ -1,0 +1,731 @@
+{% extends "base.html" %}
+
+{% block title %}Face Registration - Security System{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Registration Form -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold mb-6 flex items-center">
+            <i class="fas fa-user-plus mr-3 text-blue-600"></i>
+            Register New Face
+        </h2>
+        
+        <!-- Camera Registration -->
+        <div class="mb-6">
+            <h3 class="text-lg font-semibold mb-4">Camera Registration</h3>
+            <div class="relative mb-4">
+                <video id="videoElement" class="w-full h-64 bg-black rounded-lg" autoplay muted></video>
+                <canvas id="captureCanvas" class="hidden"></canvas>
+                <div class="absolute top-2 right-2 bg-red-600 text-white px-2 py-1 rounded text-sm">
+                    <i class="fas fa-circle mr-1"></i>LIVE
+                </div>
+            </div>
+            <div class="mb-4">
+                <label for="personName" class="block text-sm font-medium text-gray-700 mb-2">Person Name</label>
+                <input type="text" id="personName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter person's name">
+            </div>
+            <div class="flex space-x-4">
+                <button id="startCamera" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-video mr-2"></i>Start Camera
+                </button>
+                <button id="capturePhoto" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-camera mr-2"></i>Capture & Register
+                </button>
+                <button id="stopCamera" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-stop mr-2"></i>Stop Camera
+                </button>
+            </div>
+        </div>
+        
+        <hr class="my-6">
+        
+        <!-- File Upload Registration -->
+        <div>
+            <h3 class="text-lg font-semibold mb-4">Upload Image Registration</h3>
+            <form id="uploadForm" enctype="multipart/form-data">
+                <div class="mb-4">
+                    <label for="uploadName" class="block text-sm font-medium text-gray-700 mb-2">Person Name</label>
+                    <input type="text" id="uploadName" name="name" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter person's name">
+                </div>
+                <div class="mb-4">
+                    <label for="imageFile" class="block text-sm font-medium text-gray-700 mb-2">Select Image</label>
+                    <input type="file" id="imageFile" name="image" accept="image/*" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                    <i class="fas fa-upload mr-2"></i>Upload & Register
+                </button>
+            </form>
+        </div>
+    </div>
+    
+    <!-- Face Management Dashboard -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h2 class="text-2xl font-bold mb-6 flex items-center">
+            <i class="fas fa-chart-bar mr-3 text-purple-600"></i>
+            Face Management Dashboard
+        </h2>
+        
+        <!-- Statistics Cards -->
+        <div class="grid grid-cols-2 gap-4 mb-6">
+            <div class="bg-blue-50 p-4 rounded-lg text-center">
+                <div class="text-2xl font-bold text-blue-600" id="totalFaces">0</div>
+                <div class="text-sm text-blue-800">Total Faces</div>
+            </div>
+            <div class="bg-green-50 p-4 rounded-lg text-center">
+                <div class="text-2xl font-bold text-green-600" id="todayFaces">0</div>
+                <div class="text-sm text-green-800">Added Today</div>
+            </div>
+            <div class="bg-purple-50 p-4 rounded-lg text-center">
+                <div class="text-2xl font-bold text-purple-600" id="weekFaces">0</div>
+                <div class="text-sm text-purple-800">This Week</div>
+            </div>
+            <div class="bg-orange-50 p-4 rounded-lg text-center">
+                <div class="text-2xl font-bold text-orange-600" id="todayDetections">0</div>
+                <div class="text-sm text-orange-800">Detections Today</div>
+            </div>
+        </div>
+        
+        <!-- Recent Activity -->
+        <div class="mb-4">
+            <h3 class="text-lg font-semibold mb-2">Recent Activity</h3>
+            <div id="recentActivity" class="text-sm text-gray-600">
+                Loading...
+            </div>
+        </div>
+        
+        <!-- Top Detected Faces -->
+        <div>
+            <h3 class="text-lg font-semibold mb-2">Most Detected This Week</h3>
+            <div id="topFaces" class="space-y-2">
+                Loading...
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Enhanced Face Management -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold flex items-center">
+            <i class="fas fa-users mr-3 text-green-600"></i>
+            Face Management
+        </h2>
+        <div class="flex space-x-2">
+            <button id="selectAllFaces" class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">
+                <i class="fas fa-check-square mr-1"></i>Select All
+            </button>
+            <button id="bulkDeleteFaces" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm" disabled>
+                <i class="fas fa-trash mr-1"></i>Delete Selected
+            </button>
+            <button id="exportFaces" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm">
+                <i class="fas fa-download mr-1"></i>Export
+            </button>
+        </div>
+    </div>
+    
+    <!-- Search and Filter -->
+    <div class="mb-6 flex space-x-4">
+        <div class="flex-1">
+            <input type="text" id="searchFaces" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Search faces by name...">
+        </div>
+        <button id="refreshFaces" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
+        </button>
+    </div>
+    
+    <!-- Faces Grid -->
+    <div id="facesGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <!-- Faces will be loaded here -->
+    </div>
+    
+    <!-- Pagination -->
+    <div id="pagination" class="mt-6 flex justify-center space-x-2">
+        <!-- Pagination will be added here -->
+    </div>
+</div>
+
+<!-- Face Recognition Test -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <h2 class="text-2xl font-bold mb-6 flex items-center">
+        <i class="fas fa-search mr-3 text-purple-600"></i>
+        Test Face Recognition
+    </h2>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <div>
+            <video id="testVideoElement" class="w-full h-64 bg-black rounded-lg mb-4" autoplay muted></video>
+            <div class="flex space-x-4">
+                <button id="startTestCamera" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-video mr-2"></i>Start Test Camera
+                </button>
+                <button id="recognizeFaces" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-search mr-2"></i>Recognize Faces
+                </button>
+            </div>
+        </div>
+        <div>
+            <h3 class="text-lg font-semibold mb-4">Recognition Results</h3>
+            <div id="recognitionResults" class="space-y-2">
+                <p class="text-gray-500">Start camera and click "Recognize Faces" to test</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Edit Face Modal -->
+<div id="editFaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <h3 class="text-lg font-bold mb-4">Edit Face</h3>
+            <form id="editFaceForm">
+                <input type="hidden" id="editFaceId">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Name</label>
+                    <input type="text" id="editFaceName" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                </div>
+                <div class="flex space-x-4">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                        <i class="fas fa-save mr-2"></i>Save
+                    </button>
+                    <button type="button" id="cancelEdit" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                        Cancel
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- View Face Modal -->
+<div id="viewFaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold" id="viewFaceName">Face Image</h3>
+                <button id="closeViewModal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="mb-4">
+                <img id="viewFaceImage" src="" alt="Face Image" class="w-full h-64 object-cover rounded-lg">
+            </div>
+            <div class="text-sm text-gray-600">
+                <p>Registered: <span id="viewFaceDate"></span></p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let videoStream = null;
+    let testVideoStream = null;
+    let selectedFaces = new Set();
+    let currentPage = 1;
+    let facesPerPage = 12;
+    let allFaces = [];
+
+    // Initialize event listeners
+    document.addEventListener('DOMContentLoaded', function() {
+        document.getElementById('startCamera').addEventListener('click', startCamera);
+        document.getElementById('stopCamera').addEventListener('click', stopCamera);
+        document.getElementById('capturePhoto').addEventListener('click', capturePhoto);
+        document.getElementById('startTestCamera').addEventListener('click', startTestCamera);
+        document.getElementById('recognizeFaces').addEventListener('click', recognizeFaces);
+        document.getElementById('uploadForm').addEventListener('submit', uploadForm);
+        document.getElementById('refreshFaces').addEventListener('click', loadFaces);
+        document.getElementById('searchFaces').addEventListener('input', searchFaces);
+        document.getElementById('selectAllFaces').addEventListener('click', selectAllFaces);
+        document.getElementById('bulkDeleteFaces').addEventListener('click', bulkDeleteFaces);
+        document.getElementById('exportFaces').addEventListener('click', exportFaces);
+        document.getElementById('editFaceForm').addEventListener('submit', updateFace);
+        document.getElementById('cancelEdit').addEventListener('click', closeEditModal);
+        document.getElementById('closeViewModal').addEventListener('click', closeViewModal);
+
+        // Load initial data
+        loadFaces();
+        loadStatistics();
+    });
+
+    async function startCamera() {
+        try {
+            videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            document.getElementById('videoElement').srcObject = videoStream;
+            document.getElementById('capturePhoto').disabled = false;
+        } catch (error) {
+            console.error('Error accessing camera:', error);
+            alert('Could not access camera. Please check permissions.');
+        }
+    }
+
+    function stopCamera() {
+        if (videoStream) {
+            videoStream.getTracks().forEach(track => track.stop());
+            document.getElementById('videoElement').srcObject = null;
+            document.getElementById('capturePhoto').disabled = true;
+        }
+    }
+
+    async function startTestCamera() {
+        try {
+            testVideoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+            document.getElementById('testVideoElement').srcObject = testVideoStream;
+            document.getElementById('recognizeFaces').disabled = false;
+        } catch (error) {
+            console.error('Error accessing test camera:', error);
+            alert('Could not access camera. Please check permissions.');
+        }
+    }
+
+    function capturePhoto() {
+        const name = document.getElementById('personName').value.trim();
+        if (!name) {
+            alert('Please enter a person name');
+            return;
+        }
+
+        const video = document.getElementById('videoElement');
+        const canvas = document.getElementById('captureCanvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        const imageData = canvas.toDataURL('image/jpeg');
+
+        // Send to server
+        const formData = new FormData();
+        formData.append('name', name);
+        formData.append('image_data', imageData);
+
+        fetch('/api/capture_face', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                document.getElementById('personName').value = '';
+                loadFaces();
+                loadStatistics();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while registering the face');
+        });
+    }
+
+    function uploadForm(event) {
+        event.preventDefault();
+        const formData = new FormData(event.target);
+
+        fetch('/api/register_face', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                event.target.reset();
+                loadFaces();
+                loadStatistics();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while registering the face');
+        });
+    }
+
+    function loadFaces() {
+        fetch('/api/get_faces')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                allFaces = data.faces;
+                displayFaces(allFaces);
+                updatePagination();
+            }
+        })
+        .catch(error => {
+            console.error('Error loading faces:', error);
+        });
+    }
+
+    function displayFaces(faces) {
+        const facesGrid = document.getElementById('facesGrid');
+        facesGrid.innerHTML = '';
+
+        if (faces.length === 0) {
+            facesGrid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">No faces found</div>';
+            return;
+        }
+
+        // Calculate pagination
+        const startIndex = (currentPage - 1) * facesPerPage;
+        const endIndex = startIndex + facesPerPage;
+        const pageFaces = faces.slice(startIndex, endIndex);
+
+        pageFaces.forEach(face => {
+            const faceCard = document.createElement('div');
+            faceCard.className = 'bg-gray-50 rounded-lg p-4 border hover:shadow-md transition-shadow cursor-pointer';
+            faceCard.onclick = () => viewFace(face);
+            
+            faceCard.innerHTML = `
+                <div class="flex items-start justify-between mb-3">
+                    <input type="checkbox" class="face-checkbox" data-face-id="${face.id}" onchange="toggleFaceSelection(${face.id})">
+                    <div class="flex space-x-2">
+                        <button onclick="event.stopPropagation(); editFace(${face.id}, '${face.name.replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button onclick="event.stopPropagation(); deleteFace(${face.id})" class="text-red-600 hover:text-red-800">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+                <div class="w-full h-32 bg-gray-200 rounded-lg mb-3 flex items-center justify-center">
+                    <i class="fas fa-user text-4xl text-gray-400"></i>
+                </div>
+                <div>
+                    <h4 class="font-semibold text-gray-800">${face.name}</h4>
+                    <p class="text-sm text-gray-500">Registered: ${new Date(face.created_at).toLocaleDateString()}</p>
+                </div>
+            `;
+            
+            facesGrid.appendChild(faceCard);
+        });
+    }
+
+    function viewFace(face) {
+        document.getElementById('viewFaceName').textContent = face.name;
+        document.getElementById('viewFaceImage').src = `/${face.image_path}`;
+        document.getElementById('viewFaceDate').textContent = new Date(face.created_at).toLocaleDateString();
+        document.getElementById('viewFaceModal').classList.remove('hidden');
+    }
+
+    function closeViewModal() {
+        document.getElementById('viewFaceModal').classList.add('hidden');
+    }
+
+    function updatePagination() {
+        const pagination = document.getElementById('pagination');
+        const totalPages = Math.ceil(allFaces.length / facesPerPage);
+        pagination.innerHTML = '';
+
+        if (totalPages <= 1) return;
+
+        // Previous button
+        if (currentPage > 1) {
+            const prevBtn = document.createElement('button');
+            prevBtn.className = 'px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded';
+            prevBtn.innerHTML = '<i class="fas fa-chevron-left"></i>';
+            prevBtn.onclick = () => {
+                currentPage--;
+                displayFaces(allFaces);
+                updatePagination();
+            };
+            pagination.appendChild(prevBtn);
+        }
+
+        // Page numbers
+        for (let i = 1; i <= totalPages; i++) {
+            const pageBtn = document.createElement('button');
+            pageBtn.className = `px-3 py-2 rounded ${i === currentPage ? 'bg-blue-600 text-white' : 'bg-gray-200 hover:bg-gray-300'}`;
+            pageBtn.textContent = i;
+            pageBtn.onclick = () => {
+                currentPage = i;
+                displayFaces(allFaces);
+                updatePagination();
+            };
+            pagination.appendChild(pageBtn);
+        }
+
+        // Next button
+        if (currentPage < totalPages) {
+            const nextBtn = document.createElement('button');
+            nextBtn.className = 'px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded';
+            nextBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+            nextBtn.onclick = () => {
+                currentPage++;
+                displayFaces(allFaces);
+                updatePagination();
+            };
+            pagination.appendChild(nextBtn);
+        }
+    }
+
+    function searchFaces() {
+        const query = document.getElementById('searchFaces').value.trim();
+        if (query === '') {
+            displayFaces(allFaces);
+            return;
+        }
+
+        fetch(`/api/search_faces?query=${encodeURIComponent(query)}`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentPage = 1;
+                displayFaces(data.faces);
+                updatePagination();
+            }
+        })
+        .catch(error => {
+            console.error('Error searching faces:', error);
+        });
+    }
+
+    function toggleFaceSelection(faceId) {
+        if (selectedFaces.has(faceId)) {
+            selectedFaces.delete(faceId);
+        } else {
+            selectedFaces.add(faceId);
+        }
+        document.getElementById('bulkDeleteFaces').disabled = selectedFaces.size === 0;
+    }
+
+    function selectAllFaces() {
+        const checkboxes = document.querySelectorAll('.face-checkbox');
+        const allSelected = Array.from(checkboxes).every(cb => cb.checked);
+        
+        checkboxes.forEach(cb => {
+            cb.checked = !allSelected;
+            const faceId = parseInt(cb.dataset.faceId);
+            if (!allSelected) {
+                selectedFaces.add(faceId);
+            } else {
+                selectedFaces.delete(faceId);
+            }
+        });
+        
+        document.getElementById('bulkDeleteFaces').disabled = selectedFaces.size === 0;
+    }
+
+    function bulkDeleteFaces() {
+        if (selectedFaces.size === 0) return;
+        
+        if (confirm(`Are you sure you want to delete ${selectedFaces.size} selected faces?`)) {
+            fetch('/api/bulk_delete_faces', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ face_ids: Array.from(selectedFaces) })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    selectedFaces.clear();
+                    loadFaces();
+                    loadStatistics();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting faces');
+            });
+        }
+    }
+
+    function editFace(faceId, currentName) {
+        document.getElementById('editFaceId').value = faceId;
+        document.getElementById('editFaceName').value = currentName;
+        document.getElementById('editFaceModal').classList.remove('hidden');
+    }
+
+    function closeEditModal() {
+        document.getElementById('editFaceModal').classList.add('hidden');
+    }
+
+    function updateFace(event) {
+        event.preventDefault();
+        const faceId = document.getElementById('editFaceId').value;
+        const newName = document.getElementById('editFaceName').value.trim();
+        
+        if (!newName) {
+            alert('Please enter a name');
+            return;
+        }
+
+        const formData = new FormData();
+        formData.append('face_id', faceId);
+        formData.append('new_name', newName);
+
+        fetch('/api/update_face', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                alert(data.message);
+                closeEditModal();
+                loadFaces();
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while updating the face');
+        });
+    }
+
+    function deleteFace(faceId) {
+        if (confirm('Are you sure you want to delete this face?')) {
+            fetch(`/api/delete_face/${faceId}`, {
+                method: 'DELETE'
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    loadFaces();
+                    loadStatistics();
+                } else {
+                    alert('Error: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert('An error occurred while deleting the face');
+            });
+        }
+    }
+
+    function exportFaces() {
+        fetch('/api/export_faces')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const dataStr = JSON.stringify(data.faces, null, 2);
+                const dataBlob = new Blob([dataStr], {type: 'application/json'});
+                const url = URL.createObjectURL(dataBlob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = `faces_export_${new Date().toISOString().split('T')[0]}.json`;
+                link.click();
+                URL.revokeObjectURL(url);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred while exporting faces');
+        });
+    }
+
+    function loadStatistics() {
+        fetch('/api/face_statistics')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const stats = data.statistics;
+                document.getElementById('totalFaces').textContent = stats.total_faces;
+                document.getElementById('todayFaces').textContent = stats.today_faces;
+                document.getElementById('weekFaces').textContent = stats.week_faces;
+                document.getElementById('todayDetections').textContent = stats.today_detections;
+
+                // Recent activity
+                const recentActivity = document.getElementById('recentActivity');
+                if (stats.recent_face) {
+                    recentActivity.innerHTML = `Latest: <strong>${stats.recent_face.name}</strong> registered ${new Date(stats.recent_face.created_at).toLocaleDateString()}`;
+                } else {
+                    recentActivity.textContent = 'No faces registered yet';
+                }
+
+                // Top faces
+                const topFaces = document.getElementById('topFaces');
+                if (stats.top_faces.length > 0) {
+                    topFaces.innerHTML = stats.top_faces.map(face => `
+                        <div class="flex justify-between items-center py-1">
+                            <span>${face.person_name}</span>
+                            <span class="text-sm text-gray-500">${face.detection_count} detections</span>
+                        </div>
+                    `).join('');
+                } else {
+                    topFaces.innerHTML = '<div class="text-gray-500">No detections this week</div>';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error loading statistics:', error);
+        });
+    }
+
+    function recognizeFaces() {
+        const video = document.getElementById('testVideoElement');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+        const imageData = canvas.toDataURL('image/jpeg');
+
+        const formData = new FormData();
+        formData.append('image_data', imageData);
+
+        fetch('/api/recognize_faces', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                displayRecognitionResults(data.faces);
+            } else {
+                alert('Error: ' + data.error);
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('An error occurred during face recognition');
+        });
+    }
+
+    function displayRecognitionResults(faces) {
+        const resultsDiv = document.getElementById('recognitionResults');
+        resultsDiv.innerHTML = '';
+
+        if (faces.length === 0) {
+            resultsDiv.innerHTML = '<p class="text-gray-500">No faces detected</p>';
+            return;
+        }
+
+        faces.forEach((face, index) => {
+            const resultDiv = document.createElement('div');
+            resultDiv.className = `p-3 rounded-lg ${face.is_authorized ? 'bg-green-100 border border-green-300' : 'bg-red-100 border border-red-300'}`;
+            
+            const statusIcon = face.is_authorized ? 'fas fa-check-circle text-green-600' : 'fas fa-exclamation-triangle text-red-600';
+            const statusText = face.is_authorized ? 'Authorized' : 'Unauthorized';
+            const coveringText = face.face_covered ? ' (Face Covered)' : '';
+            
+            resultDiv.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-semibold">
+                            <i class="${statusIcon} mr-2"></i>
+                            ${face.name}${coveringText}
+                        </p>
+                        <p class="text-sm">Confidence: ${(face.confidence * 100).toFixed(1)}%</p>
+                    </div>
+                    <span class="text-sm font-medium">${statusText}</span>
+                </div>
+            `;
+            
+            resultsDiv.appendChild(resultDiv);
+        });
+    }
+</script>
+{% endblock %}

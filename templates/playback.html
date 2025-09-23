@@ -1,0 +1,638 @@
+{% extends "base.html" %}
+
+{% block title %}Playback & Recording - Security System{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Recording Controls -->
+    <div class="lg:col-span-2">
+        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-video mr-3 text-red-600"></i>
+                Live Recording Controls
+            </h2>
+            
+            <!-- Live Camera Feed -->
+            <div class="relative mb-4">
+                <video id="liveVideo" class="w-full h-64 bg-black rounded-lg" autoplay muted></video>
+                <canvas id="screenshotCanvas" class="hidden"></canvas>
+                <div id="recordingIndicator" class="absolute top-2 right-2 bg-gray-600 text-white px-2 py-1 rounded text-sm">
+                    <i class="fas fa-circle mr-1"></i>STOPPED
+                </div>
+                <div id="recordingTimer" class="absolute bottom-2 right-2 bg-black bg-opacity-50 text-white px-2 py-1 rounded text-sm hidden">
+                    00:00:00
+                </div>
+            </div>
+            
+            <!-- Recording Controls -->
+            <div class="flex flex-wrap gap-2 mb-4">
+                <button id="startCamera" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-video mr-2"></i>Start Camera
+                </button>
+                <button id="startRecording" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-record-vinyl mr-2"></i>Start Recording
+                </button>
+                <button id="stopRecording" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-stop mr-2"></i>Stop Recording
+                </button>
+                <button id="captureScreenshot" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-camera mr-2"></i>Screenshot
+                </button>
+            </div>
+            
+            <!-- Recording Status -->
+            <div id="recordingStatus" class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="font-semibold mb-2">Recording Status</h3>
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                        <span class="text-gray-600">Status:</span>
+                        <span id="statusText" class="font-medium">Stopped</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-600">Duration:</span>
+                        <span id="durationText" class="font-medium">00:00:00</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-600">Current File:</span>
+                        <span id="currentFileText" class="font-medium">None</span>
+                    </div>
+                    <div>
+                        <span class="text-gray-600">Auto Record:</span>
+                        <label class="inline-flex items-center">
+                            <input type="checkbox" id="autoRecord" class="form-checkbox">
+                            <span class="ml-2">Enabled</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Video Playback -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-play mr-3 text-blue-600"></i>
+                Video Playback
+            </h2>
+            
+            <div class="relative mb-4">
+                <video id="playbackVideo" class="w-full h-64 bg-black rounded-lg" controls>
+                    <source id="videoSource" src="" type="video/avi">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+            
+            <div id="playbackControls" class="flex space-x-4">
+                <button id="prevVideo" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-step-backward mr-2"></i>Previous
+                </button>
+                <button id="nextVideo" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-step-forward mr-2"></i>Next
+                </button>
+                <button id="downloadVideo" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-download mr-2"></i>Download
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Storage Management -->
+    <div class="space-y-6">
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-lg font-bold mb-4 flex items-center">
+                <i class="fas fa-hdd mr-2 text-purple-600"></i>
+                Storage Statistics
+            </h3>
+            
+            <div class="space-y-3">
+                <div class="flex justify-between">
+                    <span>Recordings:</span>
+                    <span id="recordingsSize" class="font-bold">0 MB</span>
+                </div>
+                <div class="flex justify-between">
+                    <span>Screenshots:</span>
+                    <span id="screenshotsSize" class="font-bold">0 MB</span>
+                </div>
+                <div class="flex justify-between border-t pt-2">
+                    <span>Total Storage:</span>
+                    <span id="totalSize" class="font-bold text-blue-600">0 MB</span>
+                </div>
+            </div>
+            
+            <div class="mt-4">
+                <button id="refreshStorage" class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
+                    <i class="fas fa-sync-alt mr-2"></i>Refresh Stats
+                </button>
+            </div>
+        </div>
+        
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h3 class="text-lg font-bold mb-4 flex items-center">
+                <i class="fas fa-broom mr-2 text-orange-600"></i>
+                Storage Cleanup
+            </h3>
+            
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Delete files older than:</label>
+                <select id="cleanupDays" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="7">7 days</option>
+                    <option value="14">14 days</option>
+                    <option value="30" selected>30 days</option>
+                    <option value="60">60 days</option>
+                    <option value="90">90 days</option>
+                </select>
+            </div>
+            
+            <button id="cleanupFiles" class="w-full bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded">
+                <i class="fas fa-trash mr-2"></i>Cleanup Old Files
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Recordings List -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold flex items-center">
+            <i class="fas fa-film mr-3 text-green-600"></i>
+            Recordings Library
+        </h2>
+        <button id="refreshRecordings" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
+        </button>
+    </div>
+    
+    <div class="overflow-x-auto">
+        <table class="min-w-full table-auto">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="px-4 py-2 text-left">Filename</th>
+                    <th class="px-4 py-2 text-left">Start Time</th>
+                    <th class="px-4 py-2 text-left">Duration</th>
+                    <th class="px-4 py-2 text-left">File Size</th>
+                    <th class="px-4 py-2 text-left">Actions</th>
+                </tr>
+            </thead>
+            <tbody id="recordingsTable">
+                <!-- Recordings will be loaded here -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Screenshots Gallery -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold flex items-center">
+            <i class="fas fa-images mr-3 text-indigo-600"></i>
+            Screenshots Gallery
+        </h2>
+        <button id="refreshScreenshots" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+            <i class="fas fa-sync-alt mr-2"></i>Refresh
+        </button>
+    </div>
+    
+    <div id="screenshotsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <!-- Screenshots will be loaded here -->
+    </div>
+</div>
+
+<!-- Screenshot Modal -->
+<div id="screenshotModal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50">
+    <div class="flex items-center justify-center min-h-screen p-4">
+        <div class="bg-white rounded-lg p-6 max-w-4xl w-full">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-bold">Screenshot Details</h3>
+                <button id="closeModal" class="text-gray-500 hover:text-gray-700">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <img id="modalImage" src="/placeholder.svg" alt="Screenshot" class="w-full max-h-96 object-contain mb-4">
+            <div id="modalDetails" class="text-sm text-gray-600">
+                <!-- Screenshot details will be loaded here -->
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let liveStream = null;
+let isRecording = false;
+let recordingTimer = null;
+let currentRecordings = [];
+let currentScreenshots = [];
+let currentVideoIndex = 0;
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize event listeners
+    document.getElementById('startCamera').addEventListener('click', startCamera);
+    document.getElementById('startRecording').addEventListener('click', startRecording);
+    document.getElementById('stopRecording').addEventListener('click', stopRecording);
+    document.getElementById('captureScreenshot').addEventListener('click', captureScreenshot);
+    document.getElementById('refreshStorage').addEventListener('click', loadStorageStats);
+    document.getElementById('cleanupFiles').addEventListener('click', cleanupFiles);
+    document.getElementById('refreshRecordings').addEventListener('click', loadRecordings);
+    document.getElementById('refreshScreenshots').addEventListener('click', loadScreenshots);
+    document.getElementById('prevVideo').addEventListener('click', previousVideo);
+    document.getElementById('nextVideo').addEventListener('click', nextVideo);
+    document.getElementById('downloadVideo').addEventListener('click', downloadCurrentVideo);
+    document.getElementById('closeModal').addEventListener('click', closeScreenshotModal);
+    
+    // Load initial data
+    loadRecordings();
+    loadScreenshots();
+    loadStorageStats();
+    updateRecordingStatus();
+    
+    // Auto-refresh status every 5 seconds
+    setInterval(updateRecordingStatus, 5000);
+});
+
+async function startCamera() {
+    try {
+        liveStream = await navigator.mediaDevices.getUserMedia({ video: true });
+        document.getElementById('liveVideo').srcObject = liveStream;
+        document.getElementById('startRecording').disabled = false;
+        document.getElementById('captureScreenshot').disabled = false;
+    } catch (error) {
+        console.error('Error accessing camera:', error);
+        alert('Could not access camera. Please check permissions.');
+    }
+}
+
+function startRecording() {
+    fetch('/api/start_recording', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                isRecording = true;
+                updateRecordingUI();
+                startRecordingTimer();
+                showNotification(data.result.message, 'success');
+            } else {
+                showNotification('Error: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('Failed to start recording', 'error');
+        });
+}
+
+function stopRecording() {
+    fetch('/api/stop_recording', { method: 'POST' })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                isRecording = false;
+                updateRecordingUI();
+                stopRecordingTimer();
+                showNotification(data.result.message, 'success');
+                loadRecordings();
+                loadStorageStats();
+            } else {
+                showNotification('Error: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('Failed to stop recording', 'error');
+        });
+}
+
+function captureScreenshot() {
+    const description = prompt('Enter screenshot description (optional):') || 'Manual screenshot';
+    
+    const formData = new FormData();
+    formData.append('description', description);
+    
+    fetch('/api/capture_screenshot', {
+        method: 'POST',
+        body: formData
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showNotification(data.result.message, 'success');
+            loadScreenshots();
+            loadStorageStats();
+        } else {
+            showNotification('Error: ' + data.error, 'error');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showNotification('Failed to capture screenshot', 'error');
+    });
+}
+
+function updateRecordingStatus() {
+    fetch('/api/recording_status')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const status = data.status;
+                isRecording = status.is_recording;
+                
+                document.getElementById('statusText').textContent = status.is_recording ? 'Recording' : 'Stopped';
+                document.getElementById('currentFileText').textContent = status.current_file || 'None';
+                
+                if (status.is_recording) {
+                    document.getElementById('durationText').textContent = formatDuration(status.duration);
+                }
+                
+                updateRecordingUI();
+            }
+        })
+        .catch(error => {
+            console.error('Error updating status:', error);
+        });
+}
+
+function updateRecordingUI() {
+    const indicator = document.getElementById('recordingIndicator');
+    const timer = document.getElementById('recordingTimer');
+    
+    if (isRecording) {
+        indicator.innerHTML = '<i class="fas fa-circle mr-1"></i>RECORDING';
+        indicator.className = 'absolute top-2 right-2 bg-red-600 text-white px-2 py-1 rounded text-sm';
+        timer.classList.remove('hidden');
+        document.getElementById('startRecording').disabled = true;
+        document.getElementById('stopRecording').disabled = false;
+    } else {
+        indicator.innerHTML = '<i class="fas fa-circle mr-1"></i>STOPPED';
+        indicator.className = 'absolute top-2 right-2 bg-gray-600 text-white px-2 py-1 rounded text-sm';
+        timer.classList.add('hidden');
+        document.getElementById('startRecording').disabled = false;
+        document.getElementById('stopRecording').disabled = true;
+    }
+}
+
+function startRecordingTimer() {
+    let seconds = 0;
+    recordingTimer = setInterval(() => {
+        seconds++;
+        document.getElementById('recordingTimer').textContent = formatDuration(seconds);
+    }, 1000);
+}
+
+function stopRecordingTimer() {
+    if (recordingTimer) {
+        clearInterval(recordingTimer);
+        recordingTimer = null;
+    }
+}
+
+function formatDuration(seconds) {
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+function loadRecordings() {
+    fetch('/api/get_recordings')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentRecordings = data.recordings;
+                displayRecordings(data.recordings);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading recordings:', error);
+        });
+}
+
+function displayRecordings(recordings) {
+    const tbody = document.getElementById('recordingsTable');
+    tbody.innerHTML = '';
+    
+    if (recordings.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="px-4 py-2 text-center text-gray-500">No recordings found</td></tr>';
+        return;
+    }
+    
+    recordings.forEach((recording, index) => {
+        const row = tbody.insertRow();
+        row.innerHTML = `
+            <td class="px-4 py-2">${recording.file_path.split('/').pop()}</td>
+            <td class="px-4 py-2">${new Date(recording.start_time).toLocaleString()}</td>
+            <td class="px-4 py-2">${formatDuration(recording.duration)}</td>
+            <td class="px-4 py-2">${(recording.file_size / (1024 * 1024)).toFixed(2)} MB</td>
+            <td class="px-4 py-2">
+                <div class="flex space-x-2">
+                    <button onclick="playRecording(${index})" class="text-blue-600 hover:text-blue-800">
+                        <i class="fas fa-play"></i>
+                    </button>
+                    <button onclick="downloadRecording('${recording.file_path}')" class="text-green-600 hover:text-green-800">
+                        <i class="fas fa-download"></i>
+                    </button>
+                    <button onclick="deleteRecording(${recording.id})" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            </td>
+        `;
+    });
+}
+
+function playRecording(index) {
+    if (currentRecordings[index]) {
+        currentVideoIndex = index;
+        const video = document.getElementById('playbackVideo');
+        const source = document.getElementById('videoSource');
+        source.src = '/' + currentRecordings[index].file_path;
+        video.load();
+        document.getElementById('downloadVideo').disabled = false;
+    }
+}
+
+function previousVideo() {
+    if (currentVideoIndex > 0) {
+        playRecording(currentVideoIndex - 1);
+    }
+}
+
+function nextVideo() {
+    if (currentVideoIndex < currentRecordings.length - 1) {
+        playRecording(currentVideoIndex + 1);
+    }
+}
+
+function downloadCurrentVideo() {
+    if (currentRecordings[currentVideoIndex]) {
+        downloadRecording(currentRecordings[currentVideoIndex].file_path);
+    }
+}
+
+function downloadRecording(filePath) {
+    const link = document.createElement('a');
+    link.href = '/' + filePath;
+    link.download = filePath.split('/').pop();
+    link.click();
+}
+
+function deleteRecording(recordingId) {
+    if (confirm('Are you sure you want to delete this recording?')) {
+        fetch(`/api/delete_recording/${recordingId}`, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    loadRecordings();
+                    loadStorageStats();
+                } else {
+                    showNotification('Error: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Failed to delete recording', 'error');
+            });
+    }
+}
+
+function loadScreenshots() {
+    fetch('/api/get_screenshots')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                currentScreenshots = data.screenshots;
+                displayScreenshots(data.screenshots);
+            }
+        })
+        .catch(error => {
+            console.error('Error loading screenshots:', error);
+        });
+}
+
+function displayScreenshots(screenshots) {
+    const grid = document.getElementById('screenshotsGrid');
+    grid.innerHTML = '';
+    
+    if (screenshots.length === 0) {
+        grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-8">No screenshots found</div>';
+        return;
+    }
+    
+    screenshots.forEach(screenshot => {
+        const card = document.createElement('div');
+        card.className = 'bg-gray-50 rounded-lg p-4 hover:shadow-md transition-shadow cursor-pointer';
+        card.onclick = () => openScreenshotModal(screenshot);
+        
+        card.innerHTML = `
+            <img src="/${screenshot.file_path}" alt="Screenshot" class="w-full h-32 object-cover rounded-lg mb-2">
+            <div class="text-sm">
+                <p class="font-medium truncate">${screenshot.description || 'Screenshot'}</p>
+                <p class="text-gray-500">${new Date(screenshot.timestamp).toLocaleDateString()}</p>
+                <p class="text-gray-500">${(screenshot.file_size / 1024).toFixed(1)} KB</p>
+            </div>
+            <div class="mt-2 flex justify-end">
+                <button onclick="event.stopPropagation(); deleteScreenshot(${screenshot.id})" class="text-red-600 hover:text-red-800">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        grid.appendChild(card);
+    });
+}
+
+function openScreenshotModal(screenshot) {
+    document.getElementById('modalImage').src = '/' + screenshot.file_path;
+    document.getElementById('modalDetails').innerHTML = `
+        <p><strong>Description:</strong> ${screenshot.description || 'N/A'}</p>
+        <p><strong>Timestamp:</strong> ${new Date(screenshot.timestamp).toLocaleString()}</p>
+        <p><strong>File Size:</strong> ${(screenshot.file_size / 1024).toFixed(1)} KB</p>
+        <p><strong>Detection Type:</strong> ${screenshot.detection_type || 'Manual'}</p>
+    `;
+    document.getElementById('screenshotModal').classList.remove('hidden');
+}
+
+function closeScreenshotModal() {
+    document.getElementById('screenshotModal').classList.add('hidden');
+}
+
+function deleteScreenshot(screenshotId) {
+    if (confirm('Are you sure you want to delete this screenshot?')) {
+        fetch(`/api/delete_screenshot/${screenshotId}`, { method: 'DELETE' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification(data.message, 'success');
+                    loadScreenshots();
+                    loadStorageStats();
+                } else {
+                    showNotification('Error: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                showNotification('Failed to delete screenshot', 'error');
+            });
+    }
+}
+
+function loadStorageStats() {
+    fetch('/api/storage_stats')
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const stats = data.stats;
+                document.getElementById('recordingsSize').textContent = stats.recordings.size_mb + ' MB';
+                document.getElementById('screenshotsSize').textContent = stats.screenshots.size_mb + ' MB';
+                document.getElementById('totalSize').textContent = stats.total.size_mb + ' MB';
+            }
+        })
+        .catch(error => {
+            console.error('Error loading storage stats:', error);
+        });
+}
+
+function cleanupFiles() {
+    const days = document.getElementById('cleanupDays').value;
+    
+    if (confirm(`Are you sure you want to delete all files older than ${days} days?`)) {
+        const formData = new FormData();
+        formData.append('days', days);
+        
+        fetch('/api/cleanup_old_files', {
+            method: 'POST',
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                showNotification(data.result.message, 'success');
+                loadRecordings();
+                loadScreenshots();
+                loadStorageStats();
+            } else {
+                showNotification('Error: ' + data.error, 'error');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            showNotification('Failed to cleanup files', 'error');
+        });
+    }
+}
+
+function showNotification(message, type) {
+    // Simple notification system
+    const notification = document.createElement('div');
+    notification.className = `fixed top-4 right-4 p-4 rounded-lg text-white z-50 ${
+        type === 'success' ? 'bg-green-600' : 'bg-red-600'
+    }`;
+    notification.textContent = message;
+    
+    document.body.appendChild(notification);
+    
+    setTimeout(() => {
+        document.body.removeChild(notification);
+    }, 3000);
+}
+</script>
+{% endblock %}

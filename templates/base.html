@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Security System{% endblock %}</title>
+    <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <nav class="bg-blue-900 text-white shadow-lg">
+        <div class="max-w-7xl mx-auto px-4">
+            <div class="flex justify-between items-center py-4">
+                <div class="flex items-center space-x-4">
+                    <i class="fas fa-shield-alt text-2xl"></i>
+                    <h1 class="text-xl font-bold">Security System</h1>
+                </div>
+                <div class="flex space-x-6">
+                    <a href="{{ url_for('dashboard') }}" class="hover:text-blue-200 transition-colors">
+                        <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                    </a>
+                    <a href="{{ url_for('face_registration') }}" class="hover:text-blue-200 transition-colors">
+                        <i class="fas fa-user-plus mr-2"></i>Face Registration
+                    </a>
+                    <a href="{{ url_for('motion_detection') }}" class="hover:text-blue-200 transition-colors">
+                        <i class="fas fa-running mr-2"></i>Motion Detection
+                    </a>
+                    <a href="{{ url_for('alerts') }}" class="hover:text-blue-200 transition-colors">
+                        <i class="fas fa-bell mr-2"></i>Alerts
+                    </a>
+                    <a href="{{ url_for('playback') }}" class="hover:text-blue-200 transition-colors">
+                        <i class="fas fa-play mr-2"></i>Playback
+                    </a>
+                    <a href="{{ url_for('controls') }}" class="hover:text-blue-200 transition-colors">
+                        <i class="fas fa-gamepad mr-2"></i>Controls
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto py-6 px-4">
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                <div class="mb-4">
+                    {% for message in messages %}
+                        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-2">
+                            {{ message }}
+                        </div>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

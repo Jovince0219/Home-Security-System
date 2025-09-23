@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Camera Settings - CCTV System</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .settings-container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .connection-status {
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        .connected {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .url-examples {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">CCTV System</a>
+            <div class="navbar-nav">
+                <a class="nav-link" href="/dashboard">Dashboard</a>
+                <a class="nav-link active" href="/camera_settings">Camera Settings</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container settings-container">
+        <h2>WiFi Camera Settings</h2>
+        
+        <div class="connection-status {{ 'connected' if camera_connected else 'disconnected' }}">
+            <strong>Status:</strong> 
+            {{ 'Connected' if camera_connected else 'Disconnected' }}
+        </div>
+
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ 'success' if category == 'success' else 'danger' }} alert-dismissible fade show">
+                        {{ message }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST" action="/save_camera_settings">
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="connection_type" class="form-label">Connection Type</label>
+                        <select class="form-select" id="connection_type" name="connection_type" onchange="toggleUrlFields()">
+                            <option value="rtsp" {{ 'selected' if config.connection_type == 'rtsp' else '' }}>RTSP</option>
+                            <option value="http" {{ 'selected' if config.connection_type == 'http' else '' }}>HTTP</option>
+                            <option value="mjpeg" {{ 'selected' if config.connection_type == 'mjpeg' else '' }}>MJPEG</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-info" onclick="testConnection()">Test Connection</button>
+                        <div id="test-result" class="mt-2"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="mb-3" id="rtsp-field">
+                <label for="rtsp_url" class="form-label">RTSP URL</label>
+                <input type="text" class="form-control" id="rtsp_url" name="rtsp_url" 
+                       value="{{ config.rtsp_url }}" placeholder="rtsp://192.168.1.100:554/stream">
+                <div class="url-examples">
+                    <strong>Common RTSP URL formats:</strong><br>
+                    • Generic: <code>rtsp://192.168.1.54:554/[PATH]</code><br>
+                    • Hikvision: <code>rtsp://192.168.1.54:554/Streaming/Channels/101</code><br>
+                    • Dahua: <code>rtsp://192.168.1.54:554/cam/realmonitor?channel=1&subtype=0</code><br>
+                    • TP-Link: <code>rtsp://192.168.1.54:554/stream1</code><br>
+                    • V380 Pro: <code>rtsp://192.168.1.54:554/live/ch00_0</code>
+                </div>
+            </div>
+
+            <div class="mb-3" id="http-field" style="display: none;">
+                <label for="http_url" class="form-label">HTTP/MJPEG URL</label>
+                <input type="text" class="form-control" id="http_url" name="http_url" 
+                       value="{{ config.http_url }}" placeholder="http://192.168.1.100:8080/video">
+                <div class="url-examples">
+                    <strong>Common HTTP/MJPEG URL formats:</strong><br>
+                    • Generic MJPEG: <code>http://192.168.1.54:554/mjpeg</code><br>
+                    • IP Webcam: <code>http://192.168.1.54:8080/video</code><br>
+                    • DroidCam: <code>http://192.168.1.54:4747/mjpegfeed</code>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="username" class="form-label">Username (Optional)</label>
+                        <input type="text" class="form-control" id="username" name="username" 
+                               value="{{ config.username }}">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="password" class="form-label">Password (Optional)</label>
+                        <input type="password" class="form-control" id="password" name="password" 
+                               value="{{ config.password }}">
+                    </div>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="reconnect_attempts" class="form-label">Reconnect Attempts</label>
+                        <input type="number" class="form-control" id="reconnect_attempts" name="reconnect_attempts" 
+                               value="{{ config.reconnect_attempts }}" min="1" max="10">
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="mb-3">
+                        <label for="reconnect_delay" class="form-label">Reconnect Delay (seconds)</label>
+                        <input type="number" class="form-control" id="reconnect_delay" name="reconnect_delay" 
+                               value="{{ config.reconnect_delay }}" min="1" max="30">
+                    </div>
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+
+        <div class="mt-5">
+            <h4>Setup Instructions</h4>
+            <div class="accordion" id="setupAccordion">
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#v380Setup">
+                            V380 Pro Camera Setup
+                        </button>
+                    </h2>
+                    <div id="v380Setup" class="accordion-collapse collapse show">
+                        <div class="accordion-body">
+                            <ol>
+                                <li>Open V380 Pro app and go to camera settings</li>
+                                <li>Enable RTSP stream in network settings</li>
+                                <li>Note down the RTSP URL (usually: <code>rtsp://[CAMERA_IP]:554/live/ch00_0</code>)</li>
+                                <li>Find your camera's IP address in the app or router settings</li>
+                                <li>Enter the RTSP URL above and test connection</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="accordion-item">
+                    <h2 class="accordion-header">
+                        <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#genericSetup">
+                            Generic IP Camera Setup
+                        </button>
+                    </h2>
+                    <div id="genericSetup" class="accordion-collapse collapse">
+                        <div class="accordion-body">
+                            <ol>
+                                <li>Access your camera's web interface (usually http://[CAMERA_IP])</li>
+                                <li>Login with admin credentials</li>
+                                <li>Go to Network or Streaming settings</li>
+                                <li>Enable RTSP or HTTP streaming</li>
+                                <li>Note the stream URL and port</li>
+                                <li>Test the URL in VLC player first</li>
+                            </ol>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        function toggleUrlFields() {
+            const connectionType = document.getElementById('connection_type').value;
+            const rtspField = document.getElementById('rtsp-field');
+            const httpField = document.getElementById('http-field');
+            
+            if (connectionType === 'rtsp') {
+                rtspField.style.display = 'block';
+                httpField.style.display = 'none';
+            } else {
+                rtspField.style.display = 'none';
+                httpField.style.display = 'block';
+            }
+        }
+
+        function testConnection() {
+            const resultDiv = document.getElementById('test-result');
+            resultDiv.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div> Testing...';
+            
+            fetch('/test_camera_connection')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        resultDiv.innerHTML = '<div class="text-success">✓ ' + data.message + '</div>';
+                    } else {
+                        resultDiv.innerHTML = '<div class="text-danger">✗ ' + data.message + '</div>';
+                    }
+                })
+                .catch(error => {
+                    resultDiv.innerHTML = '<div class="text-danger">✗ Connection test failed</div>';
+                });
+        }
+
+        // Initialize form on page load
+        toggleUrlFields();
+    </script>
+</body>
+</html>
