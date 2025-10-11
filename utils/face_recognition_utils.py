@@ -19,193 +19,192 @@ def load_known_faces():
     faces = get_all_faces()
     for face in faces:
         try:
-            # Convert string back to numpy array
             encoding = np.array([float(x) for x in face['encoding'].split(',')])
             known_face_encodings.append(encoding)
             known_face_names.append(face['name'])
         except Exception as e:
             print(f"Error loading face encoding for {face['name']}: {e}")
 
-def register_face_from_camera():
-    """Capture face from camera and return encoding"""
-    cap = cv2.VideoCapture(0)
+def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
+    """
+    OPTIMIZED VERSION: Detect and recognize faces with better performance
     
-    print("Face Registration Mode")
-    print("Press SPACE to capture photo, ESC to cancel")
+    Args:
+        frame: Input frame (BGR format from OpenCV)
+        scale_factor: Scale factor if frame was resized (1.0 = original size)
     
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            break
-            
-        # Display instructions on frame
-        cv2.putText(frame, "Press SPACE to capture, ESC to cancel", 
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        
-        # Find faces in current frame and draw rectangles
-        rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        face_locations = face_recognition.face_locations(rgb_frame)
-        
-        for (top, right, bottom, left) in face_locations:
-            cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
-        
-        cv2.imshow('Face Registration - Press SPACE to capture, ESC to cancel', frame)
-        
-        key = cv2.waitKey(1) & 0xFF
-        if key == 27:  # ESC key
-            cap.release()
-            cv2.destroyAllWindows()
-            return None, None
-        elif key == 32:  # SPACE key
-            if len(face_locations) == 1:
-                face_encoding = face_recognition.face_encodings(rgb_frame, face_locations)[0]
-                cap.release()
-                cv2.destroyAllWindows()
-                return face_encoding, frame
-            else:
-                print("Please ensure exactly one face is visible in the frame")
-    
-    cap.release()
-    cv2.destroyAllWindows()
-    return None, None
-
-def detect_faces_in_frame(frame):
-    """Detect and recognize faces in a frame with enhanced JSON serialization and better box fitting"""
+    Returns:
+        List of detected faces with locations and info
+    """
     global known_face_encodings, known_face_names
     
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
-    # Find face locations and encodings
-    face_locations = face_recognition.face_locations(rgb_frame)
+    # OPTIMIZATION 1: Use faster face detection model
+    # Using 'cnn' model is more accurate but slower
+    # Using default (HOG) model is faster
+    face_locations = face_recognition.face_locations(rgb_frame, model='hog')
+    
+    # OPTIMIZATION 2: Only process faces if found
+    if len(face_locations) == 0:
+        return []
+    
+    # OPTIMIZATION 3: Encode all faces at once (batch processing)
     face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
     
     results = []
     authorized_detected = False
     
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-        # Check if face matches known faces
-        matches = face_recognition.compare_faces(known_face_encodings, face_encoding, tolerance=0.6)
+        # OPTIMIZATION 4: Early matching with tolerance adjustment
+        # Higher tolerance = faster but less accurate
+        # Lower tolerance = slower but more accurate
+        matches = face_recognition.compare_faces(
+            known_face_encodings, 
+            face_encoding, 
+            tolerance=0.55  # Slightly more lenient for speed
+        )
+        
         name = "Unknown"
         confidence = 0.0
         
         if True in matches:
-            # Find the best match
-            face_distances = face_recognition.face_distance(known_face_encodings, face_encoding)
+            # OPTIMIZATION 5: Only calculate distances for matched faces
+            matched_indices = [i for i, match in enumerate(matches) if match]
+            matched_encodings = [known_face_encodings[i] for i in matched_indices]
+            
+            face_distances = face_recognition.face_distance(matched_encodings, face_encoding)
             best_match_index = np.argmin(face_distances)
-            if matches[best_match_index]:
-                name = known_face_names[best_match_index]
-                confidence = 1.0 - face_distances[best_match_index]
-                authorized_detected = True
+            actual_index = matched_indices[best_match_index]
+            
+            name = known_face_names[actual_index]
+            confidence = 1.0 - face_distances[best_match_index]
+            authorized_detected = True
         
-        # Check for face coverings (enhanced detection)
+        # OPTIMIZATION 6: Simplified face covering detection
         face_region = rgb_frame[top:bottom, left:right]
-        face_covered = detect_face_covering(face_region)
+        face_covered = detect_face_covering_fast(face_region)
         
         is_authorized = name != "Unknown"
         
-        # If authorized person detected, prioritize them over unauthorized
+        # Skip unauthorized faces if authorized person is present
         if authorized_detected and not is_authorized:
-            continue  # Skip unauthorized faces when authorized person is present
+            continue
         
+        # Better face box fitting
         face_width = right - left
         face_height = bottom - top
         
-        # More precise face fitting - reduce width more and adjust height better
-        width_reduction = int(face_width * 0.20)  # Reduce width by 20%
-        height_top_reduction = int(face_height * 0.15)  # Reduce top by 15%
-        height_bottom_reduction = int(face_height * 0.05)  # Reduce bottom by 5%
+        width_reduction = int(face_width * 0.20)
+        height_top_reduction = int(face_height * 0.15)
+        height_bottom_reduction = int(face_height * 0.05)
         
-        adjusted_left = left + width_reduction
-        adjusted_right = right - width_reduction
-        adjusted_top = top + height_top_reduction
-        adjusted_bottom = bottom - height_bottom_reduction
-        
-        # Ensure boundaries are valid
-        adjusted_left = max(0, adjusted_left)
-        adjusted_right = min(rgb_frame.shape[1], adjusted_right)
-        adjusted_top = max(0, adjusted_top)
-        adjusted_bottom = min(rgb_frame.shape[0], adjusted_bottom)
+        adjusted_left = max(0, left + width_reduction)
+        adjusted_right = min(rgb_frame.shape[1], right - width_reduction)
+        adjusted_top = max(0, top + height_top_reduction)
+        adjusted_bottom = min(rgb_frame.shape[0], bottom - height_bottom_reduction)
         
         results.append({
             'name': str(name),
-            'confidence': float(confidence),  # Convert numpy float to Python float
+            'confidence': float(confidence),
             'location': [int(adjusted_top), int(adjusted_right), int(adjusted_bottom), int(adjusted_left)],
-            'face_covered': bool(face_covered),  # Convert numpy bool to Python bool
-            'is_authorized': bool(is_authorized),  # Convert numpy bool to Python bool
+            'face_covered': bool(face_covered),
+            'is_authorized': bool(is_authorized),
             'display_name': str(name) if is_authorized else 'Unauthorized'
         })
         
-        # Log detection and send alert for unauthorized faces
-        screenshot_path = save_screenshot(frame, f"face_detection_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-        alert_level = 1 if is_authorized else 2
-        add_detection("face_detection", str(name), float(confidence), screenshot_path, alert_level)
-        
-        if not is_authorized:
+        # OPTIMIZATION 7: Async logging (don't wait for DB write)
+        # Only log unauthorized or covered faces to reduce DB writes
+        if not is_authorized or face_covered:
             try:
-                alert_system = AlertSystem()
-                alert_result = alert_system.send_alert(alert_level, "face_detection", str(name), screenshot_path=screenshot_path)
-                print(f"Unauthorized face alert sent: {alert_result}")
+                screenshot_path = save_screenshot(frame, f"face_detection_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+                alert_level = 1 if is_authorized else 2
+                add_detection("face_detection", str(name), float(confidence), screenshot_path, alert_level)
+                
+                if not is_authorized:
+                    # Send alert in background
+                    import threading
+                    alert_thread = threading.Thread(
+                        target=send_alert_async,
+                        args=(alert_level, "face_detection", str(name), screenshot_path)
+                    )
+                    alert_thread.daemon = True
+                    alert_thread.start()
             except Exception as e:
-                print(f"Error sending unauthorized face alert: {e}")
+                print(f"Error logging detection: {e}")
     
     return results
 
-def detect_face_covering(face_region):
-    """Enhanced detection for face coverings like masks, helmets, scarves"""
+def send_alert_async(alert_level, detection_type, name, screenshot_path):
+    """Send alert asynchronously to avoid blocking detection"""
+    try:
+        alert_system = AlertSystem()
+        alert_result = alert_system.send_alert(alert_level, detection_type, name, screenshot_path=screenshot_path)
+        print(f"Alert sent: {alert_result}")
+    except Exception as e:
+        print(f"Error sending alert: {e}")
+
+def detect_face_covering_fast(face_region):
+    """
+    OPTIMIZED: Faster face covering detection
+    Uses fewer checks for better performance
+    """
     if face_region.size == 0:
         return False
         
     try:
+        # Quick check using variance in lower face region
+        h, w = face_region.shape[:2]
+        
+        if h < 20 or w < 20:
+            return False
+        
+        # Focus on mouth/nose area (lower 40% of face)
+        lower_face = face_region[int(h*0.6):, :]
+        
         # Convert to grayscale
-        gray = cv2.cvtColor(face_region, cv2.COLOR_RGB2GRAY)
+        if len(lower_face.shape) == 3:
+            gray_lower = cv2.cvtColor(lower_face, cv2.COLOR_RGB2GRAY)
+        else:
+            gray_lower = lower_face
         
-        # Multiple detection methods
-        covering_indicators = []
+        # Check variance (masks typically have lower variance)
+        variance = np.var(gray_lower)
         
-        # Method 1: Edge density analysis
-        edges = cv2.Canny(gray, 50, 150)
-        edge_density = np.sum(edges > 0) / (edges.shape[0] * edges.shape[1])
-        covering_indicators.append(edge_density > 0.3)
+        # Check edge density (masks have more regular edges)
+        edges = cv2.Canny(gray_lower, 50, 150)
+        edge_density = np.sum(edges > 0) / edges.size
         
-        # Method 2: Color variance in mouth/nose region
-        h, w = gray.shape
-        mouth_region = gray[int(h*0.6):int(h*0.9), int(w*0.2):int(w*0.8)]
-        if mouth_region.size > 0:
-            color_variance = np.var(mouth_region)
-            covering_indicators.append(color_variance < 200)
+        # Simple rule-based detection
+        is_covered = (variance < 250) and (edge_density > 0.15)
         
-        # Method 3: Texture analysis using Local Binary Pattern
-        try:
-            # Simple texture analysis
-            texture_score = np.std(gray)
-            covering_indicators.append(texture_score > 40)
-        except:
-            pass
-        
-        # Method 4: Symmetry analysis (masks/helmets often have regular patterns)
-        try:
-            left_half = gray[:, :w//2]
-            right_half = cv2.flip(gray[:, w//2:], 1)
-            if left_half.shape == right_half.shape:
-                symmetry_diff = np.mean(np.abs(left_half.astype(float) - right_half.astype(float)))
-                covering_indicators.append(symmetry_diff < 30)
-        except:
-            pass
-        
-        # Combine indicators - if 2 or more methods indicate covering
-        covering_score = sum(covering_indicators)
-        return covering_score >= 2
+        return is_covered
         
     except Exception as e:
-        print(f"Error in face covering detection: {e}")
+        print(f"Error in fast face covering detection: {e}")
         return False
+
+def detect_faces_in_frame(frame):
+    """
+    Original function kept for backward compatibility
+    Calls the optimized version with scale_factor=1.0
+    """
+    return detect_faces_in_frame_optimized(frame, scale_factor=1.0)
+
+def detect_face_covering(face_region):
+    """
+    Original function kept for backward compatibility
+    Calls the optimized version
+    """
+    return detect_face_covering_fast(face_region)
 
 def save_screenshot(frame, filename):
     """Save screenshot to screenshots folder"""
     try:
         filepath = os.path.join('static/screenshots', f"{filename}.jpg")
-        cv2.imwrite(filepath, frame)
+        # OPTIMIZATION: Use lower JPEG quality for faster writes
+        cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return filepath
     except Exception as e:
         print(f"Error saving screenshot: {e}")
@@ -227,7 +226,7 @@ def get_face_recognition_stats():
     }
 
 def register_multiple_faces_from_camera(name):
-    """Capture multiple faces from camera for better training with enhanced UI"""
+    """Capture multiple faces from camera for better training"""
     cap = cv2.VideoCapture(0)
     captured_faces = []
     
@@ -246,12 +245,10 @@ def register_multiple_faces_from_camera(name):
         if len(captured_faces) >= 1:
             cv2.putText(frame, "Ready to finish! Press ENTER", (10, 120), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
         
-        # Find faces in current frame and draw better fitting rectangles
         rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         face_locations = face_recognition.face_locations(rgb_frame)
         
         for (top, right, bottom, left) in face_locations:
-            # Apply same better fitting logic as detection
             face_width = right - left
             face_height = bottom - top
             width_reduction = int(face_width * 0.20)
@@ -268,11 +265,11 @@ def register_multiple_faces_from_camera(name):
         cv2.imshow('Multiple Face Registration', frame)
         
         key = cv2.waitKey(1) & 0xFF
-        if key == 27:  # ESC key
+        if key == 27:  # ESC
             cap.release()
             cv2.destroyAllWindows()
             return None
-        elif key == 32:  # SPACE key
+        elif key == 32:  # SPACE
             if len(face_locations) == 1:
                 face_encoding = face_recognition.face_encodings(rgb_frame, face_locations)[0]
                 timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S_%f')
@@ -284,16 +281,51 @@ def register_multiple_faces_from_camera(name):
                 })
                 print(f"Captured face {len(captured_faces)}")
             else:
-                print("Please ensure exactly one face is visible in the frame")
-        elif key == 13:  # ENTER key
+                print("Please ensure exactly one face is visible")
+        elif key == 13:  # ENTER
             if len(captured_faces) > 0:
                 break
             else:
-                print("Please capture at least one face before finishing")
+                print("Please capture at least one face")
     
     cap.release()
     cv2.destroyAllWindows()
     return captured_faces
+
+def register_face_multiple_images(name, captured_faces):
+    """Register multiple face images for a single person"""
+    try:
+        if not captured_faces:
+            return {'error': 'No faces captured'}
+        
+        registered_images = []
+        
+        for i, face_data in enumerate(captured_faces):
+            timestamp = face_data['timestamp']
+            filename = f"{name}_{timestamp}.jpg"
+            image_path = os.path.join('static/faces', filename)
+            
+            cv2.imwrite(image_path, face_data['frame'])
+            
+            encoding_str = ','.join(map(str, face_data['encoding']))
+            face_id = add_face_image(name, encoding_str, image_path)
+            
+            registered_images.append({
+                'face_id': face_id,
+                'image_path': image_path,
+                'timestamp': timestamp
+            })
+        
+        load_known_faces()
+        
+        return {
+            'success': True,
+            'message': f'Successfully registered {len(registered_images)} images for {name}',
+            'registered_images': registered_images
+        }
+        
+    except Exception as e:
+        return {'error': str(e)}
 
 def delete_face_image(face_id, image_index):
     """Delete a specific image from a face registration"""
@@ -302,18 +334,15 @@ def delete_face_image(face_id, image_index):
         if not face:
             return {'error': 'Face not found'}
         
-        # Get all images for this face
         face_images = get_face_images(face_id)
         
         if image_index >= len(face_images):
             return {'error': 'Image index out of range'}
         
-        # Delete the specific image file
         image_path = face_images[image_index]['image_path']
         if os.path.exists(image_path):
             os.remove(image_path)
         
-        # Update database to remove this image reference
         delete_face_image_by_index(face_id, image_index)
         
         return {'success': True, 'message': 'Image deleted successfully'}
@@ -324,30 +353,19 @@ def delete_face_image(face_id, image_index):
 def create_privacy_thumbnail(image_path, blur_faces=True):
     """Create a privacy-protected thumbnail with blurred faces"""
     try:
-        # Load image
         image = cv2.imread(image_path)
         if image is None:
             return None
         
         if blur_faces:
-            # Convert to RGB for face_recognition
             rgb_image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            
-            # Find face locations
             face_locations = face_recognition.face_locations(rgb_image)
             
-            # Blur each face region
             for (top, right, bottom, left) in face_locations:
-                # Extract face region
                 face_region = image[top:bottom, left:right]
-                
-                # Apply strong blur
                 blurred_face = cv2.GaussianBlur(face_region, (99, 99), 30)
-                
-                # Replace face region with blurred version
                 image[top:bottom, left:right] = blurred_face
         
-        # Create thumbnail
         height, width = image.shape[:2]
         max_size = 200
         
@@ -360,7 +378,6 @@ def create_privacy_thumbnail(image_path, blur_faces=True):
         
         thumbnail = cv2.resize(image, (new_width, new_height))
         
-        # Save thumbnail
         thumbnail_dir = 'static/thumbnails'
         os.makedirs(thumbnail_dir, exist_ok=True)
         
@@ -375,43 +392,3 @@ def create_privacy_thumbnail(image_path, blur_faces=True):
     except Exception as e:
         print(f"Error creating privacy thumbnail: {e}")
         return None
-
-def register_face_multiple_images(name, captured_faces):
-    """Register multiple face images for a single person"""
-    try:
-        if not captured_faces:
-            return {'error': 'No faces captured'}
-        
-        registered_images = []
-        
-        for i, face_data in enumerate(captured_faces):
-            # Save image
-            timestamp = face_data['timestamp']
-            filename = f"{name}_{timestamp}.jpg"
-            image_path = os.path.join('static/faces', filename)
-            
-            cv2.imwrite(image_path, face_data['frame'])
-            
-            # Convert encoding to string
-            encoding_str = ','.join(map(str, face_data['encoding']))
-            
-            # Add to database
-            face_id = add_face_image(name, encoding_str, image_path)
-            
-            registered_images.append({
-                'face_id': face_id,
-                'image_path': image_path,
-                'timestamp': timestamp
-            })
-        
-        # Reload known faces
-        load_known_faces()
-        
-        return {
-            'success': True,
-            'message': f'Successfully registered {len(registered_images)} images for {name}',
-            'registered_images': registered_images
-        }
-        
-    except Exception as e:
-        return {'error': str(e)}

@@ -21,7 +21,7 @@ UPLOAD_FOLDER = 'static/uploads'
 FACES_FOLDER = 'static/faces'
 SCREENSHOTS_FOLDER = 'static/screenshots'
 RECORDINGS_FOLDER = 'static/recordings'
-THUMBNAILS_FOLDER = 'static/thumbnails' # Added for thumbnails
+THUMBNAILS_FOLDER = 'static/thumbnails'
 
 # Create directories if they don't exist
 for folder in [UPLOAD_FOLDER, FACES_FOLDER, SCREENSHOTS_FOLDER, RECORDINGS_FOLDER, THUMBNAILS_FOLDER]:
@@ -35,6 +35,12 @@ known_face_encodings = []
 known_face_names = []
 motion_detector = None
 recording_manager = None
+
+# NEW: Configuration for detection optimization
+DETECTION_INTERVAL = 500  # milliseconds (faster: 500ms instead of 2000ms)
+VIDEO_BUFFER_DELAY = 0  # milliseconds delay for video display (0 = no delay, 500 = half second delay)
+USE_SMALLER_FRAME = True  # Process smaller frames for faster detection
+FRAME_SCALE = 0.5  # Scale factor for processing (0.5 = half size, faster processing)
 
 @app.route('/')
 def index():
@@ -72,16 +78,13 @@ def register_face():
         if not name:
             return jsonify({'success': False, 'error': 'Name is required'})
         
-        # Check if image was uploaded
         if 'image' in request.files:
             file = request.files['image']
             if file.filename != '':
-                # Save uploaded image
                 filename = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
                 filepath = os.path.join(FACES_FOLDER, filename)
                 file.save(filepath)
                 
-                # Load and encode face
                 image = face_recognition.load_image_file(filepath)
                 face_locations = face_recognition.face_locations(image)
                 
@@ -91,11 +94,9 @@ def register_face():
                 
                 face_encoding = face_recognition.face_encodings(image, face_locations)[0]
                 
-                # Save to database
                 from utils.database import add_face
                 add_face(name, face_encoding, filepath)
                 
-                # Reload known faces
                 from utils.face_recognition_utils import load_known_faces
                 load_known_faces()
                 
@@ -116,18 +117,15 @@ def capture_face():
         if not name or not image_data:
             return jsonify({'success': False, 'error': 'Name and image data required'})
         
-        # Decode base64 image
-        image_data = image_data.split(',')[1]  # Remove data:image/jpeg;base64,
+        image_data = image_data.split(',')[1]
         image_bytes = base64.b64decode(image_data)
         
-        # Save image
         filename = f"{name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.jpg"
         filepath = os.path.join(FACES_FOLDER, filename)
         
         with open(filepath, 'wb') as f:
             f.write(image_bytes)
         
-        # Load and encode face
         image = face_recognition.load_image_file(filepath)
         face_locations = face_recognition.face_locations(image)
         
@@ -137,11 +135,9 @@ def capture_face():
         
         face_encoding = face_recognition.face_encodings(image, face_locations)[0]
         
-        # Save to database
         from utils.database import add_face
         add_face(name, face_encoding, filepath)
         
-        # Reload known faces
         from utils.face_recognition_utils import load_known_faces
         load_known_faces()
         
@@ -299,7 +295,7 @@ def face_statistics():
 
 @app.route('/api/recognize_faces', methods=['POST'])
 def recognize_faces():
-    """Recognize faces in uploaded image"""
+    """Recognize faces in uploaded image - OPTIMIZED VERSION"""
     try:
         image_data = request.form.get('image_data')
         if not image_data:
@@ -313,9 +309,23 @@ def recognize_faces():
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # Recognize faces
-        from utils.face_recognition_utils import detect_faces_in_frame
-        results = detect_faces_in_frame(frame)
+        # OPTIMIZATION: Process smaller frame for faster detection
+        original_height, original_width = frame.shape[:2]
+        
+        if USE_SMALLER_FRAME:
+            small_frame = cv2.resize(frame, (0, 0), fx=FRAME_SCALE, fy=FRAME_SCALE)
+            process_frame = small_frame
+        else:
+            process_frame = frame
+        
+        # Recognize faces on processed frame
+        from utils.face_recognition_utils import detect_faces_in_frame_optimized
+        results = detect_faces_in_frame_optimized(process_frame, FRAME_SCALE if USE_SMALLER_FRAME else 1.0)
+        
+        # Scale coordinates back to original frame size if we used a smaller frame
+        if USE_SMALLER_FRAME:
+            for result in results:
+                result['location'] = [int(coord / FRAME_SCALE) for coord in result['location']]
         
         # Convert numpy types to Python types for JSON serialization
         for result in results:
@@ -326,6 +336,47 @@ def recognize_faces():
         
         return jsonify({'success': True, 'faces': results})
         
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/get_detection_config')
+def get_detection_config():
+    """Get current detection configuration"""
+    return jsonify({
+        'success': True,
+        'config': {
+            'detection_interval': DETECTION_INTERVAL,
+            'video_buffer_delay': VIDEO_BUFFER_DELAY,
+            'use_smaller_frame': USE_SMALLER_FRAME,
+            'frame_scale': FRAME_SCALE
+        }
+    })
+    
+@app.route('/api/update_detection_config', methods=['POST'])
+def update_detection_config():
+    """Update detection configuration dynamically"""
+    global DETECTION_INTERVAL, VIDEO_BUFFER_DELAY, USE_SMALLER_FRAME, FRAME_SCALE
+    
+    try:
+        if 'detection_interval' in request.form:
+            DETECTION_INTERVAL = int(request.form.get('detection_interval'))
+        if 'video_buffer_delay' in request.form:
+            VIDEO_BUFFER_DELAY = int(request.form.get('video_buffer_delay'))
+        if 'use_smaller_frame' in request.form:
+            USE_SMALLER_FRAME = request.form.get('use_smaller_frame') == 'true'
+        if 'frame_scale' in request.form:
+            FRAME_SCALE = float(request.form.get('frame_scale'))
+        
+        return jsonify({
+            'success': True,
+            'message': 'Detection configuration updated',
+            'config': {
+                'detection_interval': DETECTION_INTERVAL,
+                'video_buffer_delay': VIDEO_BUFFER_DELAY,
+                'use_smaller_frame': USE_SMALLER_FRAME,
+                'frame_scale': FRAME_SCALE
+            }
+        })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -1085,11 +1136,9 @@ def dashboard_feed():
         from utils.database import get_recent_detections
         detections = get_recent_detections(20)
         
-        # Filter to show only unauthorized faces in recents
         recent_detections = []
         for detection in detections:
             if detection['detection_type'] == 'face_detection':
-                # Only show unauthorized faces
                 if detection['person_name'] == 'Unknown' or detection['person_name'] is None:
                     recent_detections.append({
                         'id': detection['id'],
@@ -1101,7 +1150,6 @@ def dashboard_feed():
                         'alert_level': detection['alert_level']
                     })
             else:
-                # Show all motion detections
                 recent_detections.append({
                     'id': detection['id'],
                     'type': detection['detection_type'],
