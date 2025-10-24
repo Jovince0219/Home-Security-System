@@ -4,12 +4,12 @@
 
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Live Screen Capture Feed with Face Recognition -->
+    <!-- Live Camera Feed with Face Recognition -->
     <div class="lg:col-span-2">
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h2 class="text-2xl font-bold mb-4 flex items-center">
-                <i class="fas fa-desktop mr-3 text-blue-600"></i>
-                Live Screen Capture
+                <i class="fas fa-camera mr-3 text-blue-600"></i>
+                Live Camera Feed
             </h2>
             <div class="relative">
                 <video id="videoElement" class="w-full h-64 bg-black rounded-lg" autoplay muted></video>
@@ -19,85 +19,59 @@
                 </div>
                 <!-- Enhanced face detection overlay with better fitting boxes -->
                 <div id="faceOverlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
-                
+
                 <!-- Performance indicator -->
                 <div class="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
-                    FPS: <span id="fpsDisplay">0</span> | Delay: <span id="delayDisplay">0ms</span>
+                    FPS: <span id="fpsDisplay">0</span>
                 </div>
             </div>
-            
-            <!-- Detection Optimization Controls -->
-            <div class="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
-                <h4 class="font-semibold mb-3 text-blue-900">⚡ Detection Optimization</h4>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Detection Speed</label>
-                        <select id="detectionSpeed" class="w-full px-3 py-2 border rounded">
-                            <option value="2000">Standard (2s)</option>
-                            <option value="1000">Fast (1s)</option>
-                            <option value="500" selected>Very Fast (0.5s)</option>
-                            <option value="250">Ultra Fast (0.25s)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label class="block text-sm font-medium mb-1">Sync Method</label>
-                        <select id="syncMethod" class="w-full px-3 py-2 border rounded">
-                            <option value="0" selected>No Delay (Faster Detection)</option>
-                            <option value="250">Slight Delay (250ms)</option>
-                            <option value="500">Medium Delay (500ms)</option>
-                            <option value="1000">High Delay (1s)</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="mt-3">
-                    <label class="flex items-center">
-                        <input type="checkbox" id="useOptimization" checked class="mr-2">
-                        <span class="text-sm">Use frame optimization (50% faster processing)</span>
-                    </label>
-                </div>
-                <button id="applySettings" class="mt-3 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm w-full">
-                    <i class="fas fa-save mr-1"></i>Apply Settings
-                </button>
-            </div>
-            
-            <!-- Screen Selection Controls -->
+
+            <!-- Camera Controls -->
             <div class="mt-4 bg-gray-50 rounded-lg p-4">
-                <h4 class="font-semibold mb-3">Screen Capture Source</h4>
+                <h4 class="font-semibold mb-3">Camera Controls</h4>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
-                    <button id="startScreenCapture" class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm">
-                        <i class="fas fa-desktop mr-1"></i>Start Screen Capture
+                    <button id="startCamera"
+                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm">
+                        <i class="fas fa-camera mr-1"></i>Start Camera
                     </button>
-                    <button id="stopScreenCapture" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
-                        <i class="fas fa-stop mr-1"></i>Stop Capture
+                    <button id="stopCamera" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                        <i class="fas fa-stop mr-1"></i>Stop Camera
                     </button>
-                    <button id="takeScreenshot" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm">
+                    <button id="takeScreenshot"
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm">
                         <i class="fas fa-camera mr-1"></i>Screenshot
                     </button>
                 </div>
                 <div class="mt-3 text-sm text-gray-600">
                     <i class="fas fa-info-circle mr-1"></i>
-                    Click "Start Screen Capture" to share your screen, window, or application
+                    Click "Start Camera" to activate your laptop's camera for face recognition
                 </div>
             </div>
-            
+
             <!-- Enhanced controls with quick actions -->
             <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                <button id="toggleRecording" class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm">
+                <button id="toggleRecording"
+                    class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm">
                     <i class="fas fa-record-vinyl mr-1"></i>Record
                 </button>
-                <button onclick="toggleMotionDetection()" class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm">
+                <button id="toggleMotionDetection"
+                    class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm">
                     <i class="fas fa-running mr-1"></i>Motion Detection
                 </button>
-                <button onclick="toggleFaceRecognition()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm">
+                <button onclick="toggleFaceRecognition()"
+                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm">
                     <i class="fas fa-user-check mr-1"></i>Face Recognition
                 </button>
-                <button onclick="playQuickMessage('warning')" class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">
+                <button onclick="playQuickMessage('warning')"
+                    class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">
                     <i class="fas fa-volume-up mr-1"></i>Warning
                 </button>
             </div>
+            <!-- Motion Detection Overlay -->
+            <div id="motionOverlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
         </div>
     </div>
-    
+
     <!-- System Status -->
     <div class="space-y-6">
         <div class="bg-white rounded-lg shadow-lg p-6">
@@ -107,16 +81,18 @@
             </h3>
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
-                    <span>Screen Capture</span>
-                    <span id="screenCaptureStatus" class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">Inactive</span>
+                    <span>Camera Feed</span>
+                    <span id="cameraStatus" class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">Inactive</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span>Face Recognition</span>
-                    <span id="faceRecognitionStatus" class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
+                    <span id="faceRecognitionStatus"
+                        class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span>Motion Detection</span>
-                    <span id="motionDetectionStatus" class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">Inactive</span>
+                    <span id="motionDetectionStatus"
+                        class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">Inactive</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span>Recording</span>
@@ -124,7 +100,7 @@
                 </div>
             </div>
         </div>
-        
+
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h3 class="text-lg font-bold mb-4 flex items-center">
                 <i class="fas fa-chart-line mr-2 text-blue-600"></i>
@@ -176,417 +152,343 @@
 
 {% block scripts %}
 <script>
-let screenStream = null;
-let isRecording = false;
-let faceRecognitionActive = true;
-let motionDetectionActive = false;
-let recognitionInterval = null;
-let detectionIntervalMs = 500; // Default: 500ms for faster detection
-let videoBufferDelay = 0; // No delay by default
-let useOptimization = true;
-let frameBuffer = [];
-let maxBufferSize = 10;
-let lastFrameTime = Date.now();
-let fpsCounter = 0;
-let lastFpsUpdate = Date.now();
+    let cameraStream = null;
+    let isRecording = false;
+    let faceRecognitionActive = true;
+    let motionDetectionActive = false;
+    let recognitionInterval = null;
+    let detectionIntervalMs = 1000; // Default: 1 second interval
+    let fpsCounter = 0;
+    let lastFpsUpdate = Date.now();
+    let motionDetectionInterval = null;
 
-// Screen capture controls
-document.getElementById('startScreenCapture').addEventListener('click', startScreenCapture);
-document.getElementById('stopScreenCapture').addEventListener('click', stopScreenCapture);
-document.getElementById('takeScreenshot').addEventListener('click', takeScreenshot);
-document.getElementById('toggleRecording').addEventListener('click', toggleRecording);
-document.getElementById('applySettings').addEventListener('click', applyDetectionSettings);
+    // Camera controls
+    document.getElementById('startCamera').addEventListener('click', startCamera);
+    document.getElementById('stopCamera').addEventListener('click', stopCamera);
+    document.getElementById('takeScreenshot').addEventListener('click', takeScreenshot);
+    document.getElementById('toggleRecording').addEventListener('click', toggleRecording);
+    document.getElementById('toggleMotionDetection').addEventListener('click', toggleMotionDetection);
 
-// Load current detection configuration
-fetch('/api/get_detection_config')
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            detectionIntervalMs = data.config.detection_interval;
-            videoBufferDelay = data.config.video_buffer_delay;
-            useOptimization = data.config.use_smaller_frame;
-            
-            document.getElementById('detectionSpeed').value = detectionIntervalMs;
-            document.getElementById('syncMethod').value = videoBufferDelay;
-            document.getElementById('useOptimization').checked = useOptimization;
-        }
-    });
+    async function startCamera() {
+        try {
+            // Request camera access with preferred constraints
+            cameraStream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                    facingMode: 'user' // Use front camera
+                },
+                audio: false
+            });
 
-function applyDetectionSettings() {
-    detectionIntervalMs = parseInt(document.getElementById('detectionSpeed').value);
-    videoBufferDelay = parseInt(document.getElementById('syncMethod').value);
-    useOptimization = document.getElementById('useOptimization').checked;
-    
-    // Update server-side configuration
-    const formData = new FormData();
-    formData.append('detection_interval', detectionIntervalMs);
-    formData.append('video_buffer_delay', videoBufferDelay);
-    formData.append('use_smaller_frame', useOptimization);
-    formData.append('frame_scale', '0.5');
-    
-    fetch('/api/update_detection_config', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            alert('Detection settings updated successfully!\n\n' + 
-                  'Detection Interval: ' + detectionIntervalMs + 'ms\n' +
-                  'Video Delay: ' + videoBufferDelay + 'ms\n' +
-                  'Optimization: ' + (useOptimization ? 'Enabled' : 'Disabled'));
-            
-            // Restart face recognition with new settings
-            if (faceRecognitionActive && screenStream) {
-                stopFaceRecognition();
+            const videoElement = document.getElementById('videoElement');
+            videoElement.srcObject = cameraStream;
+
+            updateCameraStatus('Active');
+
+            // Set up track ended event
+            cameraStream.getTracks().forEach(track => {
+                track.onended = () => {
+                    stopCamera();
+                };
+            });
+
+            // Start face recognition if enabled
+            if (faceRecognitionActive) {
                 startFaceRecognition();
             }
-        }
-    });
-}
 
-async function startScreenCapture() {
-    try {
-        screenStream = await navigator.mediaDevices.getDisplayMedia({
-            video: {
-                cursor: "always",
-                displaySurface: "window"
-            },
-            audio: false
-        });
-        
-        const videoElement = document.getElementById('videoElement');
-        videoElement.srcObject = screenStream;
-        
-        updateScreenCaptureStatus('Active');
-        
-        screenStream.getTracks().forEach(track => {
-            track.onended = () => {
-                stopScreenCapture();
-            };
-        });
-        
-        if (faceRecognitionActive) {
-            startFaceRecognition();
-        }
-        
-        // Start FPS counter
-        updateFPS();
-        
-    } catch (error) {
-        console.error('Error accessing screen capture:', error);
-        if (error.name === 'NotAllowedError') {
-            alert('Screen capture permission denied. Please allow screen sharing to continue.');
-        } else {
-            alert('Could not start screen capture: ' + error.message);
-        }
-    }
-}
+            // Start FPS counter
+            updateFPS();
 
-function stopScreenCapture() {
-    if (screenStream) {
-        screenStream.getTracks().forEach(track => track.stop());
-        document.getElementById('videoElement').srcObject = null;
-        screenStream = null;
-        
-        stopFaceRecognition();
-        document.getElementById('faceOverlay').innerHTML = '';
-        updateScreenCaptureStatus('Inactive');
-        frameBuffer = [];
-    }
-}
-
-function stopFaceRecognition() {
-    if (recognitionInterval) {
-        clearInterval(recognitionInterval);
-        recognitionInterval = null;
-    }
-}
-
-function startFaceRecognition() {
-    if (recognitionInterval) return;
-    
-    console.log('Starting face recognition with interval:', detectionIntervalMs + 'ms');
-    
-    recognitionInterval = setInterval(() => {
-        recognizeFaces();
-    }, detectionIntervalMs);
-}
-
-function recognizeFaces() {
-    const video = document.getElementById('videoElement');
-    if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) return;
-    
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    
-    const imageData = canvas.toDataURL('image/jpeg', 0.8); // Reduced quality for faster upload
-    
-    // Store frame with timestamp for buffer system
-    const frameData = {
-        imageData: imageData,
-        timestamp: Date.now(),
-        canvas: canvas
-    };
-    
-    if (videoBufferDelay > 0) {
-        frameBuffer.push(frameData);
-        if (frameBuffer.length > maxBufferSize) {
-            frameBuffer.shift();
-        }
-    }
-    
-    const formData = new FormData();
-    formData.append('image_data', imageData);
-    
-    const startTime = Date.now();
-    
-    fetch('/api/recognize_faces', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        const processingTime = Date.now() - startTime;
-        document.getElementById('delayDisplay').textContent = processingTime + 'ms';
-        
-        if (data.success) {
-            if (videoBufferDelay > 0) {
-                // Use buffered frame that matches the detection time
-                setTimeout(() => {
-                    displayFaceBoxes(data.faces);
-                }, videoBufferDelay);
+        } catch (error) {
+            console.error('Error accessing camera:', error);
+            if (error.name === 'NotAllowedError') {
+                alert('Camera permission denied. Please allow camera access to continue.');
+            } else if (error.name === 'NotFoundError') {
+                alert('No camera found. Please check if your camera is connected and try again.');
             } else {
-                // Display immediately for fastest response
-                displayFaceBoxes(data.faces);
+                alert('Could not start camera: ' + error.message);
             }
         }
-    })
-    .catch(error => console.error('Face recognition error:', error));
-}
-
-function displayFaceBoxes(faces) {
-    const overlay = document.getElementById('faceOverlay');
-    const video = document.getElementById('videoElement');
-    
-    overlay.innerHTML = '';
-    
-    faces.forEach(face => {
-        const box = document.createElement('div');
-        box.style.position = 'absolute';
-        box.style.border = face.is_authorized ? '3px solid green' : '3px solid red';
-        box.style.backgroundColor = face.is_authorized ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
-        box.style.borderRadius = '8px';
-        box.style.pointerEvents = 'none';
-        box.style.transition = 'all 0.2s ease-out'; // Smooth animation
-        
-        const videoRect = video.getBoundingClientRect();
-        const scaleX = videoRect.width / video.videoWidth;
-        const scaleY = videoRect.height / video.videoHeight;
-        
-        const [top, right, bottom, left] = face.location;
-        box.style.left = (left * scaleX) + 'px';
-        box.style.top = (top * scaleY) + 'px';
-        box.style.width = ((right - left) * scaleX) + 'px';
-        box.style.height = ((bottom - top) * scaleY) + 'px';
-        
-        const label = document.createElement('div');
-        label.style.position = 'absolute';
-        label.style.top = '-30px';
-        label.style.left = '0';
-        label.style.backgroundColor = face.is_authorized ? 'green' : 'red';
-        label.style.color = 'white';
-        label.style.padding = '4px 8px';
-        label.style.fontSize = '12px';
-        label.style.borderRadius = '4px';
-        label.style.fontWeight = 'bold';
-        label.style.pointerEvents = 'none';
-        label.style.whiteSpace = 'nowrap';
-        label.textContent = face.display_name || (face.is_authorized ? face.name : 'Unauthorized');
-        
-        if (face.face_covered) {
-            label.textContent += ' (Covered)';
-        }
-        
-        box.appendChild(label);
-        overlay.appendChild(box);
-    });
-    
-    fpsCounter++;
-}
-
-function updateFPS() {
-    setInterval(() => {
-        const now = Date.now();
-        const elapsed = (now - lastFpsUpdate) / 1000;
-        const fps = Math.round(fpsCounter / elapsed);
-        document.getElementById('fpsDisplay').textContent = fps;
-        fpsCounter = 0;
-        lastFpsUpdate = now;
-    }, 1000);
-}
-
-function takeScreenshot() {
-    if (!screenStream) {
-        alert('Please start screen capture first');
-        return;
     }
-    
-    const video = document.getElementById('videoElement');
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    const ctx = canvas.getContext('2d');
-    ctx.drawImage(video, 0, 0);
-    
-    canvas.toBlob(function(blob) {
+
+    function stopCamera() {
+        if (cameraStream) {
+            cameraStream.getTracks().forEach(track => track.stop());
+            document.getElementById('videoElement').srcObject = null;
+            cameraStream = null;
+
+            stopFaceRecognition();
+            document.getElementById('faceOverlay').innerHTML = '';
+            updateCameraStatus('Inactive');
+        }
+    }
+
+    function stopFaceRecognition() {
+        if (recognitionInterval) {
+            clearInterval(recognitionInterval);
+            recognitionInterval = null;
+        }
+    }
+
+    function startFaceRecognition() {
+        if (recognitionInterval) return;
+
+        console.log('Starting face recognition with interval:', detectionIntervalMs + 'ms');
+
+        recognitionInterval = setInterval(() => {
+            recognizeFaces();
+        }, detectionIntervalMs);
+    }
+
+    function recognizeFaces() {
+        const video = document.getElementById('videoElement');
+        if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
         const formData = new FormData();
-        formData.append('screenshot', blob, 'screen_capture_' + Date.now() + '.jpg');
-        
-        fetch('/api/save_screenshot', {
+        formData.append('image_data', imageData);
+
+        fetch('/api/recognize_faces', {
             method: 'POST',
             body: formData
-        }).then(response => response.json())
-          .then(data => {
-              if (data.success) {
-                  alert('Screenshot saved successfully!');
-                  loadRecentDetections();
-              } else {
-                  alert('Failed to save screenshot: ' + (data.error || 'Unknown error'));
-              }
-          });
-    }, 'image/jpeg');
-}
-
-function toggleRecording() {
-    if (!screenStream) {
-        alert('Please start screen capture first');
-        return;
-    }
-    
-    const button = document.getElementById('toggleRecording');
-    
-    if (!isRecording) {
-        fetch('/api/start_recording', { method: 'POST' })
+        })
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    isRecording = true;
-                    button.innerHTML = '<i class="fas fa-stop mr-1"></i>Stop Recording';
-                    button.className = 'bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm';
-                    updateRecordingStatus('Recording');
-                } else {
-                    alert('Failed to start recording: ' + (data.error || 'Unknown error'));
+                    displayFaceBoxes(data.faces);
                 }
-            });
-    } else {
-        fetch('/api/stop_recording', { method: 'POST' })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    isRecording = false;
-                    button.innerHTML = '<i class="fas fa-record-vinyl mr-1"></i>Record';
-                    button.className = 'bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm';
-                    updateRecordingStatus('Stopped');
-                } else {
-                    alert('Failed to stop recording: ' + (data.error || 'Unknown error'));
-                }
-            });
+            })
+            .catch(error => console.error('Face recognition error:', error));
     }
-}
 
-function toggleMotionDetection() {
-    const action = motionDetectionActive ? 'stop_motion_detection' : 'start_motion_detection';
-    
-    fetch('/api/dashboard_action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `action=${action}`
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            motionDetectionActive = !motionDetectionActive;
-            updateMotionDetectionStatus(motionDetectionActive ? 'Active' : 'Inactive');
+    function displayFaceBoxes(faces) {
+        const overlay = document.getElementById('faceOverlay');
+        const video = document.getElementById('videoElement');
+
+        overlay.innerHTML = '';
+
+        faces.forEach(face => {
+            const box = document.createElement('div');
+            box.style.position = 'absolute';
+            box.style.border = face.is_authorized ? '3px solid green' : '3px solid red';
+            box.style.backgroundColor = face.is_authorized ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
+            box.style.borderRadius = '8px';
+            box.style.pointerEvents = 'none';
+            box.style.transition = 'all 0.2s ease-out'; // Smooth animation
+
+            const videoRect = video.getBoundingClientRect();
+            const scaleX = videoRect.width / video.videoWidth;
+            const scaleY = videoRect.height / video.videoHeight;
+
+            const [top, right, bottom, left] = face.location;
+            box.style.left = (left * scaleX) + 'px';
+            box.style.top = (top * scaleY) + 'px';
+            box.style.width = ((right - left) * scaleX) + 'px';
+            box.style.height = ((bottom - top) * scaleY) + 'px';
+
+            const label = document.createElement('div');
+            label.style.position = 'absolute';
+            label.style.top = '-30px';
+            label.style.left = '0';
+            label.style.backgroundColor = face.is_authorized ? 'green' : 'red';
+            label.style.color = 'white';
+            label.style.padding = '4px 8px';
+            label.style.fontSize = '12px';
+            label.style.borderRadius = '4px';
+            label.style.fontWeight = 'bold';
+            label.style.pointerEvents = 'none';
+            label.style.whiteSpace = 'nowrap';
+            label.textContent = face.display_name || (face.is_authorized ? face.name : 'Unauthorized');
+
+            if (face.face_covered) {
+                label.textContent += ' (Covered)';
+            }
+
+            box.appendChild(label);
+            overlay.appendChild(box);
+        });
+
+        fpsCounter++;
+    }
+
+    function updateFPS() {
+        setInterval(() => {
+            const now = Date.now();
+            const elapsed = (now - lastFpsUpdate) / 1000;
+            const fps = Math.round(fpsCounter / elapsed);
+            document.getElementById('fpsDisplay').textContent = fps;
+            fpsCounter = 0;
+            lastFpsUpdate = now;
+        }, 1000);
+    }
+
+    function takeScreenshot() {
+        if (!cameraStream) {
+            alert('Please start camera first');
+            return;
         }
-    });
-}
 
-function toggleFaceRecognition() {
-    faceRecognitionActive = !faceRecognitionActive;
-    
-    if (faceRecognitionActive && screenStream) {
-        startFaceRecognition();
-    } else {
-        stopFaceRecognition();
-        document.getElementById('faceOverlay').innerHTML = '';
+        const video = document.getElementById('videoElement');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        canvas.toBlob(function (blob) {
+            const formData = new FormData();
+            formData.append('screenshot', blob, 'camera_capture_' + Date.now() + '.jpg');
+
+            fetch('/api/save_screenshot', {
+                method: 'POST',
+                body: formData
+            }).then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Screenshot saved successfully!');
+                        loadRecentDetections();
+                    } else {
+                        alert('Failed to save screenshot: ' + (data.error || 'Unknown error'));
+                    }
+                });
+        }, 'image/jpeg');
     }
-    
-    updateFaceRecognitionStatus(faceRecognitionActive ? 'Active' : 'Inactive');
-}
 
-function playQuickMessage(messageType) {
-    fetch('/api/dashboard_action', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: `action=play_message&message_type=${messageType}`
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            console.log('Message played:', data.result);
+    function toggleRecording() {
+        if (!cameraStream) {
+            alert('Please start camera first');
+            return;
+        }
+
+        const button = document.getElementById('toggleRecording');
+
+        if (!isRecording) {
+            fetch('/api/start_recording', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        isRecording = true;
+                        button.innerHTML = '<i class="fas fa-stop mr-1"></i>Stop Recording';
+                        button.className = 'bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm';
+                        updateRecordingStatus('Recording');
+                    } else {
+                        alert('Failed to start recording: ' + (data.error || 'Unknown error'));
+                    }
+                });
         } else {
-            console.error('Failed to play message:', data.error);
+            fetch('/api/stop_recording', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        isRecording = false;
+                        button.innerHTML = '<i class="fas fa-record-vinyl mr-1"></i>Record';
+                        button.className = 'bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm';
+                        updateRecordingStatus('Stopped');
+                    } else {
+                        alert('Failed to stop recording: ' + (data.error || 'Unknown error'));
+                    }
+                });
         }
-    })
-    .catch(error => console.error('Error playing message:', error));
-}
+    }
 
-function updateScreenCaptureStatus(status) {
-    const element = document.getElementById('screenCaptureStatus');
-    element.textContent = status;
-    element.className = status === 'Active' ? 
-        'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' : 
-        'bg-red-100 text-red-800 px-2 py-1 rounded text-sm';
-}
+    function toggleMotionDetection() {
+        const action = motionDetectionActive ? 'stop_motion_detection' : 'start_motion_detection';
 
-function updateRecordingStatus(status) {
-    const element = document.getElementById('recordingStatus');
-    element.textContent = status;
-    element.className = status === 'Recording' ? 
-        'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' : 
-        'bg-red-100 text-red-800 px-2 py-1 rounded text-sm';
-}
+        fetch('/api/dashboard_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=${action}`
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    motionDetectionActive = !motionDetectionActive;
+                    updateMotionDetectionStatus(motionDetectionActive ? 'Active' : 'Inactive');
+                }
+            });
+    }
 
-function updateMotionDetectionStatus(status) {
-    const element = document.getElementById('motionDetectionStatus');
-    element.textContent = status;
-    element.className = status === 'Active' ? 
-        'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' : 
-        'bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm';
-}
+    function toggleFaceRecognition() {
+        faceRecognitionActive = !faceRecognitionActive;
 
-function updateFaceRecognitionStatus(status) {
-    const element = document.getElementById('faceRecognitionStatus');
-    element.textContent = status;
-    element.className = status === 'Active' ? 
-        'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' : 
-        'bg-red-100 text-red-800 px-2 py-1 rounded text-sm';
-}
+        if (faceRecognitionActive && cameraStream) {
+            startFaceRecognition();
+        } else {
+            stopFaceRecognition();
+            document.getElementById('faceOverlay').innerHTML = '';
+        }
 
-function loadRecentDetections() {
-    fetch('/api/dashboard_feed')
-        .then(response => response.json())
-        .then(data => {
-            const tbody = document.getElementById('detectionsTable');
-            tbody.innerHTML = '';
-            
-            data.detections.forEach(detection => {
-                const row = tbody.insertRow();
-                row.innerHTML = `
+        updateFaceRecognitionStatus(faceRecognitionActive ? 'Active' : 'Inactive');
+    }
+
+    function playQuickMessage(messageType) {
+        fetch('/api/dashboard_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=play_message&message_type=${messageType}`
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Message played:', data.result);
+                } else {
+                    console.error('Failed to play message:', data.error);
+                }
+            })
+            .catch(error => console.error('Error playing message:', error));
+    }
+
+    function updateCameraStatus(status) {
+        const element = document.getElementById('cameraStatus');
+        element.textContent = status;
+        element.className = status === 'Active' ?
+            'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' :
+            'bg-red-100 text-red-800 px-2 py-1 rounded text-sm';
+    }
+
+    function updateRecordingStatus(status) {
+        const element = document.getElementById('recordingStatus');
+        element.textContent = status;
+        element.className = status === 'Recording' ?
+            'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' :
+            'bg-red-100 text-red-800 px-2 py-1 rounded text-sm';
+    }
+
+    function updateMotionDetectionStatus(status) {
+        const element = document.getElementById('motionDetectionStatus');
+        element.textContent = status;
+        element.className = status === 'Active' ?
+            'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' :
+            'bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm';
+    }
+
+    function updateFaceRecognitionStatus(status) {
+        const element = document.getElementById('faceRecognitionStatus');
+        element.textContent = status;
+        element.className = status === 'Active' ?
+            'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' :
+            'bg-red-100 text-red-800 px-2 py-1 rounded text-sm';
+    }
+
+    function loadRecentDetections() {
+        fetch('/api/dashboard_feed')
+            .then(response => response.json())
+            .then(data => {
+                const tbody = document.getElementById('detectionsTable');
+                tbody.innerHTML = '';
+
+                data.detections.forEach(detection => {
+                    const row = tbody.insertRow();
+                    row.innerHTML = `
                     <td class="px-4 py-2">${new Date(detection.timestamp).toLocaleString()}</td>
                     <td class="px-4 py-2">
                         <span class="px-2 py-1 rounded text-sm ${detection.type === 'face_detection' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
@@ -601,29 +503,172 @@ function loadRecentDetections() {
                         </span>
                     </td>
                     <td class="px-4 py-2">
-                        ${detection.screenshot_path ? 
+                        ${detection.screenshot_path ?
                             `<a href="/${detection.screenshot_path}" target="_blank" class="text-blue-600 hover:underline">
                                 <i class="fas fa-image mr-1"></i>View
                             </a>` : 'N/A'}
                     </td>
                 `;
+                });
             });
-        });
-}
-
-function getAlertLevelClass(level) {
-    switch(level) {
-        case 1: return 'bg-green-100 text-green-800';
-        case 2: return 'bg-yellow-100 text-yellow-800';
-        case 3: return 'bg-red-100 text-red-800';
-        default: return 'bg-gray-100 text-gray-800';
     }
-}
 
-document.addEventListener('DOMContentLoaded', function() {
-    loadRecentDetections();
-});
+    function getAlertLevelClass(level) {
+        switch (level) {
+            case 1: return 'bg-green-100 text-green-800';
+            case 2: return 'bg-yellow-100 text-yellow-800';
+            case 3: return 'bg-red-100 text-red-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    }
 
-setInterval(loadRecentDetections, 10000);
+    document.addEventListener('DOMContentLoaded', function () {
+        loadRecentDetections();
+    });
+
+    setInterval(loadRecentDetections, 10000);
+
+    function toggleMotionDetection() {
+        if (!cameraStream) {
+            alert('Please start camera first');
+            return;
+        }
+
+        const action = motionDetectionActive ? 'stop_motion_detection' : 'start_motion_detection';
+
+        fetch('/api/dashboard_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action=${action}`
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    motionDetectionActive = !motionDetectionActive;
+                    updateMotionDetectionStatus(motionDetectionActive ? 'Active' : 'Inactive');
+
+                    if (motionDetectionActive) {
+                        startMotionDetection();
+                    } else {
+                        stopMotionDetection();
+                    }
+                }
+            });
+    }
+
+    function startMotionDetection() {
+        if (motionDetectionInterval) return;
+
+        console.log('Starting motion detection');
+        motionDetectionInterval = setInterval(() => {
+            detectMotion();
+        }, 1000); // Detect every second
+    }
+
+    function stopMotionDetection() {
+        if (motionDetectionInterval) {
+            clearInterval(motionDetectionInterval);
+            motionDetectionInterval = null;
+            document.getElementById('motionOverlay').innerHTML = '';
+            console.log('Motion detection stopped');
+        }
+    }
+
+    function detectMotion() {
+        const video = document.getElementById('videoElement');
+        if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        const imageData = canvas.toDataURL('image/jpeg');
+
+        const formData = new FormData();
+        formData.append('image_data', imageData);
+
+        fetch('/api/detect_motion', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.motion_detected) {
+                    displayMotionDetections(data.detections);
+                } else {
+                    document.getElementById('motionOverlay').innerHTML = '';
+                }
+            })
+            .catch(error => console.error('Motion detection error:', error));
+    }
+
+    function displayMotionDetections(detections) {
+        const overlay = document.getElementById('motionOverlay');
+        const video = document.getElementById('videoElement');
+
+        overlay.innerHTML = '';
+
+        detections.forEach(detection => {
+            if (detection.confidence > 0.6) { // Only show confident detections
+                const box = document.createElement('div');
+                box.style.position = 'absolute';
+                box.style.border = detection.type === 'human' ? '3px solid red' : '3px solid yellow';
+                box.style.backgroundColor = detection.type === 'human' ? 'rgba(255, 0, 0, 0.1)' : 'rgba(255, 255, 0, 0.1)';
+                box.style.borderRadius = '8px';
+                box.style.pointerEvents = 'none';
+                box.style.transition = 'all 0.3s ease-out';
+
+                const videoRect = video.getBoundingClientRect();
+                const scaleX = videoRect.width / video.videoWidth;
+                const scaleY = videoRect.height / video.videoHeight;
+
+                const [x, y, w, h] = detection.bbox;
+                box.style.left = (x * scaleX) + 'px';
+                box.style.top = (y * scaleY) + 'px';
+                box.style.width = (w * scaleX) + 'px';
+                box.style.height = (h * scaleY) + 'px';
+
+                const label = document.createElement('div');
+                label.style.position = 'absolute';
+                label.style.top = '-35px';
+                label.style.left = '0';
+                label.style.backgroundColor = detection.type === 'human' ? 'red' : 'yellow';
+                label.style.color = 'white';
+                label.style.padding = '4px 8px';
+                label.style.fontSize = '12px';
+                label.style.borderRadius = '4px';
+                label.style.fontWeight = 'bold';
+                label.style.pointerEvents = 'none';
+                label.style.whiteSpace = 'nowrap';
+                label.innerHTML = `
+                <i class="fas ${detection.type === 'human' ? 'fa-user' : 'fa-paw'} mr-1"></i>
+                ${detection.type.toUpperCase()} (${(detection.confidence * 100).toFixed(0)}%)
+            `;
+
+                box.appendChild(label);
+                overlay.appendChild(box);
+            }
+        });
+    }
+
+    function updateMotionDetectionStatus(status) {
+        const element = document.getElementById('motionDetectionStatus');
+        element.textContent = status;
+        element.className = status === 'Active' ?
+            'bg-green-100 text-green-800 px-2 py-1 rounded text-sm' :
+            'bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm';
+
+        // Update the toggle button
+        const button = document.getElementById('toggleMotionDetection');
+        if (status === 'Active') {
+            button.innerHTML = '<i class="fas fa-stop mr-1"></i>Stop Motion';
+            button.className = 'bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm';
+        } else {
+            button.innerHTML = '<i class="fas fa-running mr-1"></i>Motion Detection';
+            button.className = 'bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm';
+        }
+    }
 </script>
 {% endblock %}

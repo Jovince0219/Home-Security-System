@@ -36,12 +36,6 @@ known_face_names = []
 motion_detector = None
 recording_manager = None
 
-# NEW: Configuration for detection optimization
-DETECTION_INTERVAL = 500  # milliseconds (faster: 500ms instead of 2000ms)
-VIDEO_BUFFER_DELAY = 0  # milliseconds delay for video display (0 = no delay, 500 = half second delay)
-USE_SMALLER_FRAME = True  # Process smaller frames for faster detection
-FRAME_SCALE = 0.5  # Scale factor for processing (0.5 = half size, faster processing)
-
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -295,7 +289,7 @@ def face_statistics():
 
 @app.route('/api/recognize_faces', methods=['POST'])
 def recognize_faces():
-    """Recognize faces in uploaded image - OPTIMIZED VERSION"""
+    """Recognize faces in uploaded image"""
     try:
         image_data = request.form.get('image_data')
         if not image_data:
@@ -309,23 +303,9 @@ def recognize_faces():
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
-        # OPTIMIZATION: Process smaller frame for faster detection
-        original_height, original_width = frame.shape[:2]
-        
-        if USE_SMALLER_FRAME:
-            small_frame = cv2.resize(frame, (0, 0), fx=FRAME_SCALE, fy=FRAME_SCALE)
-            process_frame = small_frame
-        else:
-            process_frame = frame
-        
         # Recognize faces on processed frame
-        from utils.face_recognition_utils import detect_faces_in_frame_optimized
-        results = detect_faces_in_frame_optimized(process_frame, FRAME_SCALE if USE_SMALLER_FRAME else 1.0)
-        
-        # Scale coordinates back to original frame size if we used a smaller frame
-        if USE_SMALLER_FRAME:
-            for result in results:
-                result['location'] = [int(coord / FRAME_SCALE) for coord in result['location']]
+        from utils.face_recognition_utils import detect_faces_in_frame
+        results = detect_faces_in_frame(frame)
         
         # Convert numpy types to Python types for JSON serialization
         for result in results:
@@ -339,47 +319,6 @@ def recognize_faces():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
     
-@app.route('/api/get_detection_config')
-def get_detection_config():
-    """Get current detection configuration"""
-    return jsonify({
-        'success': True,
-        'config': {
-            'detection_interval': DETECTION_INTERVAL,
-            'video_buffer_delay': VIDEO_BUFFER_DELAY,
-            'use_smaller_frame': USE_SMALLER_FRAME,
-            'frame_scale': FRAME_SCALE
-        }
-    })
-    
-@app.route('/api/update_detection_config', methods=['POST'])
-def update_detection_config():
-    """Update detection configuration dynamically"""
-    global DETECTION_INTERVAL, VIDEO_BUFFER_DELAY, USE_SMALLER_FRAME, FRAME_SCALE
-    
-    try:
-        if 'detection_interval' in request.form:
-            DETECTION_INTERVAL = int(request.form.get('detection_interval'))
-        if 'video_buffer_delay' in request.form:
-            VIDEO_BUFFER_DELAY = int(request.form.get('video_buffer_delay'))
-        if 'use_smaller_frame' in request.form:
-            USE_SMALLER_FRAME = request.form.get('use_smaller_frame') == 'true'
-        if 'frame_scale' in request.form:
-            FRAME_SCALE = float(request.form.get('frame_scale'))
-        
-        return jsonify({
-            'success': True,
-            'message': 'Detection configuration updated',
-            'config': {
-                'detection_interval': DETECTION_INTERVAL,
-                'video_buffer_delay': VIDEO_BUFFER_DELAY,
-                'use_smaller_frame': USE_SMALLER_FRAME,
-                'frame_scale': FRAME_SCALE
-            }
-        })
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})
-
 @app.route('/api/recent_detections')
 def recent_detections():
     """Get recent face and motion detections"""
@@ -1373,6 +1312,154 @@ def playback_stats():
         stats = get_playback_statistics()
         
         return jsonify({'success': True, 'stats': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/motion_detection_status')
+def motion_detection_status():
+    """Get current motion detection status"""
+    try:
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        stats = motion_detector.get_stats()
+        return jsonify({'success': True, 'status': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/clear_training_data', methods=['POST'])
+def clear_training_data():
+    """Clear motion detection training data"""
+    try:
+        category = request.form.get('category')  # 'human', 'animal', or None for all
+        
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        result = motion_detector.clear_training_data(category)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/upload_training_images', methods=['POST'])
+def upload_training_images():
+    """Upload training images for motion detection"""
+    try:
+        label = request.form.get('label')  # 'human' or 'animal'
+        
+        if not label or label not in ['human', 'animal']:
+            return jsonify({'success': False, 'error': 'Valid label (human/animal) required'})
+        
+        if 'images' not in request.files:
+            return jsonify({'success': False, 'error': 'No images provided'})
+        
+        files = request.files.getlist('images')
+        uploaded_count = 0
+        
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        for file in files:
+            if file.filename != '':
+                result = motion_detector.upload_training_image(file, label)
+                if result['success']:
+                    uploaded_count += 1
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Successfully uploaded {uploaded_count} images for {label}',
+            'uploaded_count': uploaded_count
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/get_training_images')
+def get_training_images():
+    """Get all training images"""
+    try:
+        category = request.args.get('category')  # 'human', 'animal', or None for all
+        
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        images = motion_detector.get_training_images(category)
+        return jsonify({'success': True, 'images': images})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/delete_training_image', methods=['DELETE'])
+def delete_training_image():
+    """Delete a training image"""
+    try:
+        filename = request.json.get('filename')
+        category = request.json.get('category')
+        
+        if not filename or not category:
+            return jsonify({'success': False, 'error': 'Filename and category required'})
+        
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        result = motion_detector.delete_training_image(filename, category)
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/bulk_upload_training', methods=['POST'])
+def bulk_upload_training():
+    """Bulk upload training images from a folder or multiple files"""
+    try:
+        if 'files' not in request.files:
+            return jsonify({'success': False, 'error': 'No files provided'})
+        
+        files = request.files.getlist('files')
+        label = request.form.get('label')  # 'human' or 'animal'
+        
+        if not label or label not in ['human', 'animal']:
+            return jsonify({'success': False, 'error': 'Valid label (human/animal) required'})
+        
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        uploaded_count = 0
+        failed_count = 0
+        
+        for file in files:
+            if file.filename != '' and file.filename.lower().endswith(('.jpg', '.jpeg', '.png')):
+                try:
+                    result = motion_detector.upload_training_image(file, label)
+                    if result['success']:
+                        uploaded_count += 1
+                    else:
+                        failed_count += 1
+                except Exception as e:
+                    print(f"Error uploading {file.filename}: {e}")
+                    failed_count += 1
+        
+        return jsonify({
+            'success': True,
+            'uploaded_count': uploaded_count,
+            'failed_count': failed_count,
+            'message': f'Uploaded {uploaded_count} images, {failed_count} failed'
+        })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
