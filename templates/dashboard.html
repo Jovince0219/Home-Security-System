@@ -611,14 +611,25 @@
         overlay.innerHTML = '';
 
         detections.forEach(detection => {
-            if (detection.confidence > 0.6) { // Only show confident detections
+            // Much lower threshold for humans, higher for animals
+            const minHumanConfidence = 0.5;   // Very low - favor human detection
+            const minAnimalConfidence = 0.7;  // High - only clear animals
+
+            const shouldDisplay = detection.type === 'human' ?
+                detection.confidence >= minHumanConfidence :
+                detection.confidence >= minAnimalConfidence;
+
+            if (shouldDisplay) {
                 const box = document.createElement('div');
+                const isHuman = detection.type === 'human';
+
                 box.style.position = 'absolute';
-                box.style.border = detection.type === 'human' ? '3px solid red' : '3px solid yellow';
-                box.style.backgroundColor = detection.type === 'human' ? 'rgba(255, 0, 0, 0.1)' : 'rgba(255, 255, 0, 0.1)';
+                box.style.border = isHuman ? '3px solid #DC2626' : '3px solid #D97706'; // Red vs Amber
+                box.style.backgroundColor = isHuman ? 'rgba(220, 38, 38, 0.15)' : 'rgba(217, 119, 6, 0.15)';
                 box.style.borderRadius = '8px';
                 box.style.pointerEvents = 'none';
                 box.style.transition = 'all 0.3s ease-out';
+                box.style.boxShadow = isHuman ? '0 0 10px rgba(220, 38, 38, 0.5)' : '0 0 10px rgba(217, 119, 6, 0.5)';
 
                 const videoRect = video.getBoundingClientRect();
                 const scaleX = videoRect.width / video.videoWidth;
@@ -634,7 +645,7 @@
                 label.style.position = 'absolute';
                 label.style.top = '-35px';
                 label.style.left = '0';
-                label.style.backgroundColor = detection.type === 'human' ? 'red' : 'yellow';
+                label.style.backgroundColor = isHuman ? '#DC2626' : '#D97706';
                 label.style.color = 'white';
                 label.style.padding = '4px 8px';
                 label.style.fontSize = '12px';
@@ -642,13 +653,17 @@
                 label.style.fontWeight = 'bold';
                 label.style.pointerEvents = 'none';
                 label.style.whiteSpace = 'nowrap';
+                label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
                 label.innerHTML = `
-                <i class="fas ${detection.type === 'human' ? 'fa-user' : 'fa-paw'} mr-1"></i>
+                <i class="fas ${isHuman ? 'fa-user' : 'fa-paw'} mr-1"></i>
                 ${detection.type.toUpperCase()} (${(detection.confidence * 100).toFixed(0)}%)
             `;
 
                 box.appendChild(label);
                 overlay.appendChild(box);
+
+                // Log to console for debugging
+                console.log(`DETECTION: ${detection.type} (${(detection.confidence * 100).toFixed(0)}%) - Area: ${detection.area.toFixed(0)}`);
             }
         });
     }

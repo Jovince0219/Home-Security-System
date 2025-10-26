@@ -23,17 +23,16 @@ class MotionDetector:
             varThreshold=16, 
             detectShadows=True
         )
-        # Lower minimum area to detect smaller human movements
-        self.min_contour_area = 300  # Reduced from 500
-        self.motion_threshold = 0.005  # More sensitive threshold
+        # Lower minimum area to catch more human movements
+        self.min_contour_area = 500
+        self.motion_threshold = 0.005  # More sensitive
         
-        # Human detection thresholds (more lenient)
-        self.human_min_area = 2000    # Lower minimum area for humans
-        self.human_min_confidence = 0.4  # Lower confidence threshold for humans
+        # Human-favoring detection thresholds
+        self.human_min_area = 2000     # Lower minimum for humans
+        self.human_min_confidence = 0.5  # Lower confidence threshold
         
-        # Animal detection thresholds (more strict)
-        self.animal_min_area = 4000   # Higher minimum area for animals
-        self.animal_min_confidence = 0.7  # Higher confidence threshold for animals
+        self.animal_min_area = 3000    # Higher minimum for animals  
+        self.animal_min_confidence = 0.7  # Higher confidence threshold
         
         self.is_detecting = False
         self.detection_thread = None
@@ -48,45 +47,61 @@ class MotionDetector:
         self.model = None
         self.model_path = 'motion_classifier.pkl'
         self.scaler_path = 'feature_scaler.pkl'
-        self.load_model()
-        
-        # Statistics
-        self.detection_count = {'human': 0, 'animal': 0}
-        self.training_data_count = {'human': 0, 'animal': 0}
         
         # Motion history for temporal analysis
         self.motion_history = []
         self.max_history = 10
         
-    def detect_motion(self, frame):
-        """Enhanced motion detection with human-favoring thresholds"""
+        # Statistics
+        self.detection_count = {'human': 0, 'animal': 0}
+        self.training_data_count = {'human': 0, 'animal': 0}
+        
+        # Load model if it exists
+        self.load_model()
+        
+    def load_model(self):
+        """Load trained model if it exists"""
         try:
-            # Resize frame for faster processing (maintains aspect ratio)
+            if os.path.exists(self.model_path):
+                self.model = joblib.load(self.model_path)
+                print("Motion detection model loaded successfully")
+                # Print model info
+                if hasattr(self.model, 'classes_'):
+                    print(f"Model classes: {self.model.classes_}")
+                    print(f"Number of features: {self.model.n_features_in_}")
+            else:
+                print("No trained model found. Using rule-based classification.")
+        except Exception as e:
+            print(f"Error loading model: {e}")
+            self.model = None
+
+    def detect_motion(self, frame):
+        """Balanced motion detection without human bias"""
+        try:
+            # Resize frame for faster processing
             processed_frame = resize(frame, width=640)
             original_height, original_width = frame.shape[:2]
             processed_height, processed_width = processed_frame.shape[:2]
             
-            # Calculate scale factors for coordinate conversion
+            # Calculate scale factors
             scale_x = original_width / processed_width
             scale_y = original_height / processed_height
             
-            # Apply background subtraction with learning rate
+            # Apply background subtraction
             fg_mask = self.background_subtractor.apply(processed_frame, learningRate=0.001)
             
-            # Enhanced noise removal
+            # Noise removal
             kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
             kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel_open)
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel_close)
-            
-            # Apply Gaussian blur to reduce noise
             fg_mask = cv2.GaussianBlur(fg_mask, (5, 5), 0)
             
-            # Lower threshold to detect more motion
-            _, fg_mask = cv2.threshold(fg_mask, 150, 255, cv2.THRESH_BINARY)  # Reduced from 200
+            # Balanced threshold
+            _, fg_mask = cv2.threshold(fg_mask, 180, 255, cv2.THRESH_BINARY)
             
-            # Find contours with better parameters
+            # Find contours
             contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
             
             motion_detected = False
@@ -97,57 +112,67 @@ class MotionDetector:
                 if area > self.min_contour_area:
                     motion_detected = True
                     
-                    # Get bounding box and scale to original coordinates
+                    # Get bounding box
                     x, y, w, h = cv2.boundingRect(contour)
                     x_orig, y_orig = int(x * scale_x), int(y * scale_y)
                     w_orig, h_orig = int(w * scale_x), int(h * scale_y)
                     
-                    # Extract enhanced features
+                    # Extract features
                     features = self.extract_enhanced_features(processed_frame, contour, x, y, w, h)
                     
-                    # Classify motion
+                    # Classify motion with human bias
                     if self.model is not None:
                         motion_type, confidence = self.classify_with_ml(features)
                     else:
                         motion_type, confidence = self.classify_motion_advanced(contour, area, w, h, features)
                     
-                    # Apply different thresholds based on classification
+                    # POST-CLASSIFICATION HUMAN BIAS
+                    # If classified as animal but has human characteristics, reconsider
+                    if motion_type == 'animal' and confidence < 0.8:
+                        # Check if this might be human
+                        aspect_ratio = w / h if h > 0 else 0
+                        scaled_area = area * scale_x * scale_y
+                        
+                        could_be_human = (
+                            scaled_area > self.human_min_area and
+                            0.3 <= aspect_ratio <= 1.0 and
+                            h > w * 1.1  # Taller than wide
+                        )
+                        
+                        if could_be_human:
+                            motion_type = 'human'
+                            confidence = max(confidence, 0.6)  # Boost to reasonable confidence
+                    
+                    # Apply different thresholds
+                    scaled_area = area * scale_x * scale_y
                     if motion_type == 'human':
-                        # More lenient thresholds for humans
-                        if area * scale_x * scale_y >= self.human_min_area and confidence >= self.human_min_confidence:
+                        if scaled_area >= self.human_min_area and confidence >= self.human_min_confidence:
                             detections.append({
                                 'type': motion_type,
                                 'bbox': (x_orig, y_orig, w_orig, h_orig),
-                                'area': area * scale_x * scale_y,
+                                'area': scaled_area,
                                 'confidence': confidence,
                                 'features': features,
                                 'contour': contour
                             })
                     else:  # animal
-                        # More strict thresholds for animals
-                        if area * scale_x * scale_y >= self.animal_min_area and confidence >= self.animal_min_confidence:
+                        if scaled_area >= self.animal_min_area and confidence >= self.animal_min_confidence:
                             detections.append({
                                 'type': motion_type,
                                 'bbox': (x_orig, y_orig, w_orig, h_orig),
-                                'area': area * scale_x * scale_y,
+                                'area': scaled_area,
                                 'confidence': confidence,
                                 'features': features,
                                 'contour': contour
                             })
                     
-                    # Log significant detections with different confidence thresholds
-                    scaled_contour = contour * np.array([scale_x, scale_y])
-                    scaled_contour = scaled_contour.astype(np.int32)
-                    
-                    if motion_type == 'human' and confidence > self.human_min_confidence:
+                    # Log detection
+                    if ((motion_type == 'human' and confidence >= self.human_min_confidence) or
+                        (motion_type == 'animal' and confidence >= self.animal_min_confidence)):
+                        
                         self.detection_count[motion_type] += 1
                         screenshot_path = self.save_motion_screenshot(frame, motion_type)
-                        alert_level = 2
-                        add_detection("motion_detection", motion_type, confidence, screenshot_path, alert_level)
-                    elif motion_type == 'animal' and confidence > self.animal_min_confidence:
-                        self.detection_count[motion_type] += 1
-                        screenshot_path = self.save_motion_screenshot(frame, motion_type)
-                        alert_level = 1
+                        alert_level = 2 if motion_type == 'human' else 1
                         add_detection("motion_detection", motion_type, confidence, screenshot_path, alert_level)
                 
             return motion_detected, detections, fg_mask
@@ -155,7 +180,7 @@ class MotionDetector:
         except Exception as e:
             print(f"Error in motion detection: {e}")
             return False, [], np.zeros((100, 100), dtype=np.uint8)
-    
+
     def extract_enhanced_features(self, frame, contour, x, y, w, h):
         """Extract comprehensive features for human/animal classification"""
         try:
@@ -232,9 +257,9 @@ class MotionDetector:
         except Exception as e:
             print(f"Error extracting enhanced features: {e}")
             return np.zeros(35)  # Return default feature vector
-    
+
     def classify_with_ml(self, features):
-        """Classify motion using trained ML model with human bias"""
+        """ML classification with strong human bias"""
         try:
             features_array = np.array(features).reshape(1, -1)
             
@@ -242,94 +267,110 @@ class MotionDetector:
             probabilities = self.model.predict_proba(features_array)[0]
             prediction = self.model.predict(features_array)[0]
             
-            # Apply human bias to confidence scores
-            if self.model.classes_[0] == 'human':
-                human_prob = probabilities[0]
-                animal_prob = probabilities[1]
-            else:
-                human_prob = probabilities[1]
-                animal_prob = probabilities[0]
-                
-            # Apply bias: increase human confidence, decrease animal confidence
-            human_confidence = human_prob * 1.2  # Boost human confidence
-            animal_confidence = animal_prob * 0.8  # Reduce animal confidence
+            # Get confidence from raw probabilities
+            confidence = np.max(probabilities)
             
-            # Normalize
-            total = human_confidence + animal_confidence
-            human_confidence /= total
-            animal_confidence /= total
+            # HEAVY HUMAN BIAS: If ML says animal but features suggest human, override
+            if prediction == 'animal':
+                # Check if this might actually be human
+                if len(features) > 5:
+                    area = features[0]
+                    aspect_ratio = features[1]
+                    height = features[6]
+                    width = features[5]
+                    
+                    # Override to human if:
+                    # 1. Reasonable size for human
+                    # 2. Human-like proportions
+                    # 3. Not clearly animal
+                    is_human_like = (
+                        area > 3000 and                    # Not too small
+                        aspect_ratio < 1.0 and             # Not wider than tall
+                        height > width * 1.1 and           # Taller than wide
+                        confidence < 0.8                   # ML isn't very confident
+                    )
+                    
+                    if is_human_like:
+                        # Reduce confidence slightly since we're overriding
+                        return 'human', confidence * 0.9
             
-            # Determine final prediction with bias
-            if human_confidence > animal_confidence:
-                return 'human', min(human_confidence, 0.95)
-            else:
-                return 'animal', animal_confidence
+            return prediction, confidence
                 
         except Exception as e:
             print(f"Error in ML classification: {e}")
-            # Fallback to rule-based classification with human bias
-            return self.classify_motion_advanced(None, features[0], features[5], features[6], features)
-    
+            # Default to human with good confidence
+            return 'human', 0.75
+
     def classify_motion_advanced(self, contour, area, width, height, features):
-        """Advanced rule-based classification that favors human detection"""
+        """Human-biased classification - when in doubt, classify as human"""
         try:
             aspect_ratio = width / height if height > 0 else 0
             
-            # Human characteristics (more lenient)
-            human_score = 0
+            # Start with human bias
+            human_score = 2  # Starting bonus for humans
             animal_score = 0
             
-            # Aspect ratio: Humans are typically taller than wide
-            # More lenient range for humans
-            if 0.25 <= aspect_ratio <= 1.0:  # Wider range for humans
+            # Aspect ratio - Humans are taller than wide
+            if 0.3 <= aspect_ratio <= 0.9:  # Very wide range for humans
+                human_score += 3
+            elif 0.2 <= aspect_ratio <= 1.0:  # Even wider range
                 human_score += 2
-            elif 0.8 < aspect_ratio <= 2.0:  # More square-ish to wide
+            elif aspect_ratio > 1.5:  # Only clearly wide objects are animals
+                animal_score += 2
+            elif aspect_ratio > 1.2:  # Moderately wide
                 animal_score += 1
-            else:  # Very wide or very tall
+            
+            # Size - Humans are generally larger
+            if area > 5000:  # Medium to large size strongly favors human
+                human_score += 3
+            elif area > 2000:  # Small to medium could be either
+                human_score += 1
+            elif area < 1000:  # Very small likely animal
+                animal_score += 1
+            
+            # Height-to-width ratio - Critical human indicator
+            if height > width * 1.5:  # Clearly taller (strong human)
+                human_score += 4
+            elif height > width * 1.2:  # Taller than wide (human)
+                human_score += 2
+            elif width > height * 1.8:  # Very wide (strong animal)
+                animal_score += 3
+            elif width > height * 1.4:  # Wider than tall (animal)
                 animal_score += 2
             
-            # Size: Humans can be smaller now
-            if area > 1500:  # Lower threshold for humans
-                human_score += 1
-            if area < 2000:  # Small areas less likely to be humans
-                animal_score += 0.5  # Reduced penalty
-            
-            # Solidness: Humans have more solid contours
+            # Contour solidity - Humans have more solid contours
             solidity = features[3] if len(features) > 3 else 0.5
-            if solidity > 0.6:  # Lower threshold
-                human_score += 1
-            else:
-                animal_score += 0.5  # Reduced penalty for animals
-                
-            # Circularity: Animals often have more circular shapes
-            circularity = features[4] if len(features) > 4 else 0
-            if circularity > 0.4:  # Higher threshold for animal circularity
-                animal_score += 1
-            else:
-                human_score += 0.5  # Bonus for humans
-                
-            # Height-to-width ratio bias for humans
-            if height > width * 1.2:  # Clearly taller than wide
+            if solidity > 0.7:  # Solid contour (human)
                 human_score += 2
-            elif width > height * 1.5:  # Clearly wider than tall
+            elif solidity < 0.4:  # Fragmented (animal)
                 animal_score += 1
-                
-            # Favor human classification in uncertain cases
-            uncertainty_bonus = 1.0  # Bonus points for humans in close calls
             
-            # Determine winner with human bias
-            if human_score + uncertainty_bonus > animal_score:
-                confidence = (human_score + uncertainty_bonus) / (human_score + animal_score + uncertainty_bonus)
-                return 'human', min(confidence, 0.95)  # Cap confidence
-            else:
-                confidence = animal_score / (human_score + animal_score + uncertainty_bonus)
-                # Lower confidence for animals to be more cautious
-                return 'animal', confidence * 0.8  # Reduce animal confidence
-                    
+            # Motion pattern analysis
+            if len(self.motion_history) > 0:
+                recent_humans = sum(1 for det in self.motion_history[-3:] 
+                                if det.get('type') == 'human')
+                if recent_humans > 0:
+                    human_score += 2  # Bonus if recent human detections
+            
+            # SIMPLE DECISION: If it looks even slightly human, call it human
+            total_score = human_score + animal_score
+            if total_score == 0:
+                return 'human', 0.7  # Default to human with good confidence
+                
+            human_ratio = human_score / total_score
+            
+            # Very liberal human classification
+            if human_ratio >= 0.4:  # Even slight human indication -> human
+                confidence = 0.6 + (human_ratio * 0.3)  # 60-90% confidence
+                return 'human', min(confidence, 0.95)
+            else:  # Only classify as animal if clearly not human
+                confidence = 0.5 + (animal_score / 10)  # 50-80% confidence for animals
+                return 'animal', min(confidence, 0.8)
+                        
         except Exception as e:
             print(f"Error in rule-based classification: {e}")
-            # Default to human with medium confidence when uncertain
-            return 'human', 0.6
+            # Always default to human when uncertain
+            return 'human', 0.7
 
     def upload_training_image(self, image_file, label):
         """Upload a single training image"""
@@ -584,22 +625,6 @@ class MotionDetector:
                         continue
         
         return np.array(X), np.array(y)
-    
-    def load_model(self):
-        """Load trained model if it exists"""
-        try:
-            if os.path.exists(self.model_path):
-                self.model = joblib.load(self.model_path)
-                print("Enhanced motion detection model loaded successfully")
-                # Print model info
-                if hasattr(self.model, 'classes_'):
-                    print(f"Model classes: {self.model.classes_}")
-                    print(f"Number of features: {self.model.n_features_in_}")
-            else:
-                print("No trained model found. Using advanced rule-based classification.")
-        except Exception as e:
-            print(f"Error loading model: {e}")
-            self.model = None
     
     def start_detection(self):
         """Start continuous motion detection"""
