@@ -19,11 +19,6 @@
                 </div>
                 <!-- Enhanced face detection overlay with better fitting boxes -->
                 <div id="faceOverlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
-
-                <!-- Performance indicator -->
-                <div class="absolute bottom-2 left-2 bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs">
-                    FPS: <span id="fpsDisplay">0</span>
-                </div>
             </div>
 
             <!-- Camera Controls -->
@@ -171,12 +166,11 @@
 
     async function startCamera() {
         try {
-            // Request camera access with preferred constraints
             cameraStream = await navigator.mediaDevices.getUserMedia({
                 video: {
                     width: { ideal: 1280 },
                     height: { ideal: 720 },
-                    facingMode: 'user' // Use front camera
+                    facingMode: 'user'
                 },
                 audio: false
             });
@@ -184,21 +178,29 @@
             const videoElement = document.getElementById('videoElement');
             videoElement.srcObject = cameraStream;
 
+            // Wait for video to be ready
+            await new Promise((resolve) => {
+                videoElement.onloadedmetadata = () => {
+                    videoElement.play();
+                    resolve();
+                };
+            });
+
+            // Initialize overlay positioning
+            initializeOverlay();
+
             updateCameraStatus('Active');
 
-            // Set up track ended event
             cameraStream.getTracks().forEach(track => {
                 track.onended = () => {
                     stopCamera();
                 };
             });
 
-            // Start face recognition if enabled
             if (faceRecognitionActive) {
                 startFaceRecognition();
             }
 
-            // Start FPS counter
             updateFPS();
 
         } catch (error) {
@@ -274,32 +276,74 @@
         const overlay = document.getElementById('faceOverlay');
         const video = document.getElementById('videoElement');
 
+        // Clear previous boxes
         overlay.innerHTML = '';
+
+        // Get the actual displayed size and position of the video
+        const videoRect = video.getBoundingClientRect();
+        const overlayRect = overlay.getBoundingClientRect();
+
+        // Calculate the actual video content area (accounting for letterboxing/pillarboxing)
+        const videoAspectRatio = video.videoWidth / video.videoHeight;
+        const displayAspectRatio = videoRect.width / videoRect.height;
+
+        let scaleX, scaleY, offsetX = 0, offsetY = 0;
+
+        if (displayAspectRatio > videoAspectRatio) {
+            // Pillarboxed (black bars on sides)
+            scaleY = videoRect.height / video.videoHeight;
+            scaleX = scaleY;
+            offsetX = (videoRect.width - (video.videoWidth * scaleX)) / 2;
+        } else {
+            // Letterboxed (black bars on top/bottom)
+            scaleX = videoRect.width / video.videoWidth;
+            scaleY = scaleX;
+            offsetY = (videoRect.height - (video.videoHeight * scaleY)) / 2;
+        }
 
         faces.forEach(face => {
             const box = document.createElement('div');
             box.style.position = 'absolute';
-            box.style.border = face.is_authorized ? '3px solid green' : '3px solid red';
-            box.style.backgroundColor = face.is_authorized ? 'rgba(0, 255, 0, 0.1)' : 'rgba(255, 0, 0, 0.1)';
-            box.style.borderRadius = '8px';
+            box.style.border = face.is_authorized ? '4px solid #22c55e' : '4px solid #ef4444';
+            box.style.backgroundColor = face.is_authorized ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            box.style.borderRadius = '12px';
             box.style.pointerEvents = 'none';
-            box.style.transition = 'all 0.2s ease-out'; // Smooth animation
+            box.style.transition = 'all 0.2s ease-out';
+            box.style.boxShadow = face.is_authorized ?
+                '0 0 15px rgba(34, 197, 94, 0.6)' :
+                '0 0 15px rgba(239, 68, 68, 0.6)';
 
-            const videoRect = video.getBoundingClientRect();
-            const scaleX = videoRect.width / video.videoWidth;
-            const scaleY = videoRect.height / video.videoHeight;
-
+            // Face location is [top, right, bottom, left] in pixel coordinates
             const [top, right, bottom, left] = face.location;
-            box.style.left = (left * scaleX) + 'px';
-            box.style.top = (top * scaleY) + 'px';
-            box.style.width = ((right - left) * scaleX) + 'px';
-            box.style.height = ((bottom - top) * scaleY) + 'px';
 
+            // Make the box 40% bigger by expanding it in all directions
+            const width = right - left;
+            const height = bottom - top;
+            const expandX = width * 0.2;  // Expand 20% on each side
+            const expandY = height * 0.2;  // Expand 20% on top and bottom
+
+            // Calculate expanded box dimensions
+            const expandedLeft = Math.max(0, left - expandX);
+            const expandedTop = Math.max(0, top - expandY);
+            const expandedRight = Math.min(video.videoWidth, right + expandX);
+            const expandedBottom = Math.min(video.videoHeight, bottom + expandY);
+
+            const boxLeft = (expandedLeft * scaleX) + offsetX;
+            const boxTop = (expandedTop * scaleY) + offsetY;
+            const boxWidth = (expandedRight - expandedLeft) * scaleX;
+            const boxHeight = (expandedBottom - expandedTop) * scaleY;
+
+            box.style.left = boxLeft + 'px';
+            box.style.top = boxTop + 'px';
+            box.style.width = boxWidth + 'px';
+            box.style.height = boxHeight + 'px';
+
+            // Create label
             const label = document.createElement('div');
             label.style.position = 'absolute';
             label.style.top = '-30px';
             label.style.left = '0';
-            label.style.backgroundColor = face.is_authorized ? 'green' : 'red';
+            label.style.backgroundColor = face.is_authorized ? '#22c55e' : '#ef4444';
             label.style.color = 'white';
             label.style.padding = '4px 8px';
             label.style.fontSize = '12px';
@@ -307,10 +351,30 @@
             label.style.fontWeight = 'bold';
             label.style.pointerEvents = 'none';
             label.style.whiteSpace = 'nowrap';
-            label.textContent = face.display_name || (face.is_authorized ? face.name : 'Unauthorized');
+            label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+
+            // Add icon
+            const icon = document.createElement('i');
+            icon.className = face.is_authorized ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle';
+            icon.style.marginRight = '4px';
+            label.appendChild(icon);
+
+            const text = document.createTextNode(
+                face.display_name || (face.is_authorized ? face.name : 'Unauthorized')
+            );
+            label.appendChild(text);
 
             if (face.face_covered) {
-                label.textContent += ' (Covered)';
+                const coverText = document.createTextNode(' (Covered)');
+                label.appendChild(coverText);
+            }
+
+            // Add confidence percentage
+            if (face.confidence > 0) {
+                const confidenceText = document.createTextNode(
+                    ` ${(face.confidence * 100).toFixed(0)}%`
+                );
+                label.appendChild(confidenceText);
             }
 
             box.appendChild(label);
@@ -318,6 +382,25 @@
         });
 
         fpsCounter++;
+    }
+
+    function initializeOverlay() {
+        const video = document.getElementById('videoElement');
+        const overlay = document.getElementById('faceOverlay');
+
+        // Make sure overlay matches video dimensions exactly
+        const resizeOverlay = () => {
+            const videoRect = video.getBoundingClientRect();
+            overlay.style.width = videoRect.width + 'px';
+            overlay.style.height = videoRect.height + 'px';
+        };
+
+        // Resize on video metadata load and window resize
+        video.addEventListener('loadedmetadata', resizeOverlay);
+        window.addEventListener('resize', resizeOverlay);
+
+        // Initial resize
+        resizeOverlay();
     }
 
     function updateFPS() {
