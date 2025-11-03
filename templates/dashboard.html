@@ -119,6 +119,233 @@
     </div>
 </div>
 
+<!-- Distance Settings Panel -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold flex items-center">
+            <i class="fas fa-ruler-combined mr-2 text-purple-600"></i>
+            Distance Detection Settings
+        </h3>
+        <button onclick="toggleDistanceSettings()"
+            class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1 rounded text-sm">
+            <i class="fas fa-cog mr-1"></i>Configure
+        </button>
+    </div>
+
+    <!-- Collapsible Settings Panel -->
+    <div id="distanceSettingsPanel" class="hidden">
+        <div class="bg-gray-50 rounded-lg p-4 space-y-4">
+            <!-- Distance Thresholds -->
+            <div>
+                <label class="block text-sm font-semibold mb-2">
+                    <i class="fas fa-expand-arrows-alt mr-1"></i>
+                    Maximum Detection Distance (meters)
+                </label>
+                <input type="number" id="maxDistance" value="6.0" step="0.5" min="1" max="20"
+                    class="w-full border rounded px-3 py-2">
+                <p class="text-xs text-gray-600 mt-1">
+                    Unauthorized persons beyond this distance will not trigger alerts
+                </p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold mb-2">
+                    <i class="fas fa-exclamation-triangle mr-1 text-orange-500"></i>
+                    Warning Distance (meters)
+                </label>
+                <input type="number" id="warningDistance" value="3.0" step="0.5" min="0.5" max="10"
+                    class="w-full border rounded px-3 py-2">
+                <p class="text-xs text-gray-600 mt-1">
+                    Medium alert when unauthorized person is within this distance
+                </p>
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold mb-2">
+                    <i class="fas fa-skull-crossbones mr-1 text-red-500"></i>
+                    Critical Distance (meters)
+                </label>
+                <input type="number" id="criticalDistance" value="1.5" step="0.25" min="0.5" max="5"
+                    class="w-full border rounded px-3 py-2">
+                <p class="text-xs text-gray-600 mt-1">
+                    High alert when unauthorized person is very close
+                </p>
+            </div>
+
+            <!-- Save Button -->
+            <button onclick="saveDistanceSettings()"
+                class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold">
+                <i class="fas fa-save mr-2"></i>Save Settings
+            </button>
+        </div>
+    </div>
+
+    <!-- Distance Zones Legend -->
+    <div class="mt-4 bg-gray-50 rounded-lg p-4">
+        <h4 class="font-semibold mb-3 text-sm">Distance Zones:</h4>
+        <div class="space-y-2">
+            <div class="flex items-center">
+                <div class="w-4 h-4 rounded bg-red-500 mr-2"></div>
+                <span class="text-sm">
+                    <strong>Critical Zone:</strong> &lt; 1.5m - Immediate threat
+                </span>
+            </div>
+            <div class="flex items-center">
+                <div class="w-4 h-4 rounded bg-orange-500 mr-2"></div>
+                <span class="text-sm">
+                    <strong>Warning Zone:</strong> 1.5m - 3m - Close proximity
+                </span>
+            </div>
+            <div class="flex items-center">
+                <div class="w-4 h-4 rounded bg-blue-500 mr-2"></div>
+                <span class="text-sm">
+                    <strong>Detection Zone:</strong> 3m - 6m - Monitored area
+                </span>
+            </div>
+            <div class="flex items-center">
+                <div class="w-4 h-4 rounded bg-gray-400 mr-2"></div>
+                <span class="text-sm">
+                    <strong>Safe Zone:</strong> &gt; 6m - Too far to detect
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Calibration Section -->
+    <div class="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
+        <h4 class="font-semibold mb-2 text-sm flex items-center">
+            <i class="fas fa-tools mr-2 text-blue-600"></i>
+            Camera Calibration (Optional)
+        </h4>
+        <p class="text-xs text-gray-700 mb-3">
+            For accurate distance measurement, calibrate your camera by having someone stand at a known distance.
+        </p>
+        <button onclick="openCalibrationModal()"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
+            <i class="fas fa-camera mr-1"></i>Calibrate Camera
+        </button>
+    </div>
+</div>
+
+<!-- Calibration Modal (Add at the bottom of your dashboard.html) -->
+<div id="calibrationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+        <h3 class="text-xl font-bold mb-4">
+            <i class="fas fa-camera mr-2"></i>Camera Calibration
+        </h3>
+
+        <div class="space-y-4">
+            <div>
+                <label class="block text-sm font-semibold mb-2">
+                    Step 1: Have someone stand at a known distance
+                </label>
+                <input type="number" id="calibrationDistance" placeholder="Enter distance in meters"
+                    class="w-full border rounded px-3 py-2" value="2.0" step="0.5">
+            </div>
+
+            <div>
+                <label class="block text-sm font-semibold mb-2">
+                    Step 2: Capture their face
+                </label>
+                <button onclick="captureCalibrationFace()"
+                    class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-camera mr-2"></i>Capture Face
+                </button>
+            </div>
+
+            <div id="calibrationResult" class="hidden p-3 bg-green-50 rounded text-sm">
+                <!-- Calibration result will appear here -->
+            </div>
+        </div>
+
+        <div class="mt-6 flex justify-end space-x-2">
+            <button onclick="closeCalibrationModal()"
+                class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded">
+                Close
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openCalibrationModal() {
+        document.getElementById('calibrationModal').classList.remove('hidden');
+    }
+
+    function closeCalibrationModal() {
+        document.getElementById('calibrationModal').classList.add('hidden');
+    }
+
+    function captureCalibrationFace() {
+        if (!cameraStream) {
+            alert('Please start the camera first');
+            return;
+        }
+
+        const video = document.getElementById('videoElement');
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        ctx.drawImage(video, 0, 0);
+
+        const imageData = canvas.toDataURL('image/jpeg');
+
+        // Send to server for calibration
+        const knownDistance = document.getElementById('calibrationDistance').value;
+
+        const formData = new FormData();
+        formData.append('image_data', imageData);
+        formData.append('known_distance', knownDistance);
+
+        fetch('/api/estimate_distance', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.faces.length > 0) {
+                    const face = data.faces[0];
+                    const faceWidthPixels = face.location[1] - face.location[3];
+
+                    // Now calibrate with this info
+                    const calibFormData = new FormData();
+                    calibFormData.append('known_distance', knownDistance);
+                    calibFormData.append('face_width_pixels', faceWidthPixels);
+
+                    return fetch('/api/calibrate_distance', {
+                        method: 'POST',
+                        body: calibFormData
+                    });
+                } else {
+                    throw new Error('No face detected. Please ensure a face is visible.');
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const resultDiv = document.getElementById('calibrationResult');
+                    resultDiv.classList.remove('hidden');
+                    resultDiv.innerHTML = `
+                <i class="fas fa-check-circle text-green-600 mr-2"></i>
+                <strong>Calibration successful!</strong><br>
+                Focal length: ${data.focal_length.toFixed(2)}
+            `;
+
+                    setTimeout(() => {
+                        closeCalibrationModal();
+                    }, 3000);
+                } else {
+                    alert('Calibration failed: ' + data.error);
+                }
+            })
+            .catch(error => {
+                alert(error.message || 'Calibration error');
+                console.error('Calibration error:', error);
+            });
+    }
+</script>
+
 <!-- Recent Unauthorized Detections -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <h3 class="text-lg font-bold mb-4 flex items-center">
@@ -281,7 +508,6 @@
 
         // Get the actual displayed size and position of the video
         const videoRect = video.getBoundingClientRect();
-        const overlayRect = overlay.getBoundingClientRect();
 
         // Calculate the actual video content area (accounting for letterboxing/pillarboxing)
         const videoAspectRatio = video.videoWidth / video.videoHeight;
@@ -302,27 +528,53 @@
         }
 
         faces.forEach(face => {
+            // Only show boxes for faces within detection range or authorized faces
+            const shouldDisplay = face.is_authorized || face.within_detection_range;
+
+            if (!shouldDisplay) {
+                return; // Skip faces that are too far away
+            }
+
             const box = document.createElement('div');
+
+            // Color coding based on distance and authorization
+            let borderColor, bgColor, boxShadow;
+
+            if (face.is_authorized) {
+                borderColor = '#22c55e'; // Green for authorized
+                bgColor = 'rgba(34, 197, 94, 0.1)';
+                boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
+            } else if (face.alert_level === 3) {
+                borderColor = '#dc2626'; // Red for critical distance
+                bgColor = 'rgba(220, 38, 38, 0.15)';
+                boxShadow = '0 0 20px rgba(220, 38, 38, 0.8)';
+            } else if (face.alert_level === 2) {
+                borderColor = '#f59e0b'; // Orange for warning distance
+                bgColor = 'rgba(245, 158, 11, 0.15)';
+                boxShadow = '0 0 15px rgba(245, 158, 11, 0.6)';
+            } else {
+                borderColor = '#3b82f6'; // Blue for detection range
+                bgColor = 'rgba(59, 130, 246, 0.1)';
+                boxShadow = '0 0 15px rgba(59, 130, 246, 0.6)';
+            }
+
             box.style.position = 'absolute';
-            box.style.border = face.is_authorized ? '4px solid #22c55e' : '4px solid #ef4444';
-            box.style.backgroundColor = face.is_authorized ? 'rgba(34, 197, 94, 0.1)' : 'rgba(239, 68, 68, 0.1)';
+            box.style.border = `4px solid ${borderColor}`;
+            box.style.backgroundColor = bgColor;
             box.style.borderRadius = '12px';
             box.style.pointerEvents = 'none';
             box.style.transition = 'all 0.2s ease-out';
-            box.style.boxShadow = face.is_authorized ?
-                '0 0 15px rgba(34, 197, 94, 0.6)' :
-                '0 0 15px rgba(239, 68, 68, 0.6)';
+            box.style.boxShadow = boxShadow;
 
             // Face location is [top, right, bottom, left] in pixel coordinates
             const [top, right, bottom, left] = face.location;
 
-            // Make the box 40% bigger by expanding it in all directions
+            // Make the box bigger by expanding it in all directions
             const width = right - left;
             const height = bottom - top;
-            const expandX = width * 0.2;  // Expand 20% on each side
-            const expandY = height * 0.2;  // Expand 20% on top and bottom
+            const expandX = width * 0.2;
+            const expandY = height * 0.2;
 
-            // Calculate expanded box dimensions
             const expandedLeft = Math.max(0, left - expandX);
             const expandedTop = Math.max(0, top - expandY);
             const expandedRight = Math.min(video.videoWidth, right + expandX);
@@ -338,16 +590,16 @@
             box.style.width = boxWidth + 'px';
             box.style.height = boxHeight + 'px';
 
-            // Create label
+            // Create label with name
             const label = document.createElement('div');
             label.style.position = 'absolute';
-            label.style.top = '-30px';
+            label.style.top = '-35px';
             label.style.left = '0';
-            label.style.backgroundColor = face.is_authorized ? '#22c55e' : '#ef4444';
+            label.style.backgroundColor = borderColor;
             label.style.color = 'white';
-            label.style.padding = '4px 8px';
-            label.style.fontSize = '12px';
-            label.style.borderRadius = '4px';
+            label.style.padding = '6px 12px';
+            label.style.fontSize = '14px';
+            label.style.borderRadius = '6px';
             label.style.fontWeight = 'bold';
             label.style.pointerEvents = 'none';
             label.style.whiteSpace = 'nowrap';
@@ -355,34 +607,144 @@
 
             // Add icon
             const icon = document.createElement('i');
-            icon.className = face.is_authorized ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle';
-            icon.style.marginRight = '4px';
+            if (face.is_authorized) {
+                icon.className = 'fas fa-check-circle';
+            } else {
+                icon.className = 'fas fa-exclamation-triangle';
+            }
+            icon.style.marginRight = '6px';
             label.appendChild(icon);
 
-            const text = document.createTextNode(
-                face.display_name || (face.is_authorized ? face.name : 'Unauthorized')
-            );
-            label.appendChild(text);
+            // Name text
+            const nameText = document.createTextNode(face.display_name || face.name);
+            label.appendChild(nameText);
 
             if (face.face_covered) {
                 const coverText = document.createTextNode(' (Covered)');
                 label.appendChild(coverText);
             }
 
-            // Add confidence percentage
-            if (face.confidence > 0) {
-                const confidenceText = document.createTextNode(
-                    ` ${(face.confidence * 100).toFixed(0)}%`
-                );
-                label.appendChild(confidenceText);
+            // Create distance badge
+            const distanceBadge = document.createElement('div');
+            distanceBadge.style.position = 'absolute';
+            distanceBadge.style.bottom = '-30px';
+            distanceBadge.style.left = '0';
+            distanceBadge.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            distanceBadge.style.color = 'white';
+            distanceBadge.style.padding = '4px 10px';
+            distanceBadge.style.fontSize = '12px';
+            distanceBadge.style.borderRadius = '4px';
+            distanceBadge.style.fontWeight = 'bold';
+            distanceBadge.style.pointerEvents = 'none';
+            distanceBadge.style.whiteSpace = 'nowrap';
+            distanceBadge.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+
+            // Distance icon
+            const distanceIcon = document.createElement('i');
+            distanceIcon.className = 'fas fa-ruler';
+            distanceIcon.style.marginRight = '6px';
+            distanceBadge.appendChild(distanceIcon);
+
+            // Distance text
+            const distanceText = document.createTextNode(
+                `${face.distance_meters}m (${face.distance_feet}ft)`
+            );
+            distanceBadge.appendChild(distanceText);
+
+            // Add zone indicator for unauthorized persons
+            if (!face.is_authorized) {
+                const zoneIndicator = document.createElement('div');
+                zoneIndicator.style.position = 'absolute';
+                zoneIndicator.style.top = '-70px';
+                zoneIndicator.style.left = '0';
+                zoneIndicator.style.padding = '4px 10px';
+                zoneIndicator.style.fontSize = '11px';
+                zoneIndicator.style.borderRadius = '4px';
+                zoneIndicator.style.fontWeight = 'bold';
+                zoneIndicator.style.pointerEvents = 'none';
+                zoneIndicator.style.whiteSpace = 'nowrap';
+                zoneIndicator.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
+
+                // Color based on zone
+                if (face.zone === 'CRITICAL ZONE') {
+                    zoneIndicator.style.backgroundColor = '#dc2626';
+                    zoneIndicator.style.color = 'white';
+                    zoneIndicator.innerHTML = '<i class="fas fa-skull-crossbones"></i> CRITICAL ZONE';
+                } else if (face.zone === 'WARNING ZONE') {
+                    zoneIndicator.style.backgroundColor = '#f59e0b';
+                    zoneIndicator.style.color = 'white';
+                    zoneIndicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> WARNING ZONE';
+                } else {
+                    zoneIndicator.style.backgroundColor = '#3b82f6';
+                    zoneIndicator.style.color = 'white';
+                    zoneIndicator.innerHTML = '<i class="fas fa-info-circle"></i> DETECTION ZONE';
+                }
+
+                box.appendChild(zoneIndicator);
             }
 
             box.appendChild(label);
+            box.appendChild(distanceBadge);
             overlay.appendChild(box);
         });
 
         fpsCounter++;
     }
+
+    // Add distance settings panel toggle
+    function toggleDistanceSettings() {
+        const panel = document.getElementById('distanceSettingsPanel');
+        panel.classList.toggle('hidden');
+    }
+
+    // Save distance settings
+    function saveDistanceSettings() {
+        const maxDistance = document.getElementById('maxDistance').value;
+        const warningDistance = document.getElementById('warningDistance').value;
+        const criticalDistance = document.getElementById('criticalDistance').value;
+
+        const formData = new FormData();
+        formData.append('max_distance', maxDistance);
+        formData.append('warning_distance', warningDistance);
+        formData.append('critical_distance', criticalDistance);
+
+        fetch('/api/update_distance_settings', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert('Distance settings updated successfully!');
+                } else {
+                    alert('Failed to update settings: ' + data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error updating distance settings:', error);
+                alert('Error updating distance settings');
+            });
+    }
+
+    // Load distance settings on page load
+    function loadDistanceSettings() {
+        fetch('/api/get_distance_settings')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('maxDistance').value = data.settings.max_detection_distance;
+                    document.getElementById('warningDistance').value = data.settings.warning_distance;
+                    document.getElementById('criticalDistance').value = data.settings.critical_distance;
+                }
+            })
+            .catch(error => console.error('Error loading distance settings:', error));
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        loadRecentDetections();
+        loadDistanceSettings();
+    });
 
     function initializeOverlay() {
         const video = document.getElementById('videoElement');

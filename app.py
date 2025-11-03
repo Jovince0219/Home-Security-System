@@ -12,6 +12,7 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import json
+from utils.distance_estimation import get_distance_estimator
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
@@ -1460,6 +1461,117 @@ def bulk_upload_training():
             'failed_count': failed_count,
             'message': f'Uploaded {uploaded_count} images, {failed_count} failed'
         })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/calibrate_distance', methods=['POST'])
+def calibrate_distance():
+    """Calibrate distance estimation for your camera"""
+    try:
+        known_distance = float(request.form.get('known_distance'))  # in meters
+        face_width_pixels = float(request.form.get('face_width_pixels'))
+        
+        distance_estimator = get_distance_estimator()
+        
+        # Convert to cm for calibration
+        known_distance_cm = known_distance * 100
+        
+        focal_length = distance_estimator.calibrate_focal_length(known_distance_cm, face_width_pixels)
+        
+        return jsonify({
+            'success': True,
+            'focal_length': focal_length,
+            'message': f'Camera calibrated successfully. Focal length: {focal_length:.2f}'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/update_distance_settings', methods=['POST'])
+def update_distance_settings():
+    """Update distance detection settings"""
+    try:
+        max_distance = float(request.form.get('max_distance', 6.0))
+        warning_distance = float(request.form.get('warning_distance', 3.0))
+        critical_distance = float(request.form.get('critical_distance', 1.5))
+        
+        distance_estimator = get_distance_estimator()
+        distance_estimator.update_settings(
+            max_distance=max_distance,
+            warning_distance=warning_distance,
+            critical_distance=critical_distance
+        )
+        
+        return jsonify({
+            'success': True,
+            'message': 'Distance settings updated successfully',
+            'settings': {
+                'max_distance': max_distance,
+                'warning_distance': warning_distance,
+                'critical_distance': critical_distance
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/get_distance_settings')
+def get_distance_settings():
+    """Get current distance estimation settings"""
+    try:
+        distance_estimator = get_distance_estimator()
+        
+        return jsonify({
+            'success': True,
+            'settings': {
+                'max_detection_distance': distance_estimator.MAX_DETECTION_DISTANCE,
+                'warning_distance': distance_estimator.WARNING_DISTANCE,
+                'critical_distance': distance_estimator.CRITICAL_DISTANCE,
+                'focal_length': distance_estimator.focal_length,
+                'known_face_width_cm': distance_estimator.KNOWN_FACE_WIDTH_CM
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/estimate_distance', methods=['POST'])
+def estimate_distance():
+    """Estimate distance for a test image"""
+    try:
+        image_data = request.form.get('image_data')
+        if not image_data:
+            return jsonify({'success': False, 'error': 'No image data provided'})
+        
+        # Decode base64 image
+        image_data = image_data.split(',')[1]
+        image_bytes = base64.b64decode(image_data)
+        
+        # Convert to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Detect faces and estimate distance
+        from utils.face_recognition_utils import detect_faces_in_frame_optimized
+        results = detect_faces_in_frame_optimized(frame)
+        
+        # Convert numpy types to Python types for JSON serialization
+        for result in results:
+            result['confidence'] = float(result['confidence'])
+            result['location'] = [int(x) for x in result['location']]
+            result['face_covered'] = bool(result['face_covered'])
+            result['is_authorized'] = bool(result['is_authorized'])
+            result['distance_meters'] = float(result['distance_meters'])
+            result['distance_feet'] = float(result['distance_feet'])
+            result['trigger_alert'] = bool(result['trigger_alert'])
+            result['alert_level'] = int(result['alert_level'])
+            result['within_detection_range'] = bool(result['within_detection_range'])
+        
+        return jsonify({'success': True, 'faces': results})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})

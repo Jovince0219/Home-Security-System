@@ -5,6 +5,7 @@ import os
 from utils.database import get_all_faces, add_detection, get_face_by_id, delete_face_image_by_index, add_face_image, get_face_images
 import datetime
 from utils.alert_system import AlertSystem
+from utils.distance_estimation import get_distance_estimator
 
 # Global variables for face recognition
 known_face_encodings = []
@@ -27,50 +28,48 @@ def load_known_faces():
 
 def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
     """
-    OPTIMIZED VERSION: Detect and recognize faces with better performance
+    OPTIMIZED VERSION with DISTANCE ESTIMATION
+    Detect and recognize faces, estimate distance, and only alert for close unauthorized persons
     
     Args:
         frame: Input frame (BGR format from OpenCV)
         scale_factor: Scale factor if frame was resized (1.0 = original size)
     
     Returns:
-        List of detected faces with locations and info
+        List of detected faces with locations, info, and distance
     """
     global known_face_encodings, known_face_names
+    
+    # Get distance estimator
+    distance_estimator = get_distance_estimator()
     
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
-    # OPTIMIZATION 1: Use faster face detection model
-    # Using 'cnn' model is more accurate but slower
-    # Using default (HOG) model is faster
+    # Detect faces
     face_locations = face_recognition.face_locations(rgb_frame, model='hog')
     
-    # OPTIMIZATION 2: Only process faces if found
     if len(face_locations) == 0:
         return []
     
-    # OPTIMIZATION 3: Encode all faces at once (batch processing)
+    # Encode all faces at once
     face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
     
     results = []
     authorized_detected = False
     
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-        # OPTIMIZATION 4: Early matching with tolerance adjustment
-        # Higher tolerance = faster but less accurate
-        # Lower tolerance = slower but more accurate
+        # Face recognition
         matches = face_recognition.compare_faces(
             known_face_encodings, 
             face_encoding, 
-            tolerance=0.55  # Slightly more lenient for speed
+            tolerance=0.55
         )
         
         name = "Unknown"
         confidence = 0.0
         
         if True in matches:
-            # OPTIMIZATION 5: Only calculate distances for matched faces
             matched_indices = [i for i, match in enumerate(matches) if match]
             matched_encodings = [known_face_encodings[i] for i in matched_indices]
             
@@ -82,15 +81,15 @@ def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
             confidence = 1.0 - face_distances[best_match_index]
             authorized_detected = True
         
-        # OPTIMIZATION 6: Simplified face covering detection
-        face_region = rgb_frame[top:bottom, left:right]
-        face_covered = detect_face_covering_fast(face_region)
-        
         is_authorized = name != "Unknown"
         
-        # Skip unauthorized faces if authorized person is present
-        if authorized_detected and not is_authorized:
-            continue
+        # DISTANCE ESTIMATION
+        face_location = [top, right, bottom, left]
+        distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
+        
+        # Check face covering
+        face_region = rgb_frame[top:bottom, left:right]
+        face_covered = detect_face_covering_fast(face_region)
         
         # Better face box fitting
         face_width = right - left
@@ -105,42 +104,77 @@ def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
         adjusted_top = max(0, top + height_top_reduction)
         adjusted_bottom = min(rgb_frame.shape[0], bottom - height_bottom_reduction)
         
+        # Determine display name based on distance and authorization
+        if is_authorized:
+            display_name = str(name)
+        else:
+            if distance_analysis['within_detection_range']:
+                display_name = 'Unauthorized'
+            else:
+                display_name = 'Too Far'
+        
         results.append({
             'name': str(name),
             'confidence': float(confidence),
             'location': [int(adjusted_top), int(adjusted_right), int(adjusted_bottom), int(adjusted_left)],
             'face_covered': bool(face_covered),
             'is_authorized': bool(is_authorized),
-            'display_name': str(name) if is_authorized else 'Unauthorized'
+            'display_name': display_name,
+            'distance_meters': distance_analysis['distance_meters'],
+            'distance_feet': distance_analysis['distance_feet'],
+            'zone': distance_analysis['zone'],
+            'trigger_alert': distance_analysis['trigger_alert'],
+            'alert_level': distance_analysis['alert_level'],
+            'within_detection_range': distance_analysis['within_detection_range']
         })
         
-        # OPTIMIZATION 7: Async logging (don't wait for DB write)
-        # Only log unauthorized or covered faces to reduce DB writes
-        if not is_authorized or face_covered:
+        # Only log and alert for unauthorized persons within detection range
+        if not is_authorized and distance_analysis['trigger_alert']:
             try:
-                screenshot_path = save_screenshot(frame, f"face_detection_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-                alert_level = 1 if is_authorized else 2
-                add_detection("face_detection", str(name), float(confidence), screenshot_path, alert_level)
+                screenshot_path = save_screenshot(
+                    frame, 
+                    f"unauthorized_{distance_analysis['distance_meters']}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                )
                 
-                if not is_authorized:
-                    # Send alert in background
-                    import threading
-                    alert_thread = threading.Thread(
-                        target=send_alert_async,
-                        args=(alert_level, "face_detection", str(name), screenshot_path)
-                    )
-                    alert_thread.daemon = True
-                    alert_thread.start()
+                alert_level = distance_analysis['alert_level']
+                
+                # Add detection to database
+                add_detection(
+                    "face_detection", 
+                    f"Unauthorized ({distance_analysis['distance_meters']}m)", 
+                    float(confidence), 
+                    screenshot_path, 
+                    alert_level
+                )
+                
+                # Send alert in background
+                import threading
+                alert_thread = threading.Thread(
+                    target=send_alert_async,
+                    args=(alert_level, "face_detection", str(name), screenshot_path, distance_analysis)
+                )
+                alert_thread.daemon = True
+                alert_thread.start()
+                
             except Exception as e:
                 print(f"Error logging detection: {e}")
     
     return results
 
-def send_alert_async(alert_level, detection_type, name, screenshot_path):
-    """Send alert asynchronously to avoid blocking detection"""
+def send_alert_async(alert_level, detection_type, name, screenshot_path, distance_info):
+    """Send alert asynchronously with distance information"""
     try:
         alert_system = AlertSystem()
-        alert_result = alert_system.send_alert(alert_level, detection_type, name, screenshot_path=screenshot_path)
+        
+        message = f"Unauthorized person detected at {distance_info['distance_meters']}m ({distance_info['zone']})"
+        
+        alert_result = alert_system.send_alert(
+            alert_level, 
+            detection_type, 
+            name, 
+            screenshot_path=screenshot_path,
+            custom_message=message
+        )
         print(f"Alert sent: {alert_result}")
     except Exception as e:
         print(f"Error sending alert: {e}")
@@ -148,35 +182,27 @@ def send_alert_async(alert_level, detection_type, name, screenshot_path):
 def detect_face_covering_fast(face_region):
     """
     OPTIMIZED: Faster face covering detection
-    Uses fewer checks for better performance
     """
     if face_region.size == 0:
         return False
         
     try:
-        # Quick check using variance in lower face region
         h, w = face_region.shape[:2]
         
         if h < 20 or w < 20:
             return False
         
-        # Focus on mouth/nose area (lower 40% of face)
         lower_face = face_region[int(h*0.6):, :]
         
-        # Convert to grayscale
         if len(lower_face.shape) == 3:
             gray_lower = cv2.cvtColor(lower_face, cv2.COLOR_RGB2GRAY)
         else:
             gray_lower = lower_face
         
-        # Check variance (masks typically have lower variance)
         variance = np.var(gray_lower)
-        
-        # Check edge density (masks have more regular edges)
         edges = cv2.Canny(gray_lower, 50, 150)
         edge_density = np.sum(edges > 0) / edges.size
         
-        # Simple rule-based detection
         is_covered = (variance < 250) and (edge_density > 0.15)
         
         return is_covered
@@ -203,7 +229,6 @@ def save_screenshot(frame, filename):
     """Save screenshot to screenshots folder"""
     try:
         filepath = os.path.join('static/screenshots', f"{filename}.jpg")
-        # OPTIMIZATION: Use lower JPEG quality for faster writes
         cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
         return filepath
     except Exception as e:
