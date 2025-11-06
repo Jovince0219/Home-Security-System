@@ -25,6 +25,174 @@ def load_known_faces():
             known_face_names.append(face['name'])
         except Exception as e:
             print(f"Error loading face encoding for {face['name']}: {e}")
+            
+def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
+    """
+    NEW FUNCTION: Face detection gated by human motion detection
+    Only performs face detection when:
+    1. Human motion is detected
+    2. Distance <= Critical Distance
+    
+    Args:
+        frame: Input frame (BGR format from OpenCV)
+        motion_detector: MotionDetector instance
+        scale_factor: Scale factor if frame was resized
+    
+    Returns:
+        List of detected faces with locations, info, and distance
+        OR empty list if conditions not met
+    """
+    global known_face_encodings, known_face_names
+    
+    # STEP 1: Check if human motion is active
+    if not motion_detector.is_human_motion_active():
+        return []  # No human motion detected, skip face detection
+    
+    # Get distance estimator
+    distance_estimator = get_distance_estimator()
+    
+    # Convert BGR to RGB
+    rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+    
+    # Detect faces
+    face_locations = face_recognition.face_locations(rgb_frame, model='hog')
+    
+    if len(face_locations) == 0:
+        return []
+    
+    # Encode all faces at once
+    face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
+    
+    results = []
+    
+    for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+        # STEP 2: Estimate distance FIRST
+        face_location = [top, right, bottom, left]
+        face_width_pixels = right - left
+        distance_meters = distance_estimator.estimate_distance(face_width_pixels)
+        
+        # STEP 3: Check if within Critical Distance
+        if distance_meters > distance_estimator.CRITICAL_DISTANCE:
+            continue  # Skip face recognition if beyond critical distance
+        
+        # STEP 4: Now perform face recognition (only for close humans)
+        matches = face_recognition.compare_faces(
+            known_face_encodings, 
+            face_encoding, 
+            tolerance=0.55
+        )
+        
+        name = "Unknown"
+        confidence = 0.0
+        
+        if True in matches:
+            matched_indices = [i for i, match in enumerate(matches) if match]
+            matched_encodings = [known_face_encodings[i] for i in matched_indices]
+            
+            face_distances = face_recognition.face_distance(matched_encodings, face_encoding)
+            best_match_index = np.argmin(face_distances)
+            actual_index = matched_indices[best_match_index]
+            
+            name = known_face_names[actual_index]
+            confidence = 1.0 - face_distances[best_match_index]
+        
+        is_authorized = name != "Unknown"
+        
+        # Get full distance analysis
+        distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
+        
+        # Check face covering
+        face_region = rgb_frame[top:bottom, left:right]
+        face_covered = detect_face_covering_fast(face_region)
+        
+        # Adjust bounding box
+        face_width = right - left
+        face_height = bottom - top
+        
+        width_reduction = int(face_width * 0.20)
+        height_top_reduction = int(face_height * 0.15)
+        height_bottom_reduction = int(face_height * 0.05)
+        
+        adjusted_left = max(0, left + width_reduction)
+        adjusted_right = min(rgb_frame.shape[1], right - width_reduction)
+        adjusted_top = max(0, top + height_top_reduction)
+        adjusted_bottom = min(rgb_frame.shape[0], bottom - height_bottom_reduction)
+        
+        # Determine display name
+        if is_authorized:
+            display_name = str(name)
+        else:
+            display_name = 'Unauthorized'
+        
+        results.append({
+            'name': str(name),
+            'confidence': float(confidence),
+            'location': [int(adjusted_top), int(adjusted_right), int(adjusted_bottom), int(adjusted_left)],
+            'face_covered': bool(face_covered),
+            'is_authorized': bool(is_authorized),
+            'display_name': display_name,
+            'distance_meters': distance_analysis['distance_meters'],
+            'distance_feet': distance_analysis['distance_feet'],
+            'zone': distance_analysis['zone'],
+            'trigger_alert': distance_analysis['trigger_alert'],
+            'alert_level': distance_analysis['alert_level'],
+            'within_detection_range': distance_analysis['within_detection_range'],
+            'face_encoding': face_encoding  # Include encoding for duplicate detection
+        })
+        
+        # STEP 5: Handle unauthorized faces (check for duplicates)
+        if not is_authorized:
+            # Create a simple hash for the face encoding
+            encoding_key = hash(tuple(face_encoding[:20]))  # Use first 20 values for hash
+            
+            # Check if this face was recently logged
+            if encoding_key in motion_detector.recent_unauthorized_faces:
+                last_detection = motion_detector.recent_unauthorized_faces[encoding_key]
+                elapsed = (datetime.datetime.now() - last_detection).total_seconds()
+                
+                if elapsed < motion_detector.duplicate_detection_window:
+                    print(f"Skipping duplicate unauthorized face (last seen {elapsed:.1f}s ago)")
+                    continue  # Skip logging this duplicate
+            
+            # NEW DETECTION - Log it
+            try:
+                screenshot_path = save_screenshot(
+                    frame, 
+                    f"unauthorized_{distance_analysis['distance_meters']}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                )
+                
+                alert_level = distance_analysis['alert_level']
+                
+                # Add detection to database
+                add_detection(
+                    "face_detection", 
+                    f"Unauthorized ({distance_analysis['distance_meters']}m)", 
+                    float(confidence), 
+                    screenshot_path, 
+                    alert_level
+                )
+                
+                # Mark this face as recently detected
+                motion_detector.recent_unauthorized_faces[encoding_key] = datetime.datetime.now()
+                
+                # Send alert in background
+                import threading
+                alert_thread = threading.Thread(
+                    target=send_alert_async,
+                    args=(alert_level, "face_detection", str(name), screenshot_path, distance_analysis)
+                )
+                alert_thread.daemon = True
+                alert_thread.start()
+                
+            except Exception as e:
+                print(f"Error logging detection: {e}")
+    
+    # Cleanup old detections periodically
+    motion_detector.cleanup_old_detections()
+    
+    return results
+
+
 
 def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
     """
@@ -166,7 +334,7 @@ def send_alert_async(alert_level, detection_type, name, screenshot_path, distanc
     try:
         alert_system = AlertSystem()
         
-        message = f"Unauthorized person detected at {distance_info['distance_meters']}m ({distance_info['zone']})"
+        message = f"Unauthorized person detected at {distance_info['distance_meters']}m (CRITICAL ZONE - Within {distance_info['distance_meters']}m)"
         
         alert_result = alert_system.send_alert(
             alert_level, 

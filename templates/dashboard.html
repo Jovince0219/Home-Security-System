@@ -58,7 +58,7 @@
                     <i class="fas fa-user-check mr-1"></i>Face Recognition
                 </button>
                 <button onclick="playQuickMessage('warning')"
-                    class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">
+                    class="bg-orange-600 hover:bg-orange-700= px-3 py-2 rounded text-sm">
                     <i class="fas fa-volume-up mr-1"></i>Warning
                 </button>
             </div>
@@ -117,6 +117,24 @@
             </div>
         </div>
     </div>
+</div>
+
+<!-- Motion-Gated Face Recognition Status -->
+<div class="mt-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
+    <div class="flex items-center justify-between">
+        <div id="motionStatusIndicator" class="flex items-center space-x-2">
+            <i class="fas fa-ban text-red-600"></i>
+            <span class="text-red-600 font-semibold">No Human Motion - Face Detection DISABLED</span>
+        </div>
+        <button id="toggleMotionGatedBtn" onclick="toggleMotionGatedRecognition()"
+            class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm">
+            <i class="fas fa-shield-alt mr-1"></i>Motion-Gated: ON
+        </button>
+    </div>
+    <p class="text-sm text-gray-700 mt-2">
+        <i class="fas fa-info-circle mr-1"></i>
+        Face detection only activates when human motion is detected within <strong>Critical Distance (1.5m)</strong>
+    </p>
 </div>
 
 <!-- Distance Settings Panel -->
@@ -384,6 +402,11 @@
     let lastFpsUpdate = Date.now();
     let motionDetectionInterval = null;
 
+    // Motion-gated face recognition state
+    let motionGatedRecognition = true;  // Enable the new logic
+    let lastMotionDetectionTime = null;
+    let motionTimeout = 5000;  // 5 seconds in milliseconds
+
     // Camera controls
     document.getElementById('startCamera').addEventListener('click', startCamera);
     document.getElementById('stopCamera').addEventListener('click', stopCamera);
@@ -483,10 +506,13 @@
 
         const imageData = canvas.toDataURL('image/jpeg', 0.8);
 
+        // NEW: Use motion-gated endpoint
+        const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
+
         const formData = new FormData();
         formData.append('image_data', imageData);
 
-        fetch('/api/recognize_faces', {
+        fetch(endpoint, {
             method: 'POST',
             body: formData
         })
@@ -494,68 +520,82 @@
             .then(data => {
                 if (data.success) {
                     displayFaceBoxes(data.faces);
+
+                    // Update motion status indicator
+                    if (data.motion_status) {
+                        updateMotionStatusIndicator(data.motion_status);
+                    }
                 }
             })
             .catch(error => console.error('Face recognition error:', error));
+    }
+
+    // Update motion status indicator
+    function updateMotionStatusIndicator(status) {
+        const indicator = document.getElementById('motionStatusIndicator');
+        if (!indicator) return;
+
+        if (status.human_motion_detected) {
+            indicator.innerHTML = `
+            <i class="fas fa-running text-green-600"></i>
+            <span class="text-green-600">Human Motion Active - Face Detection ENABLED</span>
+        `;
+            lastMotionDetectionTime = Date.now();
+        } else {
+            const timeSinceMotion = lastMotionDetectionTime ?
+                ((Date.now() - lastMotionDetectionTime) / 1000).toFixed(1) : 'N/A';
+
+            indicator.innerHTML = `
+            <i class="fas fa-ban text-red-600"></i>
+            <span class="text-red-600">No Human Motion - Face Detection DISABLED</span>
+            <span class="text-sm text-gray-600">(Last motion: ${timeSinceMotion}s ago)</span>
+        `;
+        }
     }
 
     function displayFaceBoxes(faces) {
         const overlay = document.getElementById('faceOverlay');
         const video = document.getElementById('videoElement');
 
-        // Clear previous boxes
         overlay.innerHTML = '';
 
-        // Get the actual displayed size and position of the video
         const videoRect = video.getBoundingClientRect();
-
-        // Calculate the actual video content area (accounting for letterboxing/pillarboxing)
         const videoAspectRatio = video.videoWidth / video.videoHeight;
         const displayAspectRatio = videoRect.width / videoRect.height;
 
         let scaleX, scaleY, offsetX = 0, offsetY = 0;
 
         if (displayAspectRatio > videoAspectRatio) {
-            // Pillarboxed (black bars on sides)
             scaleY = videoRect.height / video.videoHeight;
             scaleX = scaleY;
             offsetX = (videoRect.width - (video.videoWidth * scaleX)) / 2;
         } else {
-            // Letterboxed (black bars on top/bottom)
             scaleX = videoRect.width / video.videoWidth;
             scaleY = scaleX;
             offsetY = (videoRect.height - (video.videoHeight * scaleY)) / 2;
         }
 
         faces.forEach(face => {
-            // Only show boxes for faces within detection range or authorized faces
-            const shouldDisplay = face.is_authorized || face.within_detection_range;
-
-            if (!shouldDisplay) {
-                return; // Skip faces that are too far away
+            // NEW: Only display faces detected within critical distance
+            // (The backend already filters, but double-check here)
+            if (!face.within_detection_range && !face.is_authorized) {
+                return;
             }
 
             const box = document.createElement('div');
 
-            // Color coding based on distance and authorization
+            // Enhanced color coding
             let borderColor, bgColor, boxShadow;
 
             if (face.is_authorized) {
                 borderColor = '#22c55e'; // Green for authorized
                 bgColor = 'rgba(34, 197, 94, 0.1)';
                 boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
-            } else if (face.alert_level === 3) {
-                borderColor = '#dc2626'; // Red for critical distance
+            } else {
+                // Unauthorized - always critical since they're within critical distance
+                borderColor = '#dc2626'; // Red
                 bgColor = 'rgba(220, 38, 38, 0.15)';
                 boxShadow = '0 0 20px rgba(220, 38, 38, 0.8)';
-            } else if (face.alert_level === 2) {
-                borderColor = '#f59e0b'; // Orange for warning distance
-                bgColor = 'rgba(245, 158, 11, 0.15)';
-                boxShadow = '0 0 15px rgba(245, 158, 11, 0.6)';
-            } else {
-                borderColor = '#3b82f6'; // Blue for detection range
-                bgColor = 'rgba(59, 130, 246, 0.1)';
-                boxShadow = '0 0 15px rgba(59, 130, 246, 0.6)';
             }
 
             box.style.position = 'absolute';
@@ -566,10 +606,8 @@
             box.style.transition = 'all 0.2s ease-out';
             box.style.boxShadow = boxShadow;
 
-            // Face location is [top, right, bottom, left] in pixel coordinates
             const [top, right, bottom, left] = face.location;
 
-            // Make the box bigger by expanding it in all directions
             const width = right - left;
             const height = bottom - top;
             const expandX = width * 0.2;
@@ -590,7 +628,7 @@
             box.style.width = boxWidth + 'px';
             box.style.height = boxHeight + 'px';
 
-            // Create label with name
+            // Create label
             const label = document.createElement('div');
             label.style.position = 'absolute';
             label.style.top = '-35px';
@@ -601,11 +639,9 @@
             label.style.fontSize = '14px';
             label.style.borderRadius = '6px';
             label.style.fontWeight = 'bold';
-            label.style.pointerEvents = 'none';
             label.style.whiteSpace = 'nowrap';
             label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
 
-            // Add icon
             const icon = document.createElement('i');
             if (face.is_authorized) {
                 icon.className = 'fas fa-check-circle';
@@ -615,73 +651,27 @@
             icon.style.marginRight = '6px';
             label.appendChild(icon);
 
-            // Name text
             const nameText = document.createTextNode(face.display_name || face.name);
             label.appendChild(nameText);
 
-            if (face.face_covered) {
-                const coverText = document.createTextNode(' (Covered)');
-                label.appendChild(coverText);
-            }
-
-            // Create distance badge
+            // Distance badge
             const distanceBadge = document.createElement('div');
             distanceBadge.style.position = 'absolute';
             distanceBadge.style.bottom = '-30px';
             distanceBadge.style.left = '0';
-            distanceBadge.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+            distanceBadge.style.backgroundColor = 'rgba(220, 38, 38, 0.9)'; // Red for critical
             distanceBadge.style.color = 'white';
             distanceBadge.style.padding = '4px 10px';
             distanceBadge.style.fontSize = '12px';
             distanceBadge.style.borderRadius = '4px';
             distanceBadge.style.fontWeight = 'bold';
-            distanceBadge.style.pointerEvents = 'none';
             distanceBadge.style.whiteSpace = 'nowrap';
             distanceBadge.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
 
-            // Distance icon
-            const distanceIcon = document.createElement('i');
-            distanceIcon.className = 'fas fa-ruler';
-            distanceIcon.style.marginRight = '6px';
-            distanceBadge.appendChild(distanceIcon);
-
-            // Distance text
-            const distanceText = document.createTextNode(
-                `${face.distance_meters}m (${face.distance_feet}ft)`
-            );
-            distanceBadge.appendChild(distanceText);
-
-            // Add zone indicator for unauthorized persons
-            if (!face.is_authorized) {
-                const zoneIndicator = document.createElement('div');
-                zoneIndicator.style.position = 'absolute';
-                zoneIndicator.style.top = '-70px';
-                zoneIndicator.style.left = '0';
-                zoneIndicator.style.padding = '4px 10px';
-                zoneIndicator.style.fontSize = '11px';
-                zoneIndicator.style.borderRadius = '4px';
-                zoneIndicator.style.fontWeight = 'bold';
-                zoneIndicator.style.pointerEvents = 'none';
-                zoneIndicator.style.whiteSpace = 'nowrap';
-                zoneIndicator.style.boxShadow = '0 2px 4px rgba(0,0,0,0.3)';
-
-                // Color based on zone
-                if (face.zone === 'CRITICAL ZONE') {
-                    zoneIndicator.style.backgroundColor = '#dc2626';
-                    zoneIndicator.style.color = 'white';
-                    zoneIndicator.innerHTML = '<i class="fas fa-skull-crossbones"></i> CRITICAL ZONE';
-                } else if (face.zone === 'WARNING ZONE') {
-                    zoneIndicator.style.backgroundColor = '#f59e0b';
-                    zoneIndicator.style.color = 'white';
-                    zoneIndicator.innerHTML = '<i class="fas fa-exclamation-triangle"></i> WARNING ZONE';
-                } else {
-                    zoneIndicator.style.backgroundColor = '#3b82f6';
-                    zoneIndicator.style.color = 'white';
-                    zoneIndicator.innerHTML = '<i class="fas fa-info-circle"></i> DETECTION ZONE';
-                }
-
-                box.appendChild(zoneIndicator);
-            }
+            distanceBadge.innerHTML = `
+            <i class="fas fa-ruler"></i> 
+            ${face.distance_meters}m - CRITICAL DISTANCE
+        `;
 
             box.appendChild(label);
             box.appendChild(distanceBadge);
@@ -690,6 +680,23 @@
 
         fpsCounter++;
     }
+
+    // Toggle motion-gated recognition
+    function toggleMotionGatedRecognition() {
+        motionGatedRecognition = !motionGatedRecognition;
+
+        const button = document.getElementById('toggleMotionGatedBtn');
+        if (motionGatedRecognition) {
+            button.innerHTML = '<i class="fas fa-shield-alt mr-1"></i>Motion-Gated: ON';
+            button.className = 'bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm';
+        } else {
+            button.innerHTML = '<i class="fas fa-shield-alt mr-1"></i>Motion-Gated: OFF';
+            button.className = 'bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm';
+        }
+
+        console.log('Motion-gated recognition:', motionGatedRecognition ? 'ENABLED' : 'DISABLED');
+    }
+
 
     // Add distance settings panel toggle
     function toggleDistanceSettings() {
@@ -1130,5 +1137,54 @@
             button.className = 'bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm';
         }
     }
+
+    function updateDebugPanel(motionStatus) {
+        if (!motionStatus) return;
+
+        document.getElementById('debugHumanMotion').textContent = motionStatus.human_motion_detected ? 'YES' : 'NO';
+        document.getElementById('debugHumanMotion').className = motionStatus.human_motion_detected ?
+            'font-bold text-green-600' : 'font-bold text-red-600';
+
+        document.getElementById('debugFaceDetection').textContent = motionStatus.face_detection_enabled ? 'YES' : 'NO';
+        document.getElementById('debugFaceDetection').className = motionStatus.face_detection_enabled ?
+            'font-bold text-green-600' : 'font-bold text-red-600';
+
+        // Update step 3 status
+        const step3 = document.getElementById('faceDetectionStep');
+        if (motionStatus.face_detection_enabled) {
+            step3.innerHTML = `
+            <div class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold">3</div>
+            <span class="text-green-600"><strong>Face Detection:</strong> ACTIVE - Human detected within critical distance</span>
+        `;
+        } else {
+            step3.innerHTML = `
+            <div class="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold">3</div>
+            <span class="text-gray-600"><strong>Face Detection:</strong> INACTIVE - Waiting for human motion within 1.5m</span>
+        `;
+        }
+    }
+
+    function clearUnauthorizedCache() {
+        fetch('/api/clear_unauthorized_cache', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    alert(data.message);
+                    document.getElementById('debugCachedFaces').textContent = '0';
+                }
+            });
+    }
+
+    // Update status every 2 seconds
+    setInterval(() => {
+        fetch('/api/motion_detection_status_detailed')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('debugCachedFaces').textContent = data.status.recent_unauthorized_count || 0;
+                    document.getElementById('debugLastMotion').textContent = data.status.last_human_detection || 'N/A';
+                }
+            });
+    }, 2000);
 </script>
 {% endblock %}

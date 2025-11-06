@@ -56,6 +56,14 @@ class MotionDetector:
         self.detection_count = {'human': 0, 'animal': 0}
         self.training_data_count = {'human': 0, 'animal': 0}
         
+        self.human_motion_detected = False
+        self.last_human_detection_time = None
+        self.human_motion_timeout = 5.0  # seconds - how long to keep face detection active
+        
+        # NEW: Track recent detections to avoid duplicates
+        self.recent_unauthorized_faces = {}  # {face_encoding_key: timestamp}
+        self.duplicate_detection_window = 60  # seconds - ignore duplicates within this window
+        
         # Load model if it exists
         self.load_model()
         
@@ -106,6 +114,7 @@ class MotionDetector:
             
             motion_detected = False
             detections = []
+            human_detected = False
             
             for contour in contours:
                 area = cv2.contourArea(contour)
@@ -125,6 +134,42 @@ class MotionDetector:
                         motion_type, confidence = self.classify_with_ml(features)
                     else:
                         motion_type, confidence = self.classify_motion_advanced(contour, area, w, h, features)
+                        
+                    # Set human detection flag
+                    if motion_type == 'human':
+                        if scaled_area >= self.human_min_area and confidence >= self.human_min_confidence:
+                            human_detected = True
+                            detections.append({
+                                'type': motion_type,
+                                'bbox': (x_orig, y_orig, w_orig, h_orig),
+                                'area': scaled_area,
+                                'confidence': confidence,
+                                'features': features,
+                                'contour': contour
+                            })
+                    elif motion_type == 'animal':
+                        if scaled_area >= self.animal_min_area and confidence >= self.animal_min_confidence:
+                            detections.append({
+                                'type': motion_type,
+                                'bbox': (x_orig, y_orig, w_orig, h_orig),
+                                'area': scaled_area,
+                                'confidence': confidence,
+                                'features': features,
+                                'contour': contour
+                            })                
+                                
+                        # NEW: Update human motion flag
+                        if human_detected:
+                            self.human_motion_detected = True
+                            self.last_human_detection_time = datetime.datetime.now()
+                        else:
+                            # Check if timeout has passed
+                            if self.last_human_detection_time:
+                                elapsed = (datetime.datetime.now() - self.last_human_detection_time).total_seconds()
+                                if elapsed > self.human_motion_timeout:
+                                    self.human_motion_detected = False
+                                    
+                        return motion_detected, detections, fg_mask, human_detected  # Return human flag        
                     
                     # POST-CLASSIFICATION HUMAN BIAS
                     # If classified as animal but has human characteristics, reconsider
@@ -179,7 +224,27 @@ class MotionDetector:
             
         except Exception as e:
             print(f"Error in motion detection: {e}")
-            return False, [], np.zeros((100, 100), dtype=np.uint8)
+            return False, [], np.zeros((100, 100), dtype=np.uint8), False
+        
+    def is_human_motion_active(self):
+        """Check if human motion is currently active"""
+        if not self.last_human_detection_time:
+            return False
+            
+        elapsed = (datetime.datetime.now() - self.last_human_detection_time).total_seconds()
+        return elapsed <= self.human_motion_timeout
+    
+    def cleanup_old_detections(self):
+        """Remove old entries from recent detections cache"""
+        current_time = datetime.datetime.now()
+        expired_keys = []
+        
+        for key, timestamp in self.recent_unauthorized_faces.items():
+            if (current_time - timestamp).total_seconds() > self.duplicate_detection_window:
+                expired_keys.append(key)
+        
+        for key in expired_keys:
+            del self.recent_unauthorized_faces[key]
 
     def extract_enhanced_features(self, frame, contour, x, y, w, h):
         """Extract comprehensive features for human/animal classification"""

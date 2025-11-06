@@ -65,6 +65,122 @@ def playback():
 def controls():
     return render_template('controls.html')
 
+@app.route('/api/recognize_faces_with_motion', methods=['POST'])
+def recognize_faces_with_motion():
+    """
+    NEW ENDPOINT: Motion-gated face recognition
+    Only performs face recognition when:
+    1. Human motion is detected
+    2. Distance <= Critical Distance
+    """
+    try:
+        image_data = request.form.get('image_data')
+        if not image_data:
+            return jsonify({'success': False, 'error': 'No image data provided'})
+        
+        # Decode base64 image
+        image_data = image_data.split(',')[1]
+        image_bytes = base64.b64decode(image_data)
+        
+        # Convert to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Get motion detector instance
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        # STEP 1: Detect motion first
+        motion_detected, detections, fg_mask, human_detected = motion_detector.detect_motion(frame)
+        
+        # STEP 2: Only perform face recognition if human motion detected
+        if human_detected or motion_detector.is_human_motion_active():
+            from utils.face_recognition_utils import detect_faces_with_motion_gate
+            results = detect_faces_with_motion_gate(frame, motion_detector)
+            
+            # Convert numpy types to Python types for JSON serialization
+            for result in results:
+                result['confidence'] = float(result['confidence'])
+                result['location'] = [int(x) for x in result['location']]
+                result['face_covered'] = bool(result['face_covered'])
+                result['is_authorized'] = bool(result['is_authorized'])
+                result['distance_meters'] = float(result['distance_meters'])
+                result['distance_feet'] = float(result['distance_feet'])
+                result['trigger_alert'] = bool(result['trigger_alert'])
+                result['alert_level'] = int(result['alert_level'])
+                result['within_detection_range'] = bool(result['within_detection_range'])
+                # Remove face_encoding before sending to client
+                if 'face_encoding' in result:
+                    del result['face_encoding']
+            
+            return jsonify({
+                'success': True, 
+                'faces': results,
+                'motion_status': {
+                    'human_motion_detected': human_detected,
+                    'motion_active': motion_detector.is_human_motion_active(),
+                    'face_detection_enabled': len(results) > 0 or motion_detector.is_human_motion_active()
+                }
+            })
+        else:
+            # No human motion - return empty results
+            return jsonify({
+                'success': True, 
+                'faces': [],
+                'motion_status': {
+                    'human_motion_detected': False,
+                    'motion_active': False,
+                    'face_detection_enabled': False
+                }
+            })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/motion_detection_status_detailed')
+def motion_detection_status_detailed():
+    """Get detailed motion detection status including human motion flag"""
+    try:
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        stats = motion_detector.get_stats()
+        
+        # Add human motion status
+        stats['human_motion_active'] = motion_detector.is_human_motion_active()
+        stats['last_human_detection'] = motion_detector.last_human_detection_time.isoformat() if motion_detector.last_human_detection_time else None
+        stats['recent_unauthorized_count'] = len(motion_detector.recent_unauthorized_faces)
+        
+        return jsonify({'success': True, 'status': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/clear_unauthorized_cache', methods=['POST'])
+def clear_unauthorized_cache():
+    """Manually clear the cache of recent unauthorized detections"""
+    try:
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        cleared_count = len(motion_detector.recent_unauthorized_faces)
+        motion_detector.recent_unauthorized_faces = {}
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Cleared {cleared_count} cached unauthorized detections'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/register_face', methods=['POST'])
 def register_face():
     """Register a new face from uploaded image or camera"""
@@ -1673,3 +1789,4 @@ def generate_video_thumbnail(video_path):
     except Exception as e:
         print(f"Error generating thumbnail: {e}")
         return None
+    
