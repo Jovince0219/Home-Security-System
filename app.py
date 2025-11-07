@@ -310,17 +310,16 @@ def bulk_delete_faces():
                 delete_face(face_id)
                 deleted_count += 1
             except Exception as e:
-                print(f"Error deleting face {face_id}: {e}")
         
-        # Reload known faces
-        from utils.face_recognition_utils import load_known_faces
-        load_known_faces()
-        
-        return jsonify({
-            'success': True, 
-            'message': f'Successfully deleted {deleted_count} faces',
-            'deleted_count': deleted_count
-        })
+                # Reload known faces
+                from utils.face_recognition_utils import load_known_faces
+                load_known_faces()
+                
+                return jsonify({
+                    'success': True, 
+                    'message': f'Successfully deleted {deleted_count} faces',
+                    'deleted_count': deleted_count
+                })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -527,12 +526,14 @@ def detect_motion():
             from utils.motion_detection_utils import MotionDetector
             motion_detector = MotionDetector()
         
-        motion_detected, detections, fg_mask = motion_detector.detect_motion(frame)
+        # UPDATE THIS LINE - now expecting 4 return values
+        motion_detected, detections, fg_mask, human_detected = motion_detector.detect_motion(frame)
         
         return jsonify({
             'success': True, 
             'motion_detected': motion_detected,
-            'detections': detections
+            'detections': detections,
+            'human_detected': human_detected  # Optional: include this if needed
         })
         
     except Exception as e:
@@ -1190,35 +1191,54 @@ def dashboard_feed():
     """Get unified dashboard feed with face and motion detection"""
     try:
         from utils.database import get_recent_detections
-        detections = get_recent_detections(20)
         
-        recent_detections = []
-        for detection in detections:
-            if detection['detection_type'] == 'face_detection':
-                if detection['person_name'] == 'Unknown' or detection['person_name'] is None:
+        # Get more detections to filter through
+        detections = get_recent_detections(50)
+        
+        # DEBUG: Print all detections to see what we're working with
+        for i, detection in enumerate(detections):
+        
+            recent_detections = []
+            for detection in detections:
+                # Include face detections where person is unauthorized/unknown
+                if detection['detection_type'] == 'face_detection':
+                    # More flexible matching for unauthorized faces
+                    person_name = detection['person_name']
+                    is_unauthorized = (
+                        person_name is None or 
+                        person_name == 'Unknown' or 
+                        person_name == 'Unauthorized' or
+                        'unauthorized' in str(person_name).lower()
+                    )
+                
+                if is_unauthorized:
                     recent_detections.append({
                         'id': detection['id'],
                         'type': detection['detection_type'],
-                        'person_name': detection['person_name'] or 'Unauthorized',
+                        'person_name': 'Unauthorized',
                         'confidence': detection['confidence'],
                         'timestamp': detection['timestamp'],
                         'screenshot_path': detection['screenshot_path'],
                         'alert_level': detection['alert_level']
                     })
-            else:
-                recent_detections.append({
-                    'id': detection['id'],
-                    'type': detection['detection_type'],
-                    'person_name': detection['person_name'],
-                    'confidence': detection['confidence'],
-                    'timestamp': detection['timestamp'],
-                    'screenshot_path': detection['screenshot_path'],
-                    'alert_level': detection['alert_level']
-                })
+            # Include ALL motion detections
+                elif detection['detection_type'] == 'motion_detection':
+                    recent_detections.append({
+                        'id': detection['id'],
+                        'type': detection['detection_type'],
+                        'person_name': detection['person_name'] or 'motion',
+                        'confidence': detection['confidence'],
+                        'timestamp': detection['timestamp'],
+                        'screenshot_path': detection['screenshot_path'],
+                        'alert_level': detection['alert_level']
+                    })
         
+        # Return only the 20 most recent
+        recent_detections = recent_detections[:20]        
         return jsonify({'success': True, 'detections': recent_detections})
         
     except Exception as e:
+        import traceback
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/dashboard_action', methods=['POST'])
@@ -1264,6 +1284,40 @@ def dashboard_action():
         else:
             return jsonify({'success': False, 'error': 'Invalid action'})
             
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/unauthorized_detections')
+def unauthorized_detections():
+    """Get only unauthorized detections for the security alerts table"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Query for unauthorized face detections and motion detections
+        detections = conn.execute('''
+            SELECT * FROM detections 
+            WHERE (detection_type = 'face_detection' AND (person_name = 'Unknown' OR person_name IS NULL OR person_name = 'Unauthorized'))
+               OR (detection_type = 'motion_detection' AND person_name IN ('human', 'animal'))
+            ORDER BY timestamp DESC 
+            LIMIT 20
+        ''').fetchall()
+        
+        detections_list = []
+        for detection in detections:
+            detections_list.append({
+                'id': detection['id'],
+                'type': detection['detection_type'],
+                'person_name': 'Unauthorized' if detection['detection_type'] == 'face_detection' else detection['person_name'].title(),
+                'confidence': detection['confidence'],
+                'timestamp': detection['timestamp'],
+                'screenshot_path': detection['screenshot_path'],
+                'alert_level': detection['alert_level']
+            })
+        
+        conn.close()
+        return jsonify({'success': True, 'detections': detections_list})
+        
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
@@ -1568,7 +1622,6 @@ def bulk_upload_training():
                     else:
                         failed_count += 1
                 except Exception as e:
-                    print(f"Error uploading {file.filename}: {e}")
                     failed_count += 1
         
         return jsonify({
@@ -1787,6 +1840,5 @@ def generate_video_thumbnail(video_path):
         return None
         
     except Exception as e:
-        print(f"Error generating thumbnail: {e}")
         return None
     

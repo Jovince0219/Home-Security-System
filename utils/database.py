@@ -10,7 +10,9 @@ def get_db_connection():
     return conn
 
 def init_db():
-    conn = get_db_connection()
+    """Initialize database with support for faceless human detections"""
+    conn = sqlite3.connect('security_system.db')
+    c = conn.cursor()
     
     # Create faces table
     conn.execute('''
@@ -24,15 +26,15 @@ def init_db():
     ''')
     
     # Create detections table
-    conn.execute('''
+    c.execute('''
         CREATE TABLE IF NOT EXISTS detections (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             detection_type TEXT NOT NULL,
             person_name TEXT,
             confidence REAL,
             screenshot_path TEXT,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            alert_level INTEGER DEFAULT 1
+            alert_level INTEGER DEFAULT 1,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -150,7 +152,23 @@ def search_faces_by_name(query):
     return faces
 
 def add_detection(detection_type, person_name=None, confidence=None, screenshot_path=None, alert_level=1):
+    """Add detection with proper confidence handling"""
     conn = get_db_connection()
+    
+    # Ensure confidence is a float and handle None values
+    if confidence is not None:
+        confidence = float(confidence)
+    else:
+        # Set default confidence based on detection type
+        if detection_type == 'face_detection':
+            confidence = 0.0  # Default for face detection
+        elif detection_type == 'motion_detection':
+            confidence = 0.5  # Default for motion detection
+        else:
+            confidence = 0.0
+    
+    print(f"📝 DEBUG: Adding detection - Type: {detection_type}, Name: {person_name}, Confidence: {confidence}")
+    
     conn.execute(
         'INSERT INTO detections (detection_type, person_name, confidence, screenshot_path, alert_level) VALUES (?, ?, ?, ?, ?)',
         (detection_type, person_name, confidence, screenshot_path, alert_level)
@@ -158,12 +176,22 @@ def add_detection(detection_type, person_name=None, confidence=None, screenshot_
     conn.commit()
     conn.close()
 
-def get_recent_detections(limit=50):
-    conn = get_db_connection()
-    detections = conn.execute(
-        'SELECT * FROM detections ORDER BY timestamp DESC LIMIT ?', (limit,)
-    ).fetchall()
+def get_recent_detections(limit=20):
+    """Get recent detections with proper filtering"""
+    conn = sqlite3.connect('security_system.db')
+    conn.row_factory = sqlite3.Row
+    c = conn.cursor()
+    
+    # Get all recent detections, we'll filter in the API
+    c.execute('''
+        SELECT * FROM detections 
+        ORDER BY timestamp DESC 
+        LIMIT ?
+    ''', (limit * 2,))  # Get extra to account for filtering
+    
+    detections = [dict(row) for row in c.fetchall()]
     conn.close()
+    
     return detections
 
 def save_alert_settings(settings):

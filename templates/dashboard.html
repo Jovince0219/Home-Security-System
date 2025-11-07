@@ -374,16 +374,26 @@
         <table class="min-w-full table-auto">
             <thead>
                 <tr class="bg-gray-50">
-                    <th class="px-4 py-2 text-left">Time</th>
-                    <th class="px-4 py-2 text-left">Type</th>
-                    <th class="px-4 py-2 text-left">Detection</th>
-                    <th class="px-4 py-2 text-left">Confidence</th>
-                    <th class="px-4 py-2 text-left">Alert Level</th>
-                    <th class="px-4 py-2 text-left">Action</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detection
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Confidence</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alert
+                        Level</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action
+                    </th>
                 </tr>
             </thead>
             <tbody id="detectionsTable">
                 <!-- Detections will be loaded here -->
+                <tr>
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
+                        <p class="text-lg font-semibold">Loading security alerts...</p>
+                    </td>
+                </tr>
             </tbody>
         </table>
     </div>
@@ -451,7 +461,6 @@
                 startFaceRecognition();
             }
 
-            updateFPS();
 
         } catch (error) {
             console.error('Error accessing camera:', error);
@@ -772,17 +781,6 @@
         resizeOverlay();
     }
 
-    function updateFPS() {
-        setInterval(() => {
-            const now = Date.now();
-            const elapsed = (now - lastFpsUpdate) / 1000;
-            const fps = Math.round(fpsCounter / elapsed);
-            document.getElementById('fpsDisplay').textContent = fps;
-            fpsCounter = 0;
-            lastFpsUpdate = now;
-        }, 1000);
-    }
-
     function takeScreenshot() {
         if (!cameraStream) {
             alert('Please start camera first');
@@ -936,19 +934,63 @@
             .then(response => response.json())
             .then(data => {
                 const tbody = document.getElementById('detectionsTable');
+
+                if (!data.success) {
+                    tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-4 text-center text-red-500">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>
+                            Error loading alerts
+                        </td>
+                    </tr>
+                `;
+                    return;
+                }
+
+                if (!data.detections || data.detections.length === 0) {
+                    tbody.innerHTML = `
+                    <tr>
+                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                            <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
+                            <p class="text-lg font-semibold">All Clear!</p>
+                            <p class="text-sm mt-1">No security alerts detected</p>
+                        </td>
+                    </tr>
+                `;
+                    return;
+                }
+
                 tbody.innerHTML = '';
 
                 data.detections.forEach(detection => {
                     const row = tbody.insertRow();
+                    const timestamp = new Date(detection.timestamp).toLocaleString();
+                    const isFaceDetection = detection.type === 'face_detection';
+                    const typeClass = isFaceDetection ?
+                        'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800';
+                    const displayName = detection.person_name || 'Unknown';
+
+                    // Better confidence display handling
+                    let confidenceDisplay = 'N/A';
+                    if (detection.confidence !== null && detection.confidence !== undefined) {
+                        confidenceDisplay = (detection.confidence * 100).toFixed(1) + '%';
+                    }
+
                     row.innerHTML = `
-                    <td class="px-4 py-2">${new Date(detection.timestamp).toLocaleString()}</td>
+                    <td class="px-4 py-2 text-sm">${timestamp}</td>
                     <td class="px-4 py-2">
-                        <span class="px-2 py-1 rounded text-sm ${detection.type === 'face_detection' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
+                        <span class="px-2 py-1 rounded text-sm ${typeClass}">
                             ${detection.type.replace('_', ' ')}
                         </span>
                     </td>
-                    <td class="px-4 py-2 font-semibold ${detection.person_name === 'Unauthorized' ? 'text-red-600' : ''}">${detection.person_name || 'Unknown'}</td>
-                    <td class="px-4 py-2">${detection.confidence ? (detection.confidence * 100).toFixed(1) + '%' : 'N/A'}</td>
+                    <td class="px-4 py-2 font-semibold ${isFaceDetection ? 'text-red-600' : 'text-orange-600'}">
+                        ${displayName}
+                    </td>
+                    <td class="px-4 py-2">
+                        <span class="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                            ${confidenceDisplay}
+                        </span>
+                    </td>
                     <td class="px-4 py-2">
                         <span class="px-2 py-1 rounded text-sm ${getAlertLevelClass(detection.alert_level)}">
                             Level ${detection.alert_level}
@@ -962,15 +1004,27 @@
                     </td>
                 `;
                 });
+            })
+            .catch(error => {
+                console.error('Error loading alerts:', error);
+                const tbody = document.getElementById('detectionsTable');
+                tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-4 py-4 text-center text-red-500">
+                        Network error loading alerts
+                    </td>
+                </tr>
+            `;
             });
     }
 
+    // Make sure this function exists
     function getAlertLevelClass(level) {
         switch (level) {
-            case 1: return 'bg-green-100 text-green-800';
-            case 2: return 'bg-yellow-100 text-yellow-800';
-            case 3: return 'bg-red-100 text-red-800';
-            default: return 'bg-gray-100 text-gray-800';
+            case 1: return 'bg-green-100 text-green-800 border border-green-200';
+            case 2: return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+            case 3: return 'bg-red-100 text-red-800 border border-red-200';
+            default: return 'bg-gray-100 text-gray-800 border border-gray-200';
         }
     }
 
@@ -1049,11 +1103,24 @@
             .then(data => {
                 if (data.success && data.motion_detected) {
                     displayMotionDetections(data.detections);
+
+                    // NEW: Update human motion status if available
+                    if (data.human_detected !== undefined) {
+                        updateHumanMotionStatus(data.human_detected);
+                    }
                 } else {
                     document.getElementById('motionOverlay').innerHTML = '';
                 }
             })
             .catch(error => console.error('Motion detection error:', error));
+    }
+
+    // NEW: Helper function to update human motion status
+    function updateHumanMotionStatus(humanDetected) {
+        if (humanDetected) {
+            console.log('Human motion detected - enabling face detection');
+            // You can add visual indicators here if needed
+        }
     }
 
     function displayMotionDetections(detections) {
@@ -1175,16 +1242,6 @@
             });
     }
 
-    // Update status every 2 seconds
-    setInterval(() => {
-        fetch('/api/motion_detection_status_detailed')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('debugCachedFaces').textContent = data.status.recent_unauthorized_count || 0;
-                    document.getElementById('debugLastMotion').textContent = data.status.last_human_detection || 'N/A';
-                }
-            });
-    }, 2000);
+
 </script>
 {% endblock %}

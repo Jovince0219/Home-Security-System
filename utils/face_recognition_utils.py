@@ -94,35 +94,31 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             actual_index = matched_indices[best_match_index]
             
             name = known_face_names[actual_index]
-            confidence = 1.0 - face_distances[best_match_index]
-        
-        is_authorized = name != "Unknown"
-        
-        # Get full distance analysis
-        distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
-        
-        # Check face covering
-        face_region = rgb_frame[top:bottom, left:right]
-        face_covered = detect_face_covering_fast(face_region)
-        
-        # Adjust bounding box
-        face_width = right - left
-        face_height = bottom - top
-        
-        width_reduction = int(face_width * 0.20)
-        height_top_reduction = int(face_height * 0.15)
-        height_bottom_reduction = int(face_height * 0.05)
-        
-        adjusted_left = max(0, left + width_reduction)
-        adjusted_right = min(rgb_frame.shape[1], right - width_reduction)
-        adjusted_top = max(0, top + height_top_reduction)
-        adjusted_bottom = min(rgb_frame.shape[0], bottom - height_bottom_reduction)
-        
-        # Determine display name
-        if is_authorized:
-            display_name = str(name)
+            confidence = float(1.0 - face_distances[best_match_index])  # Ensure it's a float
+            
+            # Ensure confidence is within valid range [0, 1]
+            confidence = max(0.0, min(1.0, confidence))
+            
+            print(f"DEBUG: Authorized face '{name}' detected with confidence: {confidence:.3f}")
         else:
-            display_name = 'Unauthorized'
+            name = "Unauthorized"
+            # For unauthorized faces, we can estimate confidence based on face quality
+            # Use a default confidence or calculate based on face size/quality
+            face_width_pixels = right - left
+            face_height_pixels = bottom - top
+            face_area = face_width_pixels * face_height_pixels
+            
+            # Simple confidence estimation for unauthorized faces
+            if face_area > 10000:  # Large face = high confidence
+                confidence = 0.85
+            elif face_area > 5000:  # Medium face = medium confidence
+                confidence = 0.70
+            else:  # Small face = lower confidence
+                confidence = 0.55
+            
+            print(f"DEBUG: Unauthorized face detected with estimated confidence: {confidence:.3f}")
+
+        is_authorized = name != "Unauthorized"
         
         results.append({
             'name': str(name),
@@ -190,9 +186,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     # Cleanup old detections periodically
     motion_detector.cleanup_old_detections()
     
-    return results
-
-
+    return results  
 
 def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
     """
@@ -246,10 +240,29 @@ def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
             actual_index = matched_indices[best_match_index]
             
             name = known_face_names[actual_index]
-            confidence = 1.0 - face_distances[best_match_index]
-            authorized_detected = True
-        
-        is_authorized = name != "Unknown"
+            confidence = float(1.0 - face_distances[best_match_index])  # Ensure it's a float
+            
+            # Ensure confidence is within valid range [0, 1]
+            confidence = max(0.0, min(1.0, confidence))
+            
+        else:
+            name = "Unauthorized"
+            # For unauthorized faces, we can estimate confidence based on face quality
+            # Use a default confidence or calculate based on face size/quality
+            face_width_pixels = right - left
+            face_height_pixels = bottom - top
+            face_area = face_width_pixels * face_height_pixels
+            
+            # Simple confidence estimation for unauthorized faces
+            if face_area > 10000:  # Large face = high confidence
+                confidence = 0.85
+            elif face_area > 5000:  # Medium face = medium confidence
+                confidence = 0.70
+            else:  # Small face = lower confidence
+                confidence = 0.55
+            
+
+        is_authorized = name != "Unauthorized"
         
         # DISTANCE ESTIMATION
         face_location = [top, right, bottom, left]

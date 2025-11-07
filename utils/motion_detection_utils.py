@@ -212,13 +212,20 @@ class MotionDetector:
                             })
                     
                     # Log detection
-                    if ((motion_type == 'human' and confidence >= self.human_min_confidence) or
-                        (motion_type == 'animal' and confidence >= self.animal_min_confidence)):
-                        
-                        self.detection_count[motion_type] += 1
-                        screenshot_path = self.save_motion_screenshot(frame, motion_type)
-                        alert_level = 2 if motion_type == 'human' else 1
-                        add_detection("motion_detection", motion_type, confidence, screenshot_path, alert_level)
+# In the detect_motion function, find where detections are logged and update:
+            if ((motion_type == 'human' and confidence >= self.human_min_confidence) or
+                (motion_type == 'animal' and confidence >= self.animal_min_confidence)):
+                
+                # Ensure confidence is a float
+                confidence = float(confidence)
+                
+                self.detection_count[motion_type] += 1
+                screenshot_path = self.save_motion_screenshot(frame, motion_type)
+                alert_level = 2 if motion_type == 'human' else 1
+                
+                print(f"DEBUG: Logging {motion_type} detection with confidence: {confidence:.3f}")
+                
+                add_detection("motion_detection", motion_type, confidence, screenshot_path, alert_level)
                 
             return motion_detected, detections, fg_mask
             
@@ -725,11 +732,12 @@ class MotionDetector:
             ret, frame = cap.read()
             if ret:
                 try:
-                    motion_detected, detections, fg_mask = self.detect_motion(frame)
+                    # UPDATE THIS LINE - now expecting 4 return values
+                    motion_detected, detections, fg_mask, human_detected = self.detect_motion(frame)
                     
                     if motion_detected and detections:
                         for detection in detections:
-                            if detection['confidence'] > 0.7:  # Only log confident detections
+                            if detection['confidence'] > 0.7:
                                 print(f"Confident {detection['type']} detection: {detection['confidence']:.3f}")
                 
                 except Exception as e:

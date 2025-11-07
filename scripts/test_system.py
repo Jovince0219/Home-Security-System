@@ -130,9 +130,9 @@ def main():
     print(f"\nOverall: {passed}/{total} tests passed")
     
     if passed == total:
-        print("🎉 All systems operational!")
+        print(" All systems operational!")
     else:
-        print("⚠️  Some systems need attention.")
+        print("Some systems need attention.")
     
     return passed == total
 
