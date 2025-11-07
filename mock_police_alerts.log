@@ -1181,3 +1181,261 @@
 [MOCK POLICE ALERT - 2025-11-06 23:09:29] face_detection: Unauthorized person detected at 0.34m (CRITICAL ZONE - Within 0.34m)
 [MOCK POLICE ALERT - 2025-11-06 23:09:30] face_detection: Unauthorized person detected at 0.34m (CRITICAL ZONE - Within 0.34m)
 [MOCK POLICE ALERT - 2025-11-06 23:09:31] face_detection: Unauthorized person detected at 0.34m (CRITICAL ZONE - Within 0.34m)
+[MOCK POLICE ALERT - 2025-11-07 21:15:54] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:15:55] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:15:56] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:15:57] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:15:58] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:15:59] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:20:42] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:20:44] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:21:53] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:21:55] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:26:55] face_detection: Unauthorized person detected at 0.34m (CRITICAL ZONE - Within 0.34m)
+[MOCK POLICE ALERT - 2025-11-07 21:26:56] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:26:57] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:26:58] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:26:59] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:00] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:35] face_detection: Unauthorized person detected at 0.19m (CRITICAL ZONE - Within 0.19m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:35] face_detection: Unauthorized person detected at 0.19m (CRITICAL ZONE - Within 0.19m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:36] face_detection: Unauthorized person detected at 0.19m (CRITICAL ZONE - Within 0.19m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:38] face_detection: Unauthorized person detected at 0.19m (CRITICAL ZONE - Within 0.19m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:39] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:40] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:41] face_detection: Unauthorized person detected at 0.28m (CRITICAL ZONE - Within 0.28m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:42] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:43] face_detection: Unauthorized person detected at 0.49m (CRITICAL ZONE - Within 0.49m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:44] face_detection: Unauthorized person detected at 0.49m (CRITICAL ZONE - Within 0.49m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:45] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:50] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:51] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:52] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:27:53] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:31:59] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:00] face_detection: Unauthorized person detected at 1.22m (CRITICAL ZONE - Within 1.22m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:01] face_detection: Unauthorized person detected at 1.22m (CRITICAL ZONE - Within 1.22m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:03] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:04] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:05] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:06] face_detection: Unauthorized person detected at 1.76m (CRITICAL ZONE - Within 1.76m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:07] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:08] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:09] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:10] face_detection: Unauthorized person detected at 1.43m (CRITICAL ZONE - Within 1.43m)
+[MOCK POLICE ALERT - 2025-11-07 21:32:40] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 21:36:42] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:35] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:36] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:37] face_detection: Unauthorized person detected at 0.41m (CRITICAL ZONE - Within 0.41m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:38] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:39] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:40] face_detection: Unauthorized person detected at 0.41m (CRITICAL ZONE - Within 0.41m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:41] face_detection: Unauthorized person detected at 0.41m (CRITICAL ZONE - Within 0.41m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:42] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:43] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:44] face_detection: Unauthorized person detected at 0.41m (CRITICAL ZONE - Within 0.41m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:45] face_detection: Unauthorized person detected at 0.41m (CRITICAL ZONE - Within 0.41m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:46] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:48] face_detection: Unauthorized person detected at 0.34m (CRITICAL ZONE - Within 0.34m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:49] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:50] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:51] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:52] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:40:57] face_detection: Unauthorized person detected at 0.49m (CRITICAL ZONE - Within 0.49m)
+[MOCK POLICE ALERT - 2025-11-07 21:41:00] face_detection: Unauthorized person detected at 0.49m (CRITICAL ZONE - Within 0.49m)
+[MOCK POLICE ALERT - 2025-11-07 21:47:25] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 21:47:26] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:47:27] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 21:54:42] face_detection: Unauthorized person detected at 2.5m (CRITICAL ZONE - Within 2.5m)
+[MOCK POLICE ALERT - 2025-11-07 21:54:43] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 22:12:47] face_detection: Unauthorized person detected at 1.22m (CRITICAL ZONE - Within 1.22m)
+[MOCK POLICE ALERT - 2025-11-07 22:12:49] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 22:12:50] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 22:12:51] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 22:12:52] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 22:12:53] face_detection: Unauthorized person detected at 1.2m (CRITICAL ZONE - Within 1.2m)
+[MOCK POLICE ALERT - 2025-11-07 22:24:14] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 22:37:01] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:37:02] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:37:03] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:37:04] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:37:05] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:37:06] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:38:41] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:08] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:09] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:10] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:11] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:12] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:13] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:14] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:15] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:46:16] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:50:09] face_detection: Unauthorized person detected at 2.5m (CRITICAL ZONE - Within 2.5m)
+[MOCK POLICE ALERT - 2025-11-07 22:57:33] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:57:34] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 22:57:35] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 23:08:31] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 23:08:32] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 23:08:33] face_detection: Unauthorized person detected at 0.7m (CRITICAL ZONE - Within 0.7m)
+[MOCK POLICE ALERT - 2025-11-07 23:08:40] face_detection: Unauthorized person detected at 2.5m (CRITICAL ZONE - Within 2.5m)
+[MOCK POLICE ALERT - 2025-11-07 23:13:02] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 23:13:33] face_detection: Unauthorized person detected at 2.5m (CRITICAL ZONE - Within 2.5m)
+[MOCK POLICE ALERT - 2025-11-07 23:16:20] face_detection: Unauthorized person detected at 1.76m (CRITICAL ZONE - Within 1.76m)
+[MOCK POLICE ALERT - 2025-11-07 23:17:02] face_detection: Unauthorized person detected at 2.09m (CRITICAL ZONE - Within 2.09m)
+[MOCK POLICE ALERT - 2025-11-07 23:21:41] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:42] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:43] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:45] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:46] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:51] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:52] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:53] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:53] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:57] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:58] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:21:59] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:00] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:00] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:02] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 23:22:03] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:03] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:05] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:07] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:08] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:10] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:10] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:11] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:22:12] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:31:55] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:31:56] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:31:59] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:00] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:01] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:02] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:03] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:05] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:05] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:06] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:07] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:07] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:24] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:24] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:26] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:40] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:51] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:32:53] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:33:10] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:33:11] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:33:11] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:33:18] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:33:18] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:33:33] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:03] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:04] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:06] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:06] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:09] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:11] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:13] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:14] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:34:16] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:02] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:03] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:04] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:05] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:06] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:11] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:12] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:12] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:14] face_detection: Unauthorized person detected at 1.73m (CRITICAL ZONE - Within 1.73m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:15] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:16] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:17] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:18] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:19] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:20] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:21] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:23] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:25] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:27] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:27] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:28] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:31] face_detection: Unauthorized person detected at 0.4m (CRITICAL ZONE - Within 0.4m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:32] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:37:33] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:35] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:36] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:37] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:39] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:40] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:41] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:42] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:43] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:44] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:45] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:46] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:47] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:49] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:50] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:51] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:53] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:53] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:55] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:56] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:57] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:57] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:37:59] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:00] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:38:01] face_detection: Unauthorized person detected at 0.49m (CRITICAL ZONE - Within 0.49m)
+[MOCK POLICE ALERT - 2025-11-07 23:38:02] face_detection: Unauthorized person detected at 0.48m (CRITICAL ZONE - Within 0.48m)
+[MOCK POLICE ALERT - 2025-11-07 23:38:03] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:04] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:05] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:06] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:07] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:10] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:11] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:12] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:13] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:13] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:23] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:45] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:46] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:47] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:55] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:38:56] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:39:30] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:39:32] motion_detection: Motion detected without face recognition at 2.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:25] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 23:41:26] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 23:41:27] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 23:41:28] face_detection: Unauthorized person detected at 0.58m (CRITICAL ZONE - Within 0.58m)
+[MOCK POLICE ALERT - 2025-11-07 23:41:29] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:30] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:34] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:36] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:37] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:37] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:38] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:39] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:42] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:43] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:44] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:45] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:45] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:46] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:49] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:50] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:51] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:51] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:52] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:53] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:54] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:55] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:56] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:41:59] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:42:00] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:42:00] motion_detection: Motion detected without face recognition at 1.0m - Possible unauthorized person
+[MOCK POLICE ALERT - 2025-11-07 23:42:01] motion_detection: Motion detected without face recognition at 1.5m - Possible unauthorized person

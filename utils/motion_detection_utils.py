@@ -19,23 +19,31 @@ class MotionDetector:
     def __init__(self):
         # Enhanced background subtractor with better parameters
         self.background_subtractor = cv2.createBackgroundSubtractorMOG2(
-            history=500, 
-            varThreshold=16, 
-            detectShadows=True
+            history=200,  # Shorter history for faster adaptation
+            varThreshold=8,  # Lower threshold for more sensitivity
+            detectShadows=False  # Disable shadows for cleaner detection
         )
         # Lower minimum area to catch more human movements
-        self.min_contour_area = 500
-        self.motion_threshold = 0.005  # More sensitive
+        self.min_contour_area = 200  # Reduced from 500
+        self.motion_threshold = 0.001  # More sensitive threshold
         
         # Human-favoring detection thresholds
-        self.human_min_area = 2000     # Lower minimum for humans
-        self.human_min_confidence = 0.5  # Lower confidence threshold
+        self.human_min_area = 500     # Reduced from 2000
+        self.human_min_confidence = 0.3  # Lower confidence threshold
         
-        self.animal_min_area = 3000    # Higher minimum for animals  
-        self.animal_min_confidence = 0.7  # Higher confidence threshold
+        self.animal_min_area = 2000   # Keep animals higher
+        self.animal_min_confidence = 0.7
+        
+        # Motion history for better human detection
+        self.motion_frames = []
+        self.max_motion_frames = 5
         
         self.is_detecting = False
         self.detection_thread = None
+        
+        # Motion without face tracking
+        self.last_motion_without_face = None
+        self.motion_without_face_cooldown = 30  # seconds between duplicate alerts
         
         # Training data management
         self.training_data_folder = 'static/training_data'
@@ -82,12 +90,69 @@ class MotionDetector:
         except Exception as e:
             print(f"Error loading model: {e}")
             self.model = None
+            
+    def detect_motion_without_faces(self, frame, face_detections):
+        """
+        Check for human motion without face detection within critical distance
+        """
+        try:
+            # Skip if we recently alerted for this
+            if self.last_motion_without_face:
+                elapsed = (datetime.datetime.now() - self.last_motion_without_face).total_seconds()
+                if elapsed < self.motion_without_face_cooldown:
+                    return None
+            
+            # Check if human motion is active but no faces detected
+            if (self.human_motion_detected and 
+                (not face_detections or len(face_detections) == 0)):
+                
+                # Get the latest motion detection
+                motion_detected, detections, fg_mask, human_detected = self.detect_motion(frame)
+                
+                if human_detected and detections:
+                    # Find human detections
+                    human_detections = [d for d in detections if d['type'] == 'human']
+                    
+                    if human_detections:
+                        # Use the largest human detection
+                        largest_human = max(human_detections, key=lambda x: x['area'])
+                        
+                        # Estimate distance (simplified)
+                        bbox = largest_human['bbox']
+                        width = bbox[2] - bbox[0]
+                        height = bbox[3] - bbox[1]
+                        motion_area = width * height
+                        
+                        # Simple area-based distance estimation
+                        if motion_area > 15000:  # Likely within critical distance
+                            self.last_motion_without_face = datetime.datetime.now()
+                            return {
+                                'type': 'motion_no_face',
+                                'distance_meters': 1.5,  # Approximate critical distance
+                                'distance_feet': 4.9,
+                                'confidence': largest_human['confidence'],
+                                'bbox': bbox,
+                                'zone': 'CRITICAL ZONE',
+                                'trigger_alert': True,
+                                'alert_level': 3
+                            }
+            
+            return None
+            
+        except Exception as e:
+            print(f"Error detecting motion without faces: {e}")
+            return None
+
 
     def detect_motion(self, frame):
-        """Balanced motion detection without human bias"""
+        """Enhanced motion detection that respects user distance settings"""
         try:
+            # Get distance estimator to check user settings
+            from utils.distance_estimation import get_distance_estimator
+            distance_estimator = get_distance_estimator()
+            
             # Resize frame for faster processing
-            processed_frame = resize(frame, width=640)
+            processed_frame = resize(frame, width=800)
             original_height, original_width = frame.shape[:2]
             processed_height, processed_width = processed_frame.shape[:2]
             
@@ -96,18 +161,17 @@ class MotionDetector:
             scale_y = original_height / processed_height
             
             # Apply background subtraction
-            fg_mask = self.background_subtractor.apply(processed_frame, learningRate=0.001)
+            fg_mask = self.background_subtractor.apply(processed_frame, learningRate=0.01)
             
             # Noise removal
-            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
-            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+            kernel_open = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2))
+            kernel_close = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
             
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_OPEN, kernel_open)
             fg_mask = cv2.morphologyEx(fg_mask, cv2.MORPH_CLOSE, kernel_close)
-            fg_mask = cv2.GaussianBlur(fg_mask, (5, 5), 0)
+            fg_mask = cv2.GaussianBlur(fg_mask, (3, 3), 0)
             
-            # Balanced threshold
-            _, fg_mask = cv2.threshold(fg_mask, 180, 255, cv2.THRESH_BINARY)
+            _, fg_mask = cv2.threshold(fg_mask, 100, 255, cv2.THRESH_BINARY)
             
             # Find contours
             contours, _ = cv2.findContours(fg_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -115,6 +179,8 @@ class MotionDetector:
             motion_detected = False
             detections = []
             human_detected = False
+            
+            current_motion_areas = []
             
             for contour in contours:
                 area = cv2.contourArea(contour)
@@ -126,113 +192,116 @@ class MotionDetector:
                     x_orig, y_orig = int(x * scale_x), int(y * scale_y)
                     w_orig, h_orig = int(w * scale_x), int(h * scale_y)
                     
-                    # Extract features
-                    features = self.extract_enhanced_features(processed_frame, contour, x, y, w, h)
-                    
-                    # Classify motion with human bias
-                    if self.model is not None:
-                        motion_type, confidence = self.classify_with_ml(features)
-                    else:
-                        motion_type, confidence = self.classify_motion_advanced(contour, area, w, h, features)
-                        
-                    # Set human detection flag
-                    if motion_type == 'human':
-                        if scaled_area >= self.human_min_area and confidence >= self.human_min_confidence:
-                            human_detected = True
-                            detections.append({
-                                'type': motion_type,
-                                'bbox': (x_orig, y_orig, w_orig, h_orig),
-                                'area': scaled_area,
-                                'confidence': confidence,
-                                'features': features,
-                                'contour': contour
-                            })
-                    elif motion_type == 'animal':
-                        if scaled_area >= self.animal_min_area and confidence >= self.animal_min_confidence:
-                            detections.append({
-                                'type': motion_type,
-                                'bbox': (x_orig, y_orig, w_orig, h_orig),
-                                'area': scaled_area,
-                                'confidence': confidence,
-                                'features': features,
-                                'contour': contour
-                            })                
-                                
-                        # NEW: Update human motion flag
-                        if human_detected:
-                            self.human_motion_detected = True
-                            self.last_human_detection_time = datetime.datetime.now()
-                        else:
-                            # Check if timeout has passed
-                            if self.last_human_detection_time:
-                                elapsed = (datetime.datetime.now() - self.last_human_detection_time).total_seconds()
-                                if elapsed > self.human_motion_timeout:
-                                    self.human_motion_detected = False
-                                    
-                        return motion_detected, detections, fg_mask, human_detected  # Return human flag        
-                    
-                    # POST-CLASSIFICATION HUMAN BIAS
-                    # If classified as animal but has human characteristics, reconsider
-                    if motion_type == 'animal' and confidence < 0.8:
-                        # Check if this might be human
-                        aspect_ratio = w / h if h > 0 else 0
-                        scaled_area = area * scale_x * scale_y
-                        
-                        could_be_human = (
-                            scaled_area > self.human_min_area and
-                            0.3 <= aspect_ratio <= 1.0 and
-                            h > w * 1.1  # Taller than wide
-                        )
-                        
-                        if could_be_human:
-                            motion_type = 'human'
-                            confidence = max(confidence, 0.6)  # Boost to reasonable confidence
-                    
-                    # Apply different thresholds
+                    # Calculate scaled area for distance estimation
                     scaled_area = area * scale_x * scale_y
-                    if motion_type == 'human':
-                        if scaled_area >= self.human_min_area and confidence >= self.human_min_confidence:
-                            detections.append({
-                                'type': motion_type,
-                                'bbox': (x_orig, y_orig, w_orig, h_orig),
-                                'area': scaled_area,
-                                'confidence': confidence,
-                                'features': features,
-                                'contour': contour
-                            })
-                    else:  # animal
-                        if scaled_area >= self.animal_min_area and confidence >= self.animal_min_confidence:
-                            detections.append({
-                                'type': motion_type,
-                                'bbox': (x_orig, y_orig, w_orig, h_orig),
-                                'area': scaled_area,
-                                'confidence': confidence,
-                                'features': features,
-                                'contour': contour
-                            })
                     
-                    # Log detection
-# In the detect_motion function, find where detections are logged and update:
-            if ((motion_type == 'human' and confidence >= self.human_min_confidence) or
-                (motion_type == 'animal' and confidence >= self.animal_min_confidence)):
-                
-                # Ensure confidence is a float
-                confidence = float(confidence)
-                
-                self.detection_count[motion_type] += 1
-                screenshot_path = self.save_motion_screenshot(frame, motion_type)
-                alert_level = 2 if motion_type == 'human' else 1
-                
-                print(f"DEBUG: Logging {motion_type} detection with confidence: {confidence:.3f}")
-                
-                add_detection("motion_detection", motion_type, confidence, screenshot_path, alert_level)
-                
-            return motion_detected, detections, fg_mask
+                    # Estimate distance from motion area using user settings
+                    estimated_distance = self.estimate_distance_from_motion_area(scaled_area, distance_estimator.MAX_DETECTION_DISTANCE)
+                    
+                    # Only process if within user's max detection distance
+                    if estimated_distance <= distance_estimator.MAX_DETECTION_DISTANCE:
+                        current_motion_areas.append({
+                            'area': float(area),
+                            'bbox': (int(x), int(y), int(w), int(h)),
+                            'scaled_area': float(scaled_area),
+                            'estimated_distance': float(estimated_distance)
+                        })
+                        
+                        # Extract features
+                        features = self.extract_enhanced_features(processed_frame, contour, x, y, w, h)
+                        
+                        # Classify motion
+                        if self.model is not None:
+                            motion_type, confidence = self.classify_with_ml(features)
+                        else:
+                            motion_type, confidence = self.classify_motion_advanced(contour, area, w, h, features)
+                        
+                        # Only add to detections if within user's distance and is human
+                        if motion_type == 'human' and confidence >= self.human_min_confidence:
+                            human_detected = True
+                            # ADD human detections to the detections list so they can be used by motion-only detection
+                            detections.append({
+                                'type': str(motion_type),
+                                'bbox': (int(x_orig), int(y_orig), int(w_orig), int(h_orig)),
+                                'area': float(scaled_area),
+                                'confidence': float(confidence),
+                                'estimated_distance': float(estimated_distance)
+                            })
+                            print(f"HUMAN MOTION: Distance {estimated_distance:.2f}m, Area {scaled_area:.0f}px, Conf {confidence:.3f}")
+                        
+                        elif motion_type == 'animal' and scaled_area >= self.animal_min_area and confidence >= self.animal_min_confidence:
+                            # Still show animal detections with boxes
+                            detections.append({
+                                'type': str(motion_type),
+                                'bbox': (int(x_orig), int(y_orig), int(w_orig), int(h_orig)),
+                                'area': float(scaled_area),
+                                'confidence': float(confidence),
+                                'estimated_distance': float(estimated_distance)
+                            })
+            
+            # Temporal analysis for better human detection
+            self.motion_frames.append({
+                'motion_detected': motion_detected,
+                'human_detected': human_detected,
+                'motion_areas': current_motion_areas,
+                'timestamp': datetime.datetime.now()
+            })
+            
+            if len(self.motion_frames) > self.max_motion_frames:
+                self.motion_frames.pop(0)
+            
+            # Force human detection for consistent motion within distance
+            if motion_detected and not human_detected and len(self.motion_frames) >= 3:
+                recent_motion_frames = [f for f in self.motion_frames[-3:] if f['motion_detected']]
+                if len(recent_motion_frames) >= 2:
+                    # Check if we have consistent motion within user's distance
+                    valid_motion_areas = []
+                    for frame in recent_motion_frames:
+                        for area in frame['motion_areas']:
+                            if area['estimated_distance'] <= distance_estimator.MAX_DETECTION_DISTANCE:
+                                valid_motion_areas.append(area['scaled_area'])
+                    
+                    if valid_motion_areas:
+                        avg_motion_area = sum(valid_motion_areas) / len(valid_motion_areas)
+                        
+                        if avg_motion_area > 1000:  # Reasonable human size
+                            human_detected = True
+                            print(f"FORCING HUMAN DETECTION: Consistent motion within {distance_estimator.MAX_DETECTION_DISTANCE}m (avg area: {avg_motion_area:.0f}px)")
+            
+            # Update human motion status
+            if human_detected:
+                self.human_motion_detected = True
+                self.last_human_detection_time = datetime.datetime.now()
+            else:
+                if self.last_human_detection_time:
+                    elapsed = (datetime.datetime.now() - self.last_human_detection_time).total_seconds()
+                    if elapsed > self.human_motion_timeout:
+                        self.human_motion_detected = False
+            
+            return motion_detected, detections, fg_mask, human_detected
             
         except Exception as e:
             print(f"Error in motion detection: {e}")
             return False, [], np.zeros((100, 100), dtype=np.uint8), False
-        
+
+    def estimate_distance_from_motion_area(self, motion_area, max_detection_distance):
+        """
+        Estimate distance based on motion area relative to user's max detection distance
+        """
+        # Scale estimation based on user's max distance
+        if motion_area > 50000:
+            return max_detection_distance * 0.08   # Very close
+        elif motion_area > 30000:
+            return max_detection_distance * 0.17   # Close
+        elif motion_area > 20000:
+            return max_detection_distance * 0.25   # Critical distance
+        elif motion_area > 10000:
+            return max_detection_distance * 0.42   # Warning distance  
+        elif motion_area > 5000:
+            return max_detection_distance * 0.67   # Detection range
+        else:
+            return max_detection_distance * 1.1    # Beyond max distance
+            
     def is_human_motion_active(self):
         """Check if human motion is currently active"""
         if not self.last_human_detection_time:

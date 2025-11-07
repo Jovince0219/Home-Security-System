@@ -28,27 +28,13 @@ def load_known_faces():
             
 def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     """
-    NEW FUNCTION: Face detection gated by human motion detection
-    Only performs face detection when:
-    1. Human motion is detected
-    2. Distance <= Critical Distance
-    
-    Args:
-        frame: Input frame (BGR format from OpenCV)
-        motion_detector: MotionDetector instance
-        scale_factor: Scale factor if frame was resized
-    
-    Returns:
-        List of detected faces with locations, info, and distance
-        OR empty list if conditions not met
+    UPDATED: Face detection that works independently for unauthorized persons
+    Authorized faces: Only detected when human motion is active
+    Unauthorized faces: Always detected regardless of motion
     """
     global known_face_encodings, known_face_names
     
-    # STEP 1: Check if human motion is active
-    if not motion_detector.is_human_motion_active():
-        return []  # No human motion detected, skip face detection
-    
-    # Get distance estimator
+    # Get distance estimator with user settings
     distance_estimator = get_distance_estimator()
     
     # Convert BGR to RGB
@@ -66,16 +52,16 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     results = []
     
     for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
-        # STEP 2: Estimate distance FIRST
+        # STEP 1: Estimate distance FIRST using user settings
         face_location = [top, right, bottom, left]
         face_width_pixels = right - left
         distance_meters = distance_estimator.estimate_distance(face_width_pixels)
         
-        # STEP 3: Check if within Critical Distance
-        if distance_meters > distance_estimator.CRITICAL_DISTANCE:
-            continue  # Skip face recognition if beyond critical distance
+        # STEP 2: Check if within user's configured MAX Detection Distance
+        if distance_meters > distance_estimator.MAX_DETECTION_DISTANCE:
+            continue  # Skip face recognition if beyond user's max distance
         
-        # STEP 4: Now perform face recognition (only for close humans)
+        # STEP 3: Perform face recognition
         matches = face_recognition.compare_faces(
             known_face_encodings, 
             face_encoding, 
@@ -94,52 +80,87 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             actual_index = matched_indices[best_match_index]
             
             name = known_face_names[actual_index]
-            confidence = float(1.0 - face_distances[best_match_index])  # Ensure it's a float
-            
-            # Ensure confidence is within valid range [0, 1]
+            confidence = float(1.0 - face_distances[best_match_index])
             confidence = max(0.0, min(1.0, confidence))
             
-            print(f"DEBUG: Authorized face '{name}' detected with confidence: {confidence:.3f}")
+            print(f"DEBUG: Authorized face '{name}' detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
+            
+            # FOR AUTHORIZED FACES: Only process if human motion is active
+            if not motion_detector.is_human_motion_active():
+                print(f"SKIPPING AUTHORIZED FACE: No human motion active")
+                continue  # Skip authorized faces when no human motion
+            
         else:
             name = "Unauthorized"
-            # For unauthorized faces, we can estimate confidence based on face quality
-            # Use a default confidence or calculate based on face size/quality
+            # For unauthorized faces, estimate confidence based on face size/quality
             face_width_pixels = right - left
             face_height_pixels = bottom - top
             face_area = face_width_pixels * face_height_pixels
             
             # Simple confidence estimation for unauthorized faces
-            if face_area > 10000:  # Large face = high confidence
+            if face_area > 10000:
                 confidence = 0.85
-            elif face_area > 5000:  # Medium face = medium confidence
+            elif face_area > 5000:
                 confidence = 0.70
-            else:  # Small face = lower confidence
+            else:
                 confidence = 0.55
             
-            print(f"DEBUG: Unauthorized face detected with estimated confidence: {confidence:.3f}")
+            print(f"DEBUG: Unauthorized face detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
+            # UNAUTHORIZED FACES: Always process regardless of motion
 
         is_authorized = name != "Unauthorized"
         
-        results.append({
+        # Use distance estimator with user settings
+        distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
+        
+        # Check face covering
+        face_region = rgb_frame[top:bottom, left:right]
+        face_covered = detect_face_covering_fast(face_region)
+        
+        # Better face box fitting
+        face_width = right - left
+        face_height = bottom - top
+        
+        width_reduction = int(face_width * 0.20)
+        height_top_reduction = int(face_height * 0.15)
+        height_bottom_reduction = int(face_height * 0.05)
+        
+        adjusted_left = max(0, left + width_reduction)
+        adjusted_right = min(rgb_frame.shape[1], right - width_reduction)
+        adjusted_top = max(0, top + height_top_reduction)
+        adjusted_bottom = min(rgb_frame.shape[0], bottom - height_bottom_reduction)
+        
+        # Determine display name based on distance and authorization
+        if is_authorized:
+            display_name = str(name)
+        else:
+            if distance_analysis['within_detection_range']:
+                display_name = 'Unauthorized'
+            else:
+                display_name = 'Too Far'
+        
+        # Create result
+        result = {
             'name': str(name),
             'confidence': float(confidence),
             'location': [int(adjusted_top), int(adjusted_right), int(adjusted_bottom), int(adjusted_left)],
             'face_covered': bool(face_covered),
             'is_authorized': bool(is_authorized),
             'display_name': display_name,
-            'distance_meters': distance_analysis['distance_meters'],
-            'distance_feet': distance_analysis['distance_feet'],
-            'zone': distance_analysis['zone'],
-            'trigger_alert': distance_analysis['trigger_alert'],
-            'alert_level': distance_analysis['alert_level'],
-            'within_detection_range': distance_analysis['within_detection_range'],
-            'face_encoding': face_encoding  # Include encoding for duplicate detection
-        })
+            'distance_meters': float(distance_analysis['distance_meters']),
+            'distance_feet': float(distance_analysis['distance_feet']),
+            'zone': str(distance_analysis['zone']),
+            'trigger_alert': bool(distance_analysis['trigger_alert']),
+            'alert_level': int(distance_analysis['alert_level']),
+            'within_detection_range': bool(distance_analysis['within_detection_range'])
+        }
         
-        # STEP 5: Handle unauthorized faces (check for duplicates)
-        if not is_authorized:
-            # Create a simple hash for the face encoding
-            encoding_key = hash(tuple(face_encoding[:20]))  # Use first 20 values for hash
+        results.append(result)
+        
+        # STEP 4: Handle unauthorized faces (check for duplicates)
+        if not is_authorized and distance_analysis['trigger_alert']:
+            # Create a simple hash for the face encoding (using first few values)
+            encoding_key = hash(tuple(face_encoding[:10]))
             
             # Check if this face was recently logged
             if encoding_key in motion_detector.recent_unauthorized_faces:
@@ -186,7 +207,132 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     # Cleanup old detections periodically
     motion_detector.cleanup_old_detections()
     
-    return results  
+    return results
+
+
+def estimate_distance_from_area(self, motion_area):
+    """
+    Estimate distance based on motion detection area using user's max distance as reference
+    """
+    # Use the user's max detection distance as the baseline
+    max_distance = self.MAX_DETECTION_DISTANCE
+    
+    # Calibration: adjust these ratios based on your camera
+    # These are approximate ratios - you may need to calibrate
+    if motion_area > 50000:
+        return max_distance * 0.08  # 8% of max distance = very close
+    elif motion_area > 30000:
+        return max_distance * 0.17  # 17% of max distance
+    elif motion_area > 20000:
+        return max_distance * 0.25  # 25% of max distance = critical zone
+    elif motion_area > 10000:
+        return max_distance * 0.42  # 42% of max distance = warning zone
+    elif motion_area > 5000:
+        return max_distance * 0.67  # 67% of max distance = detection zone
+    else:
+        return max_distance * 1.1   # Beyond max distance
+
+def analyze_motion_detection(self, bbox, motion_area, is_human=True):
+    """
+    Analyze motion detection and determine distance-based alerts using user settings
+    """
+    try:
+        # Estimate distance from motion area
+        distance = self.estimate_distance_from_area(motion_area)
+        
+        # Determine if alert should be triggered based on user's max distance
+        trigger_alert = distance <= self.MAX_DETECTION_DISTANCE
+        
+        # Get alert level based on user's warning/critical distances
+        alert_level = self.get_alert_level(distance) if trigger_alert else 0
+        
+        return {
+            'distance_meters': round(distance, 2),
+            'distance_feet': round(distance * 3.28084, 2),
+            'trigger_alert': trigger_alert,
+            'alert_level': alert_level,
+            'zone': self.get_distance_zone(distance),
+            'within_detection_range': distance <= self.MAX_DETECTION_DISTANCE,
+            'motion_area': motion_area
+        }
+        
+    except Exception as e:
+        print(f"Error in motion detection analysis: {e}")
+        return {
+            'distance_meters': self.MAX_DETECTION_DISTANCE + 1,
+            'distance_feet': (self.MAX_DETECTION_DISTANCE + 1) * 3.28084,
+            'trigger_alert': False,
+            'alert_level': 0,
+            'zone': 'SAFE ZONE',
+            'within_detection_range': False,
+            'motion_area': motion_area
+        }
+
+def detect_motion_without_faces(frame, motion_detector, distance_estimator):
+    """
+    Detect motion without faces and determine if it should trigger an alert
+    """
+    try:
+        print(f"🟡 DEBUG: detect_motion_without_faces called - checking for motion without faces")
+        
+        # Use the motion detector to check for human motion
+        motion_detected, detections, fg_mask, human_detected = motion_detector.detect_motion(frame)
+        
+        print(f"🟡 DEBUG: Motion detected: {motion_detected}, Human detected: {human_detected}")
+        
+        # Only proceed if human motion is detected but no faces were found
+        if not human_detected:
+            print(f"🔴 DEBUG: No human motion detected, skipping motion-only detection")
+            return None
+        
+        # Find the largest human motion detection
+        human_motions = []
+        for detection in detections:
+            if detection.get('type') == 'human':
+                human_motions.append(detection)
+        
+        if not human_motions:
+            print(f"🔴 DEBUG: No human motion detections found")
+            return None
+        
+        # Use the largest human motion
+        largest_motion = max(human_motions, key=lambda x: x.get('area', 0))
+        
+        # Estimate distance from motion area using user settings
+        motion_area = largest_motion.get('area', 0)
+        estimated_distance = distance_estimator.estimate_distance_from_area(motion_area)
+        
+        # Check if within user's detection range
+        within_range = estimated_distance <= distance_estimator.MAX_DETECTION_DISTANCE
+        
+        # Determine alert level based on user's distance settings
+        alert_level = distance_estimator.get_alert_level(estimated_distance) if within_range else 0
+        trigger_alert = within_range and alert_level > 0
+        
+        zone = distance_estimator.get_distance_zone(estimated_distance)
+        
+        result = {
+            'type': 'motion_no_face',
+            'distance_meters': round(estimated_distance, 2),
+            'distance_feet': round(estimated_distance * 3.28084, 2),
+            'confidence': largest_motion.get('confidence', 0.7),
+            'bbox': largest_motion.get('bbox', [100, 100, 300, 300]),
+            'zone': zone,
+            'trigger_alert': trigger_alert,
+            'alert_level': alert_level,
+            'motion_area': motion_area,
+            'within_detection_range': within_range,
+            'person_name': 'Motion Detected, Unauthorized Person'
+        }
+        
+        print(f"✅ DEBUG: Motion-only detection created: trigger_alert={result['trigger_alert']}, distance={result['distance_meters']}m, zone={result['zone']}")
+        return result
+        
+    except Exception as e:
+        print(f"❌ ERROR in detect_motion_without_faces: {e}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
     """

@@ -168,6 +168,29 @@ class DistanceEstimator:
             self.WARNING_DISTANCE = warning_distance
         if critical_distance is not None:
             self.CRITICAL_DISTANCE = critical_distance
+            
+    def estimate_distance_from_area(self, motion_area):
+        """
+        Estimate distance based on motion detection area
+        Larger area = closer distance
+        """
+        # This is a simplified estimation - you may need to calibrate for your camera
+        # Typical values: 
+        # - Very close (1m): area > 50000 pixels
+        # - Close (2m): area ~ 20000-30000 pixels  
+        # - Medium (4m): area ~ 8000-15000 pixels
+        # - Far (6m+): area < 5000 pixels
+        
+        if motion_area > 50000:
+            return 1.0  # Very close
+        elif motion_area > 30000:
+            return 1.5  # Close to critical distance
+        elif motion_area > 15000:
+            return 2.5  # Within warning distance
+        elif motion_area > 8000:
+            return 4.0  # Within detection range
+        else:
+            return 6.0  # Beyond detection range
 
 
 # Global instance

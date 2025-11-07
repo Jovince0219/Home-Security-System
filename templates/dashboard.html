@@ -119,24 +119,6 @@
     </div>
 </div>
 
-<!-- Motion-Gated Face Recognition Status -->
-<div class="mt-4 bg-blue-50 border-l-4 border-blue-500 p-4 rounded">
-    <div class="flex items-center justify-between">
-        <div id="motionStatusIndicator" class="flex items-center space-x-2">
-            <i class="fas fa-ban text-red-600"></i>
-            <span class="text-red-600 font-semibold">No Human Motion - Face Detection DISABLED</span>
-        </div>
-        <button id="toggleMotionGatedBtn" onclick="toggleMotionGatedRecognition()"
-            class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm">
-            <i class="fas fa-shield-alt mr-1"></i>Motion-Gated: ON
-        </button>
-    </div>
-    <p class="text-sm text-gray-700 mt-2">
-        <i class="fas fa-info-circle mr-1"></i>
-        Face detection only activates when human motion is detected within <strong>Critical Distance (1.5m)</strong>
-    </p>
-</div>
-
 <!-- Distance Settings Panel -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <div class="flex justify-between items-center mb-4">
@@ -162,31 +144,7 @@
                 <input type="number" id="maxDistance" value="6.0" step="0.5" min="1" max="20"
                     class="w-full border rounded px-3 py-2">
                 <p class="text-xs text-gray-600 mt-1">
-                    Unauthorized persons beyond this distance will not trigger alerts
-                </p>
-            </div>
-
-            <div>
-                <label class="block text-sm font-semibold mb-2">
-                    <i class="fas fa-exclamation-triangle mr-1 text-orange-500"></i>
-                    Warning Distance (meters)
-                </label>
-                <input type="number" id="warningDistance" value="3.0" step="0.5" min="0.5" max="10"
-                    class="w-full border rounded px-3 py-2">
-                <p class="text-xs text-gray-600 mt-1">
-                    Medium alert when unauthorized person is within this distance
-                </p>
-            </div>
-
-            <div>
-                <label class="block text-sm font-semibold mb-2">
-                    <i class="fas fa-skull-crossbones mr-1 text-red-500"></i>
-                    Critical Distance (meters)
-                </label>
-                <input type="number" id="criticalDistance" value="1.5" step="0.25" min="0.5" max="5"
-                    class="w-full border rounded px-3 py-2">
-                <p class="text-xs text-gray-600 mt-1">
-                    High alert when unauthorized person is very close
+                    Maximum distance at which faces will be detected and analyzed
                 </p>
             </div>
 
@@ -194,92 +152,6 @@
             <button onclick="saveDistanceSettings()"
                 class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold">
                 <i class="fas fa-save mr-2"></i>Save Settings
-            </button>
-        </div>
-    </div>
-
-    <!-- Distance Zones Legend -->
-    <div class="mt-4 bg-gray-50 rounded-lg p-4">
-        <h4 class="font-semibold mb-3 text-sm">Distance Zones:</h4>
-        <div class="space-y-2">
-            <div class="flex items-center">
-                <div class="w-4 h-4 rounded bg-red-500 mr-2"></div>
-                <span class="text-sm">
-                    <strong>Critical Zone:</strong> &lt; 1.5m - Immediate threat
-                </span>
-            </div>
-            <div class="flex items-center">
-                <div class="w-4 h-4 rounded bg-orange-500 mr-2"></div>
-                <span class="text-sm">
-                    <strong>Warning Zone:</strong> 1.5m - 3m - Close proximity
-                </span>
-            </div>
-            <div class="flex items-center">
-                <div class="w-4 h-4 rounded bg-blue-500 mr-2"></div>
-                <span class="text-sm">
-                    <strong>Detection Zone:</strong> 3m - 6m - Monitored area
-                </span>
-            </div>
-            <div class="flex items-center">
-                <div class="w-4 h-4 rounded bg-gray-400 mr-2"></div>
-                <span class="text-sm">
-                    <strong>Safe Zone:</strong> &gt; 6m - Too far to detect
-                </span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Calibration Section -->
-    <div class="mt-4 bg-blue-50 rounded-lg p-4 border border-blue-200">
-        <h4 class="font-semibold mb-2 text-sm flex items-center">
-            <i class="fas fa-tools mr-2 text-blue-600"></i>
-            Camera Calibration (Optional)
-        </h4>
-        <p class="text-xs text-gray-700 mb-3">
-            For accurate distance measurement, calibrate your camera by having someone stand at a known distance.
-        </p>
-        <button onclick="openCalibrationModal()"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded text-sm">
-            <i class="fas fa-camera mr-1"></i>Calibrate Camera
-        </button>
-    </div>
-</div>
-
-<!-- Calibration Modal (Add at the bottom of your dashboard.html) -->
-<div id="calibrationModal" class="hidden fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-        <h3 class="text-xl font-bold mb-4">
-            <i class="fas fa-camera mr-2"></i>Camera Calibration
-        </h3>
-
-        <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-semibold mb-2">
-                    Step 1: Have someone stand at a known distance
-                </label>
-                <input type="number" id="calibrationDistance" placeholder="Enter distance in meters"
-                    class="w-full border rounded px-3 py-2" value="2.0" step="0.5">
-            </div>
-
-            <div>
-                <label class="block text-sm font-semibold mb-2">
-                    Step 2: Capture their face
-                </label>
-                <button onclick="captureCalibrationFace()"
-                    class="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-                    <i class="fas fa-camera mr-2"></i>Capture Face
-                </button>
-            </div>
-
-            <div id="calibrationResult" class="hidden p-3 bg-green-50 rounded text-sm">
-                <!-- Calibration result will appear here -->
-            </div>
-        </div>
-
-        <div class="mt-6 flex justify-end space-x-2">
-            <button onclick="closeCalibrationModal()"
-                class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded">
-                Close
             </button>
         </div>
     </div>
@@ -405,7 +277,7 @@
     let cameraStream = null;
     let isRecording = false;
     let faceRecognitionActive = true;
-    let motionDetectionActive = false;
+    let motionDetectionActive = true;
     let recognitionInterval = null;
     let detectionIntervalMs = 1000; // Default: 1 second interval
     let fpsCounter = 0;
@@ -515,7 +387,6 @@
 
         const imageData = canvas.toDataURL('image/jpeg', 0.8);
 
-        // NEW: Use motion-gated endpoint
         const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
 
         const formData = new FormData();
@@ -530,6 +401,11 @@
                 if (data.success) {
                     displayFaceBoxes(data.faces);
 
+                    // Display motion-only detection if present
+                    if (data.motion_only_detection) {
+                        displayMotionOnlyDetection(data.motion_only_detection);
+                    }
+
                     // Update motion status indicator
                     if (data.motion_status) {
                         updateMotionStatusIndicator(data.motion_status);
@@ -539,27 +415,69 @@
             .catch(error => console.error('Face recognition error:', error));
     }
 
-    // Update motion status indicator
     function updateMotionStatusIndicator(status) {
         const indicator = document.getElementById('motionStatusIndicator');
         if (!indicator) return;
 
+        let statusHTML = '';
+
         if (status.human_motion_detected) {
-            indicator.innerHTML = `
+            statusHTML = `
             <i class="fas fa-running text-green-600"></i>
-            <span class="text-green-600">Human Motion Active - Face Detection ENABLED</span>
+            <span class="text-green-600">Human Motion Active</span>
         `;
             lastMotionDetectionTime = Date.now();
         } else {
             const timeSinceMotion = lastMotionDetectionTime ?
                 ((Date.now() - lastMotionDetectionTime) / 1000).toFixed(1) : 'N/A';
 
-            indicator.innerHTML = `
+            statusHTML = `
             <i class="fas fa-ban text-red-600"></i>
-            <span class="text-red-600">No Human Motion - Face Detection DISABLED</span>
+            <span class="text-red-600">No Human Motion</span>
             <span class="text-sm text-gray-600">(Last motion: ${timeSinceMotion}s ago)</span>
         `;
         }
+
+        // Add face detection status
+        if (status.face_detection_enabled) {
+            statusHTML += `
+            <div class="text-xs text-green-600 mt-1">
+                <i class="fas fa-user-check mr-1"></i>
+                <strong>Face Detection:</strong> ACTIVE
+            </div>
+        `;
+        } else {
+            statusHTML += `
+            <div class="text-xs text-gray-600 mt-1">
+                <i class="fas fa-user-slash mr-1"></i>
+                <strong>Face Detection:</strong> Waiting for human motion (authorized faces only)
+            </div>
+        `;
+        }
+
+        // Add motion-only alert status
+        if (status.motion_only_alert) {
+            statusHTML += `
+            <div class="text-xs text-red-600 mt-1">
+                <i class="fas fa-exclamation-triangle mr-1"></i>
+                <strong>Motion-Only Alert:</strong> Triggered - No face detected
+            </div>
+        `;
+        }
+
+        // Add distance settings info
+        if (status.distance_settings) {
+            statusHTML += `
+            <div class="text-xs text-gray-600 mt-1">
+                <strong>Distance Settings:</strong> 
+                Max: ${status.distance_settings.max_distance}m, 
+                Warn: ${status.distance_settings.warning_distance}m, 
+                Critical: ${status.distance_settings.critical_distance}m
+            </div>
+        `;
+        }
+
+        indicator.innerHTML = statusHTML;
     }
 
     function displayFaceBoxes(faces) {
@@ -714,15 +632,12 @@
     }
 
     // Save distance settings
+    // Save distance settings - UPDATED VERSION
     function saveDistanceSettings() {
         const maxDistance = document.getElementById('maxDistance').value;
-        const warningDistance = document.getElementById('warningDistance').value;
-        const criticalDistance = document.getElementById('criticalDistance').value;
 
         const formData = new FormData();
         formData.append('max_distance', maxDistance);
-        formData.append('warning_distance', warningDistance);
-        formData.append('critical_distance', criticalDistance);
 
         fetch('/api/update_distance_settings', {
             method: 'POST',
@@ -742,6 +657,21 @@
             });
     }
 
+
+
+    // Load distance settings on page load - UPDATED VERSION
+    function loadDistanceSettings() {
+        fetch('/api/get_distance_settings')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    document.getElementById('maxDistance').value = data.settings.max_detection_distance;
+                    // Removed warning and critical distance loading
+                }
+            })
+            .catch(error => console.error('Error loading distance settings:', error));
+    }
+
     // Load distance settings on page load
     function loadDistanceSettings() {
         fetch('/api/get_distance_settings')
@@ -749,8 +679,6 @@
             .then(data => {
                 if (data.success) {
                     document.getElementById('maxDistance').value = data.settings.max_detection_distance;
-                    document.getElementById('warningDistance').value = data.settings.warning_distance;
-                    document.getElementById('criticalDistance').value = data.settings.critical_distance;
                 }
             })
             .catch(error => console.error('Error loading distance settings:', error));
@@ -930,33 +858,34 @@
     }
 
     function loadRecentDetections() {
-        fetch('/api/dashboard_feed')
+        // Use the unauthorized_detections endpoint instead of dashboard_feed
+        fetch('/api/unauthorized_detections')
             .then(response => response.json())
             .then(data => {
                 const tbody = document.getElementById('detectionsTable');
 
                 if (!data.success) {
                     tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-4 py-4 text-center text-red-500">
-                            <i class="fas fa-exclamation-triangle mr-2"></i>
-                            Error loading alerts
-                        </td>
-                    </tr>
-                `;
+                <tr>
+                    <td colspan="6" class="px-4 py-4 text-center text-red-500">
+                        <i class="fas fa-exclamation-triangle mr-2"></i>
+                        Error loading alerts
+                    </td>
+                </tr>
+            `;
                     return;
                 }
 
                 if (!data.detections || data.detections.length === 0) {
                     tbody.innerHTML = `
-                    <tr>
-                        <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                            <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
-                            <p class="text-lg font-semibold">All Clear!</p>
-                            <p class="text-sm mt-1">No security alerts detected</p>
-                        </td>
-                    </tr>
-                `;
+                <tr>
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
+                        <p class="text-lg font-semibold">All Clear!</p>
+                        <p class="text-sm mt-1">No security alerts detected</p>
+                    </td>
+                </tr>
+            `;
                     return;
                 }
 
@@ -977,44 +906,44 @@
                     }
 
                     row.innerHTML = `
-                    <td class="px-4 py-2 text-sm">${timestamp}</td>
-                    <td class="px-4 py-2">
-                        <span class="px-2 py-1 rounded text-sm ${typeClass}">
-                            ${detection.type.replace('_', ' ')}
-                        </span>
-                    </td>
-                    <td class="px-4 py-2 font-semibold ${isFaceDetection ? 'text-red-600' : 'text-orange-600'}">
-                        ${displayName}
-                    </td>
-                    <td class="px-4 py-2">
-                        <span class="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
-                            ${confidenceDisplay}
-                        </span>
-                    </td>
-                    <td class="px-4 py-2">
-                        <span class="px-2 py-1 rounded text-sm ${getAlertLevelClass(detection.alert_level)}">
-                            Level ${detection.alert_level}
-                        </span>
-                    </td>
-                    <td class="px-4 py-2">
-                        ${detection.screenshot_path ?
+                <td class="px-4 py-2 text-sm">${timestamp}</td>
+                <td class="px-4 py-2">
+                    <span class="px-2 py-1 rounded text-sm ${typeClass}">
+                        ${detection.type.replace('_', ' ')}
+                    </span>
+                </td>
+                <td class="px-4 py-2 font-semibold ${isFaceDetection ? 'text-red-600' : 'text-orange-600'}">
+                    ${displayName}
+                </td>
+                <td class="px-4 py-2">
+                    <span class="px-2 py-1 bg-gray-100 rounded text-xs font-mono">
+                        ${confidenceDisplay}
+                    </span>
+                </td>
+                <td class="px-4 py-2">
+                    <span class="px-2 py-1 rounded text-sm ${getAlertLevelClass(detection.alert_level)}">
+                        Level ${detection.alert_level}
+                    </span>
+                </td>
+                <td class="px-4 py-2">
+                    ${detection.screenshot_path ?
                             `<a href="/${detection.screenshot_path}" target="_blank" class="text-blue-600 hover:underline">
-                                <i class="fas fa-image mr-1"></i>View
-                            </a>` : 'N/A'}
-                    </td>
-                `;
+                            <i class="fas fa-image mr-1"></i>View
+                        </a>` : 'N/A'}
+                </td>
+            `;
                 });
             })
             .catch(error => {
                 console.error('Error loading alerts:', error);
                 const tbody = document.getElementById('detectionsTable');
                 tbody.innerHTML = `
-                <tr>
-                    <td colspan="6" class="px-4 py-4 text-center text-red-500">
-                        Network error loading alerts
-                    </td>
-                </tr>
-            `;
+            <tr>
+                <td colspan="6" class="px-4 py-4 text-center text-red-500">
+                    Network error loading alerts
+                </td>
+            </tr>
+        `;
             });
     }
 
@@ -1034,6 +963,7 @@
 
     setInterval(loadRecentDetections, 10000);
 
+
     function toggleMotionDetection() {
         if (!cameraStream) {
             alert('Please start camera first');
@@ -1046,6 +976,67 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `action=${action}`
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    motionDetectionActive = !motionDetectionActive;
+                    updateMotionDetectionStatus(motionDetectionActive ? 'Active' : 'Inactive');
+
+                    if (motionDetectionActive) {
+                        startMotionDetection();
+                    } else {
+                        stopMotionDetection();
+                    }
+                }
+            });
+    }
+
+    function startMotionDetection() {
+        if (motionDetectionInterval) return;
+
+        console.log('Starting motion detection');
+        motionDetectionInterval = setInterval(() => {
+            detectMotion();
+        }, 1000); // Detect every second
+    }
+
+    function stopMotionDetection() {
+        if (motionDetectionInterval) {
+            clearInterval(motionDetectionInterval);
+            motionDetectionInterval = null; 
+        }
+    }
+
+    // Make sure this function exists
+    function getAlertLevelClass(level) {
+        switch (level) {
+            case 1: return 'bg-green-100 text-green-800 border border-green-200';
+            case 2: return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+            case 3: return 'bg-red-100 text-red-800 border border-red-200';
+            default: return 'bg-gray-100 text-gray-800 border border-gray-200';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        loadRecentDetections();
+    });
+
+    setInterval(loadRecentDetections, 10000);
+
+
+    function toggleMotionDetection() {
+        if (!cameraStream) {
+            alert('Please start camera first');
+            return;
+        }
+
+        const action = motionDetectionActive ? 'stop_motion_detection' : 'start_motion_detection';
+
+        fetch('/api/dashboard_action', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `action = ${action} `
         })
             .then(response => response.json())
             .then(data => {
@@ -1102,9 +1093,7 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success && data.motion_detected) {
-                    displayMotionDetections(data.detections);
-
-                    // NEW: Update human motion status if available
+                    // Update human motiofn status if available
                     if (data.human_detected !== undefined) {
                         updateHumanMotionStatus(data.human_detected);
                     }
@@ -1130,25 +1119,16 @@
         overlay.innerHTML = '';
 
         detections.forEach(detection => {
-            // Much lower threshold for humans, higher for animals
-            const minHumanConfidence = 0.5;   // Very low - favor human detection
-            const minAnimalConfidence = 0.7;  // High - only clear animals
-
-            const shouldDisplay = detection.type === 'human' ?
-                detection.confidence >= minHumanConfidence :
-                detection.confidence >= minAnimalConfidence;
-
-            if (shouldDisplay) {
+            // ONLY display animal detections, NOT human detections
+            if (detection.type === 'animal') {
                 const box = document.createElement('div');
-                const isHuman = detection.type === 'human';
-
                 box.style.position = 'absolute';
-                box.style.border = isHuman ? '3px solid #DC2626' : '3px solid #D97706'; // Red vs Amber
-                box.style.backgroundColor = isHuman ? 'rgba(220, 38, 38, 0.15)' : 'rgba(217, 119, 6, 0.15)';
+                box.style.border = '3px solid #D97706'; // Amber for animals
+                box.style.backgroundColor = 'rgba(217, 119, 6, 0.15)';
                 box.style.borderRadius = '8px';
                 box.style.pointerEvents = 'none';
                 box.style.transition = 'all 0.3s ease-out';
-                box.style.boxShadow = isHuman ? '0 0 10px rgba(220, 38, 38, 0.5)' : '0 0 10px rgba(217, 119, 6, 0.5)';
+                box.style.boxShadow = '0 0 10px rgba(217, 119, 6, 0.5)';
 
                 const videoRect = video.getBoundingClientRect();
                 const scaleX = videoRect.width / video.videoWidth;
@@ -1164,7 +1144,7 @@
                 label.style.position = 'absolute';
                 label.style.top = '-35px';
                 label.style.left = '0';
-                label.style.backgroundColor = isHuman ? '#DC2626' : '#D97706';
+                label.style.backgroundColor = '#D97706';
                 label.style.color = 'white';
                 label.style.padding = '4px 8px';
                 label.style.fontSize = '12px';
@@ -1174,18 +1154,17 @@
                 label.style.whiteSpace = 'nowrap';
                 label.style.boxShadow = '0 2px 4px rgba(0,0,0,0.2)';
                 label.innerHTML = `
-                <i class="fas ${isHuman ? 'fa-user' : 'fa-paw'} mr-1"></i>
-                ${detection.type.toUpperCase()} (${(detection.confidence * 100).toFixed(0)}%)
-            `;
+                        <i i class="fas fa-paw mr-1" ></i >
+                            ANIMAL(${(detection.confidence * 100).toFixed(0)}%)
+                    `;
 
                 box.appendChild(label);
                 overlay.appendChild(box);
-
-                // Log to console for debugging
-                console.log(`DETECTION: ${detection.type} (${(detection.confidence * 100).toFixed(0)}%) - Area: ${detection.area.toFixed(0)}`);
             }
+            // Human detections are NOT displayed with boxes
         });
     }
+
 
     function updateMotionDetectionStatus(status) {
         const element = document.getElementById('motionDetectionStatus');
@@ -1220,13 +1199,13 @@
         const step3 = document.getElementById('faceDetectionStep');
         if (motionStatus.face_detection_enabled) {
             step3.innerHTML = `
-            <div class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold">3</div>
-            <span class="text-green-600"><strong>Face Detection:</strong> ACTIVE - Human detected within critical distance</span>
-        `;
+                    <div div class="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center text-white text-xs font-bold" > 3</div >
+                        <span class="text-green-600"><strong>Face Detection:</strong> ACTIVE - Human detected within critical distance</span>
+                `;
         } else {
             step3.innerHTML = `
-            <div class="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold">3</div>
-            <span class="text-gray-600"><strong>Face Detection:</strong> INACTIVE - Waiting for human motion within 1.5m</span>
+                    <div div class="w-6 h-6 rounded-full bg-gray-400 flex items-center justify-center text-white text-xs font-bold" > 3</div >
+                        <span class="text-gray-600"><strong>Face Detection:</strong> INACTIVE - Waiting for human motion within 1.5m</span>
         `;
         }
     }

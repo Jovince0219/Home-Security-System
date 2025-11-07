@@ -68,10 +68,7 @@ def controls():
 @app.route('/api/recognize_faces_with_motion', methods=['POST'])
 def recognize_faces_with_motion():
     """
-    NEW ENDPOINT: Motion-gated face recognition
-    Only performs face recognition when:
-    1. Human motion is detected
-    2. Distance <= Critical Distance
+    Enhanced motion-gated face recognition with independent unauthorized face detection
     """
     try:
         image_data = request.form.get('image_data')
@@ -92,52 +89,183 @@ def recognize_faces_with_motion():
             from utils.motion_detection_utils import MotionDetector
             motion_detector = MotionDetector()
         
+        # Get distance estimator with user settings
+        from utils.distance_estimation import get_distance_estimator
+        distance_estimator = get_distance_estimator()
+        
         # STEP 1: Detect motion first
         motion_detected, detections, fg_mask, human_detected = motion_detector.detect_motion(frame)
         
-        # STEP 2: Only perform face recognition if human motion detected
-        if human_detected or motion_detector.is_human_motion_active():
-            from utils.face_recognition_utils import detect_faces_with_motion_gate
-            results = detect_faces_with_motion_gate(frame, motion_detector)
+        # STEP 2: Perform face recognition (unauthorized faces always detected)
+        face_results = []
+        motion_only_result = None
+        
+        # Always run face detection, but authorized faces are filtered in the function
+        from utils.face_recognition_utils import detect_faces_with_motion_gate
+        face_results = detect_faces_with_motion_gate(frame, motion_detector)
+        
+        # STEP 3: Check for motion without faces using user distance settings
+        # Only check for motion-only if no faces were detected AND human motion is active
+        if len(face_results) == 0 and (human_detected or motion_detector.is_human_motion_active()):
+            print(f"🔴 DEBUG: No faces but human motion detected - checking for motion without faces")
             
-            # Convert numpy types to Python types for JSON serialization
-            for result in results:
-                result['confidence'] = float(result['confidence'])
-                result['location'] = [int(x) for x in result['location']]
-                result['face_covered'] = bool(result['face_covered'])
-                result['is_authorized'] = bool(result['is_authorized'])
-                result['distance_meters'] = float(result['distance_meters'])
-                result['distance_feet'] = float(result['distance_feet'])
-                result['trigger_alert'] = bool(result['trigger_alert'])
-                result['alert_level'] = int(result['alert_level'])
-                result['within_detection_range'] = bool(result['within_detection_range'])
-                # Remove face_encoding before sending to client
-                if 'face_encoding' in result:
-                    del result['face_encoding']
+            from utils.face_recognition_utils import detect_motion_without_faces
             
-            return jsonify({
-                'success': True, 
-                'faces': results,
-                'motion_status': {
-                    'human_motion_detected': human_detected,
-                    'motion_active': motion_detector.is_human_motion_active(),
-                    'face_detection_enabled': len(results) > 0 or motion_detector.is_human_motion_active()
+            motion_only_result = detect_motion_without_faces(frame, motion_detector, distance_estimator)
+            
+            print(f"🔴 DEBUG: Motion only result: {motion_only_result}")
+            
+            # If motion without face detected within user's distance, log it
+            if motion_only_result and motion_only_result['trigger_alert']:
+                try:
+                    # Save screenshot
+                    screenshot_path = save_screenshot(
+                        frame, 
+                        f"motion_no_face_{motion_only_result['distance_meters']}m"
+                    )
+                    
+                    # Add detection to database with proper person_name
+                    from utils.database import add_detection
+                    add_detection(
+                        "motion_detection", 
+                        motion_only_result['person_name'],  # Use the person_name from the result
+                        float(motion_only_result['confidence']), 
+                        screenshot_path, 
+                        motion_only_result['alert_level']
+                    )
+                    
+                    print(f"✅ LOGGED MOTION-ONLY ALERT: {motion_only_result['person_name']} at {motion_only_result['distance_meters']}m")
+                    
+                    # Send alert
+                    send_motion_alert_async(motion_only_result, screenshot_path)
+                    
+                except Exception as e:
+                    print(f"❌ Error logging motion-only detection: {e}")
+            else:
+                print(f"🔴 DEBUG: Motion detected but not logged - trigger_alert: {motion_only_result.get('trigger_alert') if motion_only_result else 'No result'}")
+        
+        # Ensure all data is JSON serializable
+        clean_motion_only_result = None
+        if motion_only_result:
+            clean_motion_only_result = {
+                'type': str(motion_only_result.get('type', '')),
+                'distance_meters': float(motion_only_result.get('distance_meters', 0)),
+                'distance_feet': float(motion_only_result.get('distance_feet', 0)),
+                'confidence': float(motion_only_result.get('confidence', 0)),
+                'bbox': [int(x) for x in motion_only_result.get('bbox', [])],
+                'zone': str(motion_only_result.get('zone', '')),
+                'trigger_alert': bool(motion_only_result.get('trigger_alert', False)),
+                'alert_level': int(motion_only_result.get('alert_level', 0)),
+                'within_detection_range': bool(motion_only_result.get('within_detection_range', False)),
+                'motion_area': int(motion_only_result.get('motion_area', 0)),
+                'person_name': 'Motion Detected, Unauthorized Person'  # Add this for frontend
+            }
+        
+        return jsonify({
+            'success': True, 
+            'faces': face_results,
+            'motion_only_detection': clean_motion_only_result,
+            'motion_detections': detections,  # Only contains animals now
+            'motion_status': {
+                'human_motion_detected': human_detected,
+                'motion_active': motion_detector.is_human_motion_active(),
+                'face_detection_enabled': len(face_results) > 0 or motion_detector.is_human_motion_active(),
+                'motion_only_alert': motion_only_result is not None,
+                'distance_settings': {
+                    'max_distance': float(distance_estimator.MAX_DETECTION_DISTANCE),
+                    'warning_distance': float(distance_estimator.WARNING_DISTANCE),
+                    'critical_distance': float(distance_estimator.CRITICAL_DISTANCE)
                 }
-            })
-        else:
-            # No human motion - return empty results
-            return jsonify({
-                'success': True, 
-                'faces': [],
-                'motion_status': {
-                    'human_motion_detected': False,
-                    'motion_active': False,
-                    'face_detection_enabled': False
-                }
-            })
+            }
+        })
+        
+    except Exception as e:
+        print(f"Error in recognize_faces_with_motion: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/log_motion_detection', methods=['POST'])
+def log_motion_detection():
+    """Direct endpoint to log motion detection for testing"""
+    try:
+        # Create a simple black image for testing
+        test_frame = np.zeros((100, 100, 3), dtype=np.uint8)
+        
+        # Save screenshot
+        screenshot_path = save_screenshot(
+            test_frame, 
+            "test_motion"
+        )
+        
+        # Add detection to database
+        from utils.database import add_detection
+        add_detection(
+            "motion_detection", 
+            "Motion Detected, Unauthorized Person",
+            0.8,  # confidence
+            screenshot_path, 
+            2  # alert level
+        )
+        
+        return jsonify({
+            'success': True, 
+            'message': 'Motion detection logged successfully'
+        })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/debug_detections')
+def debug_detections():
+    """Debug endpoint to see all detections in database"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Get ALL detections
+        all_detections = conn.execute('''
+            SELECT * FROM detections ORDER BY timestamp DESC LIMIT 10
+        ''').fetchall()
+        
+        detections_list = []
+        for detection in all_detections:
+            detections_list.append({
+                'id': detection['id'],
+                'detection_type': detection['detection_type'],
+                'person_name': detection['person_name'],
+                'confidence': detection['confidence'],
+                'timestamp': detection['timestamp'],
+                'alert_level': detection['alert_level']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True, 
+            'total_detections': len(detections_list),
+            'detections': detections_list
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+def send_motion_alert_async(motion_info, screenshot_path):
+    """Send alert for motion without face detection"""
+    try:
+        from utils.alert_system import AlertSystem
+        alert_system = AlertSystem()
+        
+        message = f"Motion detected without face recognition at {motion_info['distance_meters']}m - Possible unauthorized person"
+        
+        alert_result = alert_system.send_alert(
+            motion_info['alert_level'], 
+            "motion_detection", 
+            "Motion Detected, Unauthorized Person", 
+            screenshot_path=screenshot_path,
+            custom_message=message
+        )
+        print(f"Motion-only alert sent: {alert_result}")
+    except Exception as e:
+        print(f"Error sending motion-only alert: {e}")
     
 @app.route('/api/motion_detection_status_detailed')
 def motion_detection_status_detailed():
@@ -1221,7 +1349,7 @@ def dashboard_feed():
                         'screenshot_path': detection['screenshot_path'],
                         'alert_level': detection['alert_level']
                     })
-            # Include ALL motion detections
+                # Include ALL motion detections
                 elif detection['detection_type'] == 'motion_detection':
                     recent_detections.append({
                         'id': detection['id'],
@@ -1234,7 +1362,9 @@ def dashboard_feed():
                     })
         
         # Return only the 20 most recent
-        recent_detections = recent_detections[:20]        
+        recent_detections = recent_detections[:20]
+        
+        
         return jsonify({'success': True, 'detections': recent_detections})
         
     except Exception as e:
@@ -1289,37 +1419,61 @@ def dashboard_action():
     
 @app.route('/api/unauthorized_detections')
 def unauthorized_detections():
-    """Get only unauthorized detections for the security alerts table"""
+    """Get all security-related detections"""
     try:
         from utils.database import get_db_connection
         conn = get_db_connection()
         
-        # Query for unauthorized face detections and motion detections
-        detections = conn.execute('''
+        # Get ALL recent detections - no filtering
+        all_detections = conn.execute('''
             SELECT * FROM detections 
-            WHERE (detection_type = 'face_detection' AND (person_name = 'Unknown' OR person_name IS NULL OR person_name = 'Unauthorized'))
-               OR (detection_type = 'motion_detection' AND person_name IN ('human', 'animal'))
             ORDER BY timestamp DESC 
             LIMIT 20
         ''').fetchall()
         
         detections_list = []
-        for detection in detections:
+        for detection in all_detections:
+            detection_dict = dict(detection)
+            
+            # For debugging, print every detection
+            print(f"📋 DATABASE DETECTION: type={detection_dict['detection_type']}, name='{detection_dict['person_name']}'")
+            
+            # Include ALL detections in the results
             detections_list.append({
-                'id': detection['id'],
-                'type': detection['detection_type'],
-                'person_name': 'Unauthorized' if detection['detection_type'] == 'face_detection' else detection['person_name'].title(),
-                'confidence': detection['confidence'],
-                'timestamp': detection['timestamp'],
-                'screenshot_path': detection['screenshot_path'],
-                'alert_level': detection['alert_level']
+                'id': detection_dict['id'],
+                'type': detection_dict['detection_type'],
+                'person_name': detection_dict['person_name'],
+                'confidence': detection_dict['confidence'],
+                'timestamp': detection_dict['timestamp'],
+                'screenshot_path': detection_dict['screenshot_path'],
+                'alert_level': detection_dict['alert_level']
             })
+        
+        print(f"📊 Returning {len(detections_list)} total detections")
         
         conn.close()
         return jsonify({'success': True, 'detections': detections_list})
         
     except Exception as e:
+        print(f"❌ ERROR in unauthorized_detections: {e}")
         return jsonify({'success': False, 'error': str(e)})
+    
+def save_screenshot(frame, filename_prefix):
+    """Save screenshot to screenshots folder"""
+    try:
+        # Create filename with timestamp
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+        filename = f"{filename_prefix}_{timestamp}.jpg"
+        filepath = os.path.join(SCREENSHOTS_FOLDER, filename)
+        
+        # Save the frame as image
+        cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        
+        print(f"✅ Screenshot saved: {filepath}")
+        return filepath
+    except Exception as e:
+        print(f"❌ Error saving screenshot: {e}")
+        return None
 
 @app.route('/api/register_face_multiple', methods=['POST'])
 def register_face_multiple():
@@ -1663,8 +1817,10 @@ def update_distance_settings():
     """Update distance detection settings"""
     try:
         max_distance = float(request.form.get('max_distance', 6.0))
-        warning_distance = float(request.form.get('warning_distance', 3.0))
-        critical_distance = float(request.form.get('critical_distance', 1.5))
+        
+        # Calculate warning and critical distances based on max_distance
+        warning_distance = max_distance * 0.5   # 50% of max distance
+        critical_distance = max_distance * 0.25  # 25% of max distance
         
         distance_estimator = get_distance_estimator()
         distance_estimator.update_settings(
