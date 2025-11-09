@@ -68,7 +68,7 @@ class MotionDetector:
         self.last_human_detection_time = None
         self.human_motion_timeout = 5.0  # seconds - how long to keep face detection active
         
-        # NEW: Track recent detections to avoid duplicates
+        # Track recent detections to avoid duplicates
         self.recent_unauthorized_faces = {}  # {face_encoding_key: timestamp}
         self.duplicate_detection_window = 60  # seconds - ignore duplicates within this window
         

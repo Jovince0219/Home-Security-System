@@ -171,7 +171,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                     print(f"Skipping duplicate unauthorized face (last seen {elapsed:.1f}s ago)")
                     continue  # Skip logging this duplicate
             
-            # NEW DETECTION - Log it
+            # DETECTION - Log it
             try:
                 screenshot_path = save_screenshot(
                     frame, 

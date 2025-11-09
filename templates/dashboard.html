@@ -274,20 +274,26 @@
 
 {% block scripts %}
 <script>
+    // Face recognition state management
     let cameraStream = null;
     let isRecording = false;
     let faceRecognitionActive = true;
     let motionDetectionActive = true;
     let recognitionInterval = null;
-    let detectionIntervalMs = 1000; // Default: 1 second interval
+    let detectionIntervalMs = 1000;
     let fpsCounter = 0;
     let lastFpsUpdate = Date.now();
     let motionDetectionInterval = null;
 
     // Motion-gated face recognition state
-    let motionGatedRecognition = true;  // Enable the new logic
+    let motionGatedRecognition = true;
     let lastMotionDetectionTime = null;
-    let motionTimeout = 5000;  // 5 seconds in milliseconds
+    let motionTimeout = 5000;
+
+    // Face recognition queue system
+    let isProcessingFaceRecognition = false;
+    let faceRecognitionQueue = [];
+    let pendingFaceRecognition = null;
 
     // Camera controls
     document.getElementById('startCamera').addEventListener('click', startCamera);
@@ -320,7 +326,6 @@
 
             // Initialize overlay positioning
             initializeOverlay();
-
             updateCameraStatus('Active');
 
             cameraStream.getTracks().forEach(track => {
@@ -332,7 +337,6 @@
             if (faceRecognitionActive) {
                 startFaceRecognition();
             }
-
 
         } catch (error) {
             console.error('Error accessing camera:', error);
@@ -363,56 +367,112 @@
             clearInterval(recognitionInterval);
             recognitionInterval = null;
         }
+
+        // Clear any pending requests
+        faceRecognitionQueue = [];
+        isProcessingFaceRecognition = false;
+        pendingFaceRecognition = null;
     }
 
     function startFaceRecognition() {
         if (recognitionInterval) return;
 
-        console.log('Starting face recognition with interval:', detectionIntervalMs + 'ms');
+        console.log('Starting face recognition with queued system');
 
         recognitionInterval = setInterval(() => {
-            recognizeFaces();
+            // Instead of calling recognizeFaces directly, add to queue
+            queueFaceRecognition();
         }, detectionIntervalMs);
     }
 
-    function recognizeFaces() {
+    // Queue-based face recognition
+    function queueFaceRecognition() {
         const video = document.getElementById('videoElement');
-        if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+        if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) {
+            return;
+        }
 
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
+        // If we're already processing, just return
+        if (isProcessingFaceRecognition) {
+            return;
+        }
 
-        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+        // Process immediately
+        processFaceRecognition();
+    }
 
-        const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
+    // Process face recognition one at a time
+    async function processFaceRecognition() {
+        if (isProcessingFaceRecognition) {
+            return;
+        }
 
-        const formData = new FormData();
-        formData.append('image_data', imageData);
+        const video = document.getElementById('videoElement');
+        if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) {
+            return;
+        }
 
-        fetch(endpoint, {
-            method: 'POST',
-            body: formData
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    displayFaceBoxes(data.faces);
+        isProcessingFaceRecognition = true;
 
-                    // Display motion-only detection if present
-                    if (data.motion_only_detection) {
-                        displayMotionOnlyDetection(data.motion_only_detection);
-                    }
+        try {
+            await recognizeFaces();
+        } catch (error) {
+            console.error('Face recognition error:', error);
+        } finally {
+            // Use a small delay before allowing next processing to prevent rapid firing
+            setTimeout(() => {
+                isProcessingFaceRecognition = false;
+            }, 100);
+        }
+    }
 
-                    // Update motion status indicator
-                    if (data.motion_status) {
-                        updateMotionStatusIndicator(data.motion_status);
-                    }
-                }
+    function recognizeFaces() {
+        return new Promise((resolve, reject) => {
+            const video = document.getElementById('videoElement');
+            if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) {
+                reject(new Error('Video not ready'));
+                return;
+            }
+
+            const canvas = document.createElement('canvas');
+            canvas.width = video.videoWidth;
+            canvas.height = video.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(video, 0, 0);
+
+            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+            const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
+
+            const formData = new FormData();
+            formData.append('image_data', imageData);
+
+            fetch(endpoint, {
+                method: 'POST',
+                body: formData
             })
-            .catch(error => console.error('Face recognition error:', error));
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        displayFaceBoxes(data.faces);
+
+                        // Display motion-only detection if present
+                        if (data.motion_only_detection) {
+                            displayMotionOnlyDetection(data.motion_only_detection);
+                        }
+
+                        // Update motion status indicator
+                        if (data.motion_status) {
+                            updateMotionStatusIndicator(data.motion_status);
+                        }
+                    }
+                    resolve(data);
+                })
+                .catch(error => {
+                    console.error('Face recognition error:', error);
+                    reject(error);
+                });
+        });
     }
 
     function updateMotionStatusIndicator(status) {
@@ -503,7 +563,7 @@
         }
 
         faces.forEach(face => {
-            // NEW: Only display faces detected within critical distance
+            // Only display faces detected within critical distance
             // (The backend already filters, but double-check here)
             if (!face.within_detection_range && !face.is_authorized) {
                 return;
@@ -1004,7 +1064,7 @@
     function stopMotionDetection() {
         if (motionDetectionInterval) {
             clearInterval(motionDetectionInterval);
-            motionDetectionInterval = null; 
+            motionDetectionInterval = null;
         }
     }
 
@@ -1104,7 +1164,7 @@
             .catch(error => console.error('Motion detection error:', error));
     }
 
-    // NEW: Helper function to update human motion status
+    // Helper function to update human motion status
     function updateHumanMotionStatus(humanDetected) {
         if (humanDetected) {
             console.log('Human motion detected - enabling face detection');
