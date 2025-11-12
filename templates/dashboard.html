@@ -39,26 +39,25 @@
                 </div>
                 <div class="mt-3 text-sm text-gray-600">
                     <i class="fas fa-info-circle mr-1"></i>
-                    Click "Start Camera" to activate your laptop's camera for face recognition
+                    Camera starts automatically when page loads
                 </div>
             </div>
 
             <!-- Enhanced controls with quick actions -->
             <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
-                <button id="toggleRecording"
-                    class="bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm">
-                    <i class="fas fa-record-vinyl mr-1"></i>Record
+                <button id="toggleRecording" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                    <i class="fas fa-stop mr-1"></i>Stop Recording
                 </button>
                 <button id="toggleMotionDetection"
-                    class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm">
-                    <i class="fas fa-running mr-1"></i>Motion Detection
+                    class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                    <i class="fas fa-stop mr-1"></i>Stop Motion
                 </button>
-                <button onclick="toggleFaceRecognition()"
-                    class="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm">
-                    <i class="fas fa-user-check mr-1"></i>Face Recognition
+                <button id="toggleFaceRecognition"
+                    class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                    <i class="fas fa-stop mr-1"></i>Stop Face Recognition
                 </button>
                 <button onclick="playQuickMessage('warning')"
-                    class="bg-orange-600 hover:bg-orange-700= px-3 py-2 rounded text-sm">
+                    class="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm">
                     <i class="fas fa-volume-up mr-1"></i>Warning
                 </button>
             </div>
@@ -77,7 +76,7 @@
             <div class="space-y-3">
                 <div class="flex justify-between items-center">
                     <span>Camera Feed</span>
-                    <span id="cameraStatus" class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">Inactive</span>
+                    <span id="cameraStatus" class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span>Face Recognition</span>
@@ -87,11 +86,12 @@
                 <div class="flex justify-between items-center">
                     <span>Motion Detection</span>
                     <span id="motionDetectionStatus"
-                        class="bg-yellow-100 text-yellow-800 px-2 py-1 rounded text-sm">Inactive</span>
+                        class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
                 </div>
                 <div class="flex justify-between items-center">
                     <span>Recording</span>
-                    <span id="recordingStatus" class="bg-red-100 text-red-800 px-2 py-1 rounded text-sm">Stopped</span>
+                    <span id="recordingStatus"
+                        class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Recording</span>
                 </div>
             </div>
         </div>
@@ -116,6 +116,65 @@
                 </div>
             </div>
         </div>
+    </div>
+</div>
+
+<!-- Face Tracking Status Panel -->
+<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-center mb-4">
+        <h3 class="text-lg font-bold flex items-center">
+            <i class="fas fa-shield-alt mr-2 text-green-600"></i>
+            Face Tracking & Alert Status
+        </h3>
+        <button onclick="refreshFaceTracking()"
+            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
+            <i class="fas fa-sync-alt mr-1"></i>Refresh
+        </button>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <h4 class="font-semibold text-blue-800 mb-2">
+                <i class="fas fa-users mr-1"></i>Tracked Faces
+            </h4>
+            <p id="trackedFacesCount" class="text-3xl font-bold text-blue-600">0</p>
+            <p class="text-xs text-blue-700 mt-1">Currently being monitored</p>
+        </div>
+
+        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+            <h4 class="font-semibold text-green-800 mb-2">
+                <i class="fas fa-phone mr-1"></i>Answered Calls
+            </h4>
+            <p id="answeredCallsCount" class="text-3xl font-bold text-green-600">0</p>
+            <p class="text-xs text-green-700 mt-1">Calls that were answered</p>
+        </div>
+
+        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+            <h4 class="font-semibold text-yellow-800 mb-2">
+                <i class="fas fa-clock mr-1"></i>Alert Cooldown
+            </h4>
+            <p id="cooldownTime" class="text-3xl font-bold text-yellow-600">5:00</p>
+            <p class="text-xs text-yellow-700 mt-1">Minutes between alerts</p>
+        </div>
+
+        <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+            <h4 class="font-semibold text-red-800 mb-2">
+                <i class="fas fa-phone-alt mr-1"></i>Max Calls per Face
+            </h4>
+            <p id="maxCallsPerFace" class="text-3xl font-bold text-red-600">3</p>
+            <p class="text-xs text-red-700 mt-1">Before cooldown period</p>
+        </div>
+    </div>
+
+    <!-- Management Actions -->
+    <div class="mt-6 flex space-x-4">
+        <button onclick="cleanupOldFaces()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded">
+            <i class="fas fa-broom mr-2"></i>Cleanup Old Faces (24h+)
+        </button>
+        <button onclick="resetFaceTracking()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
+            <i class="fas fa-trash-alt mr-2"></i>Reset All Tracking
+        </button>
     </div>
 </div>
 
@@ -157,85 +216,6 @@
     </div>
 </div>
 
-<script>
-    function openCalibrationModal() {
-        document.getElementById('calibrationModal').classList.remove('hidden');
-    }
-
-    function closeCalibrationModal() {
-        document.getElementById('calibrationModal').classList.add('hidden');
-    }
-
-    function captureCalibrationFace() {
-        if (!cameraStream) {
-            alert('Please start the camera first');
-            return;
-        }
-
-        const video = document.getElementById('videoElement');
-        const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(video, 0, 0);
-
-        const imageData = canvas.toDataURL('image/jpeg');
-
-        // Send to server for calibration
-        const knownDistance = document.getElementById('calibrationDistance').value;
-
-        const formData = new FormData();
-        formData.append('image_data', imageData);
-        formData.append('known_distance', knownDistance);
-
-        fetch('/api/estimate_distance', {
-            method: 'POST',
-            body: formData
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success && data.faces.length > 0) {
-                    const face = data.faces[0];
-                    const faceWidthPixels = face.location[1] - face.location[3];
-
-                    // Now calibrate with this info
-                    const calibFormData = new FormData();
-                    calibFormData.append('known_distance', knownDistance);
-                    calibFormData.append('face_width_pixels', faceWidthPixels);
-
-                    return fetch('/api/calibrate_distance', {
-                        method: 'POST',
-                        body: calibFormData
-                    });
-                } else {
-                    throw new Error('No face detected. Please ensure a face is visible.');
-                }
-            })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const resultDiv = document.getElementById('calibrationResult');
-                    resultDiv.classList.remove('hidden');
-                    resultDiv.innerHTML = `
-                <i class="fas fa-check-circle text-green-600 mr-2"></i>
-                <strong>Calibration successful!</strong><br>
-                Focal length: ${data.focal_length.toFixed(2)}
-            `;
-
-                    setTimeout(() => {
-                        closeCalibrationModal();
-                    }, 3000);
-                } else {
-                    alert('Calibration failed: ' + data.error);
-                }
-            })
-            .catch(error => {
-                alert(error.message || 'Calibration error');
-                console.error('Calibration error:', error);
-            });
-    }
-</script>
-
 <!-- Recent Unauthorized Detections -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <h3 class="text-lg font-bold mb-4 flex items-center">
@@ -274,11 +254,11 @@
 
 {% block scripts %}
 <script>
-    // Face recognition state management
+    // Face recognition state management - ALL SET TO TRUE BY DEFAULT
     let cameraStream = null;
-    let isRecording = false;
-    let faceRecognitionActive = true;
-    let motionDetectionActive = true;
+    let isRecording = true; // Recording on by default
+    let faceRecognitionActive = true; // Face recognition on by default
+    let motionDetectionActive = true; // Motion detection on by default
     let recognitionInterval = null;
     let detectionIntervalMs = 1000;
     let fpsCounter = 0;
@@ -301,6 +281,35 @@
     document.getElementById('takeScreenshot').addEventListener('click', takeScreenshot);
     document.getElementById('toggleRecording').addEventListener('click', toggleRecording);
     document.getElementById('toggleMotionDetection').addEventListener('click', toggleMotionDetection);
+    document.getElementById('toggleFaceRecognition').addEventListener('click', toggleFaceRecognition);
+
+    // AUTO-START EVERYTHING WHEN PAGE LOADS
+    document.addEventListener('DOMContentLoaded', function () {
+        console.log('🚀 Auto-starting all security systems...');
+
+        // Start camera immediately
+        startCamera();
+
+        // Start recording automatically
+        startAutoRecording();
+
+        // Start motion detection automatically
+        startMotionDetection();
+
+        // Load other components
+        loadRecentDetections();
+        loadDistanceSettings();
+        refreshFaceTracking();
+
+        // Update UI to show everything is active
+        updateRecordingStatus('Recording');
+        updateMotionDetectionStatus('Active');
+        updateFaceRecognitionStatus('Active');
+
+        // Set up auto-refresh intervals
+        setInterval(loadRecentDetections, 10000);
+        setInterval(refreshFaceTracking, 30000);
+    });
 
     async function startCamera() {
         try {
@@ -324,8 +333,9 @@
                 };
             });
 
-            // Initialize overlay positioning
+            // Initialize overlays and indicators
             initializeOverlay();
+            initializeMotionIndicator();
             updateCameraStatus('Active');
 
             cameraStream.getTracks().forEach(track => {
@@ -337,6 +347,8 @@
             if (faceRecognitionActive) {
                 startFaceRecognition();
             }
+
+            console.log('✅ Camera started successfully');
 
         } catch (error) {
             console.error('Error accessing camera:', error);
@@ -350,6 +362,29 @@
         }
     }
 
+    function startAutoRecording() {
+        if (!cameraStream) {
+            console.log('Waiting for camera to start recording...');
+            setTimeout(startAutoRecording, 1000);
+            return;
+        }
+
+        fetch('/api/start_recording', { method: 'POST' })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    isRecording = true;
+                    updateRecordingStatus('Recording');
+                    console.log('✅ Auto-recording started');
+                } else {
+                    console.error('Failed to start auto-recording:', data.error);
+                }
+            })
+            .catch(error => {
+                console.error('Error starting auto-recording:', error);
+            });
+    }
+
     function stopCamera() {
         if (cameraStream) {
             cameraStream.getTracks().forEach(track => track.stop());
@@ -357,6 +392,7 @@
             cameraStream = null;
 
             stopFaceRecognition();
+            stopMotionDetection();
             document.getElementById('faceOverlay').innerHTML = '';
             updateCameraStatus('Inactive');
         }
@@ -377,10 +413,9 @@
     function startFaceRecognition() {
         if (recognitionInterval) return;
 
-        console.log('Starting face recognition with queued system');
+        console.log('✅ Starting face recognition');
 
         recognitionInterval = setInterval(() => {
-            // Instead of calling recognizeFaces directly, add to queue
             queueFaceRecognition();
         }, detectionIntervalMs);
     }
@@ -392,12 +427,10 @@
             return;
         }
 
-        // If we're already processing, just return
         if (isProcessingFaceRecognition) {
             return;
         }
 
-        // Process immediately
         processFaceRecognition();
     }
 
@@ -418,11 +451,16 @@
             await recognizeFaces();
         } catch (error) {
             console.error('Face recognition error:', error);
+            setTimeout(() => {
+                if (cameraStream) {
+                    console.log('Attempting to restart face recognition...');
+                    isProcessingFaceRecognition = false;
+                }
+            }, 5000);
         } finally {
-            // Use a small delay before allowing next processing to prevent rapid firing
             setTimeout(() => {
                 isProcessingFaceRecognition = false;
-            }, 100);
+            }, 200);
         }
     }
 
@@ -434,110 +472,102 @@
                 return;
             }
 
-            const canvas = document.createElement('canvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
 
-            const imageData = canvas.toDataURL('image/jpeg', 0.8);
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
 
-            const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
+                const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
 
-            const formData = new FormData();
-            formData.append('image_data', imageData);
+                const formData = new FormData();
+                formData.append('image_data', imageData);
 
-            fetch(endpoint, {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayFaceBoxes(data.faces);
-
-                        // Display motion-only detection if present
-                        if (data.motion_only_detection) {
-                            displayMotionOnlyDetection(data.motion_only_detection);
-                        }
-
-                        // Update motion status indicator
-                        if (data.motion_status) {
-                            updateMotionStatusIndicator(data.motion_status);
-                        }
-                    }
-                    resolve(data);
+                fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
                 })
-                .catch(error => {
-                    console.error('Face recognition error:', error);
-                    reject(error);
-                });
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            displayFaceBoxes(data.faces || []);
+                            if (data.motion_status) {
+                                updateMotionStatusIndicator(data.motion_status);
+                            }
+                        } else {
+                            console.error('Face recognition failed:', data.error);
+                        }
+                        resolve(data);
+                    })
+                    .catch(error => {
+                        console.error('Face recognition fetch error:', error);
+                        reject(error);
+                    });
+            } catch (error) {
+                console.error('Error in recognizeFaces:', error);
+                reject(error);
+            }
         });
     }
 
     function updateMotionStatusIndicator(status) {
-        const indicator = document.getElementById('motionStatusIndicator');
-        if (!indicator) return;
+        let indicator = document.getElementById('motionStatusIndicator');
+
+        if (!indicator) {
+            return;
+        }
 
         let statusHTML = '';
 
         if (status.human_motion_detected) {
             statusHTML = `
-            <i class="fas fa-running text-green-600"></i>
-            <span class="text-green-600">Human Motion Active</span>
+            <i class="fas fa-running text-green-400 mr-1"></i>
+            <span class="text-green-400">Motion Detected</span>
         `;
-            lastMotionDetectionTime = Date.now();
         } else {
-            const timeSinceMotion = lastMotionDetectionTime ?
-                ((Date.now() - lastMotionDetectionTime) / 1000).toFixed(1) : 'N/A';
-
             statusHTML = `
-            <i class="fas fa-ban text-red-600"></i>
-            <span class="text-red-600">No Human Motion</span>
-            <span class="text-sm text-gray-600">(Last motion: ${timeSinceMotion}s ago)</span>
+            <i class="fas fa-ban text-red-400 mr-1"></i>
+            <span class="text-red-400">No Motion</span>
         `;
         }
 
-        // Add face detection status
         if (status.face_detection_enabled) {
             statusHTML += `
-            <div class="text-xs text-green-600 mt-1">
+            <div class="text-xs text-green-400 mt-1">
                 <i class="fas fa-user-check mr-1"></i>
                 <strong>Face Detection:</strong> ACTIVE
             </div>
         `;
         } else {
             statusHTML += `
-            <div class="text-xs text-gray-600 mt-1">
+            <div class="text-xs text-gray-300 mt-1">
                 <i class="fas fa-user-slash mr-1"></i>
-                <strong>Face Detection:</strong> Waiting for human motion (authorized faces only)
-            </div>
-        `;
-        }
-
-        // Add motion-only alert status
-        if (status.motion_only_alert) {
-            statusHTML += `
-            <div class="text-xs text-red-600 mt-1">
-                <i class="fas fa-exclamation-triangle mr-1"></i>
-                <strong>Motion-Only Alert:</strong> Triggered - No face detected
-            </div>
-        `;
-        }
-
-        // Add distance settings info
-        if (status.distance_settings) {
-            statusHTML += `
-            <div class="text-xs text-gray-600 mt-1">
-                <strong>Distance Settings:</strong> 
-                Max: ${status.distance_settings.max_distance}m, 
-                Warn: ${status.distance_settings.warning_distance}m, 
-                Critical: ${status.distance_settings.critical_distance}m
+                <strong>Face Detection:</strong> INACTIVE
             </div>
         `;
         }
 
         indicator.innerHTML = statusHTML;
+    }
+
+    function initializeMotionIndicator() {
+        const videoContainer = document.getElementById('videoElement').parentNode;
+        let indicator = document.getElementById('motionStatusIndicator');
+
+        if (!indicator) {
+            indicator = document.createElement('div');
+            indicator.id = 'motionStatusIndicator';
+            indicator.className = 'absolute top-2 left-2 bg-black bg-opacity-70 text-white px-3 py-2 rounded text-sm z-10';
+            videoContainer.appendChild(indicator);
+        }
     }
 
     function displayFaceBoxes(faces) {
@@ -563,24 +593,20 @@
         }
 
         faces.forEach(face => {
-            // Only display faces detected within critical distance
-            // (The backend already filters, but double-check here)
             if (!face.within_detection_range && !face.is_authorized) {
                 return;
             }
 
             const box = document.createElement('div');
 
-            // Enhanced color coding
             let borderColor, bgColor, boxShadow;
 
             if (face.is_authorized) {
-                borderColor = '#22c55e'; // Green for authorized
+                borderColor = '#22c55e';
                 bgColor = 'rgba(34, 197, 94, 0.1)';
                 boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
             } else {
-                // Unauthorized - always critical since they're within critical distance
-                borderColor = '#dc2626'; // Red
+                borderColor = '#dc2626';
                 bgColor = 'rgba(220, 38, 38, 0.15)';
                 boxShadow = '0 0 20px rgba(220, 38, 38, 0.8)';
             }
@@ -646,7 +672,7 @@
             distanceBadge.style.position = 'absolute';
             distanceBadge.style.bottom = '-30px';
             distanceBadge.style.left = '0';
-            distanceBadge.style.backgroundColor = 'rgba(220, 38, 38, 0.9)'; // Red for critical
+            distanceBadge.style.backgroundColor = 'rgba(220, 38, 38, 0.9)';
             distanceBadge.style.color = 'white';
             distanceBadge.style.padding = '4px 10px';
             distanceBadge.style.fontSize = '12px';
@@ -668,31 +694,11 @@
         fpsCounter++;
     }
 
-    // Toggle motion-gated recognition
-    function toggleMotionGatedRecognition() {
-        motionGatedRecognition = !motionGatedRecognition;
-
-        const button = document.getElementById('toggleMotionGatedBtn');
-        if (motionGatedRecognition) {
-            button.innerHTML = '<i class="fas fa-shield-alt mr-1"></i>Motion-Gated: ON';
-            button.className = 'bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm';
-        } else {
-            button.innerHTML = '<i class="fas fa-shield-alt mr-1"></i>Motion-Gated: OFF';
-            button.className = 'bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm';
-        }
-
-        console.log('Motion-gated recognition:', motionGatedRecognition ? 'ENABLED' : 'DISABLED');
-    }
-
-
-    // Add distance settings panel toggle
     function toggleDistanceSettings() {
         const panel = document.getElementById('distanceSettingsPanel');
         panel.classList.toggle('hidden');
     }
 
-    // Save distance settings
-    // Save distance settings - UPDATED VERSION
     function saveDistanceSettings() {
         const maxDistance = document.getElementById('maxDistance').value;
 
@@ -717,22 +723,6 @@
             });
     }
 
-
-
-    // Load distance settings on page load - UPDATED VERSION
-    function loadDistanceSettings() {
-        fetch('/api/get_distance_settings')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    document.getElementById('maxDistance').value = data.settings.max_detection_distance;
-                    // Removed warning and critical distance loading
-                }
-            })
-            .catch(error => console.error('Error loading distance settings:', error));
-    }
-
-    // Load distance settings on page load
     function loadDistanceSettings() {
         fetch('/api/get_distance_settings')
             .then(response => response.json())
@@ -743,29 +733,19 @@
             })
             .catch(error => console.error('Error loading distance settings:', error));
     }
-
-    // Initialize on page load
-    document.addEventListener('DOMContentLoaded', function () {
-        loadRecentDetections();
-        loadDistanceSettings();
-    });
 
     function initializeOverlay() {
         const video = document.getElementById('videoElement');
         const overlay = document.getElementById('faceOverlay');
 
-        // Make sure overlay matches video dimensions exactly
         const resizeOverlay = () => {
             const videoRect = video.getBoundingClientRect();
             overlay.style.width = videoRect.width + 'px';
             overlay.style.height = videoRect.height + 'px';
         };
 
-        // Resize on video metadata load and window resize
         video.addEventListener('loadedmetadata', resizeOverlay);
         window.addEventListener('resize', resizeOverlay);
-
-        // Initial resize
         resizeOverlay();
     }
 
@@ -809,7 +789,20 @@
 
         const button = document.getElementById('toggleRecording');
 
-        if (!isRecording) {
+        if (isRecording) {
+            fetch('/api/stop_recording', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        isRecording = false;
+                        button.innerHTML = '<i class="fas fa-record-vinyl mr-1"></i>Start Recording';
+                        button.className = 'bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm';
+                        updateRecordingStatus('Stopped');
+                    } else {
+                        alert('Failed to stop recording: ' + (data.error || 'Unknown error'));
+                    }
+                });
+        } else {
             fetch('/api/start_recording', { method: 'POST' })
                 .then(response => response.json())
                 .then(data => {
@@ -822,50 +815,49 @@
                         alert('Failed to start recording: ' + (data.error || 'Unknown error'));
                     }
                 });
-        } else {
-            fetch('/api/stop_recording', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        isRecording = false;
-                        button.innerHTML = '<i class="fas fa-record-vinyl mr-1"></i>Record';
-                        button.className = 'bg-purple-600 hover:bg-purple-700 text-white px-3 py-2 rounded text-sm';
-                        updateRecordingStatus('Stopped');
-                    } else {
-                        alert('Failed to stop recording: ' + (data.error || 'Unknown error'));
-                    }
-                });
         }
     }
 
     function toggleMotionDetection() {
-        const action = motionDetectionActive ? 'stop_motion_detection' : 'start_motion_detection';
+        if (!cameraStream) {
+            alert('Please start camera first');
+            return;
+        }
 
-        fetch('/api/dashboard_action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `action=${action}`
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    motionDetectionActive = !motionDetectionActive;
-                    updateMotionDetectionStatus(motionDetectionActive ? 'Active' : 'Inactive');
-                }
-            });
+        const button = document.getElementById('toggleMotionDetection');
+
+        if (motionDetectionActive) {
+            stopMotionDetection();
+            motionDetectionActive = false;
+            button.innerHTML = '<i class="fas fa-running mr-1"></i>Start Motion';
+            button.className = 'bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-2 rounded text-sm';
+            updateMotionDetectionStatus('Inactive');
+        } else {
+            startMotionDetection();
+            motionDetectionActive = true;
+            button.innerHTML = '<i class="fas fa-stop mr-1"></i>Stop Motion';
+            button.className = 'bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm';
+            updateMotionDetectionStatus('Active');
+        }
     }
 
     function toggleFaceRecognition() {
-        faceRecognitionActive = !faceRecognitionActive;
+        const button = document.getElementById('toggleFaceRecognition');
 
-        if (faceRecognitionActive && cameraStream) {
-            startFaceRecognition();
-        } else {
+        if (faceRecognitionActive) {
             stopFaceRecognition();
+            faceRecognitionActive = false;
+            button.innerHTML = '<i class="fas fa-user-check mr-1"></i>Start Face Recognition';
+            button.className = 'bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-2 rounded text-sm';
+            updateFaceRecognitionStatus('Inactive');
             document.getElementById('faceOverlay').innerHTML = '';
+        } else {
+            startFaceRecognition();
+            faceRecognitionActive = true;
+            button.innerHTML = '<i class="fas fa-stop mr-1"></i>Stop Face Recognition';
+            button.className = 'bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm';
+            updateFaceRecognitionStatus('Active');
         }
-
-        updateFaceRecognitionStatus(faceRecognitionActive ? 'Active' : 'Inactive');
     }
 
     function playQuickMessage(messageType) {
@@ -918,7 +910,6 @@
     }
 
     function loadRecentDetections() {
-        // Use the unauthorized_detections endpoint instead of dashboard_feed
         fetch('/api/unauthorized_detections')
             .then(response => response.json())
             .then(data => {
@@ -949,9 +940,39 @@
                     return;
                 }
 
-                tbody.innerHTML = '';
+                // ✅ DEDUPLICATION: Group detections by person and type
+                const uniqueDetections = new Map();
 
                 data.detections.forEach(detection => {
+                    // Create unique key: person_name + detection_type
+                    const personName = (detection.person_name || 'Unknown').trim();
+                    const detectionType = detection.type || 'unknown';
+                    const key = `${personName}_${detectionType}`;
+
+                    // Keep only most recent detection for each unique person+type
+                    if (!uniqueDetections.has(key)) {
+                        uniqueDetections.set(key, detection);
+                    } else {
+                        const existing = uniqueDetections.get(key);
+                        const existingTime = new Date(existing.timestamp);
+                        const newTime = new Date(detection.timestamp);
+
+                        // Replace if this detection is more recent
+                        if (newTime > existingTime) {
+                            uniqueDetections.set(key, detection);
+                        }
+                    }
+                });
+
+                // Convert to array and sort by timestamp (most recent first)
+                const filteredDetections = Array.from(uniqueDetections.values())
+                    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+                    .slice(0, 20); // Show max 20 unique detections
+
+                tbody.innerHTML = '';
+
+                // ✅ DISPLAY: Show unique detections only
+                filteredDetections.forEach(detection => {
                     const row = tbody.insertRow();
                     const timestamp = new Date(detection.timestamp).toLocaleString();
                     const isFaceDetection = detection.type === 'face_detection';
@@ -959,11 +980,15 @@
                         'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800';
                     const displayName = detection.person_name || 'Unknown';
 
-                    // Better confidence display handling
                     let confidenceDisplay = 'N/A';
                     if (detection.confidence !== null && detection.confidence !== undefined) {
                         confidenceDisplay = (detection.confidence * 100).toFixed(1) + '%';
                     }
+
+                    // ✅ HIGHLIGHT: Show if face detection (triggers Twilio)
+                    const callIndicator = isFaceDetection ?
+                        '<span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">📞 Call Triggered</span>' :
+                        '<span class="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">No Call</span>';
 
                     row.innerHTML = `
                 <td class="px-4 py-2 text-sm">${timestamp}</td>
@@ -971,6 +996,7 @@
                     <span class="px-2 py-1 rounded text-sm ${typeClass}">
                         ${detection.type.replace('_', ' ')}
                     </span>
+                    ${callIndicator}
                 </td>
                 <td class="px-4 py-2 font-semibold ${isFaceDetection ? 'text-red-600' : 'text-orange-600'}">
                     ${displayName}
@@ -993,6 +1019,10 @@
                 </td>
             `;
                 });
+
+                // ✅ STATS UPDATE: Show unique count
+                const uniqueCount = filteredDetections.length;
+                console.log(`📊 Showing ${uniqueCount} unique detections (deduplicated from ${data.detections.length} total)`);
             })
             .catch(error => {
                 console.error('Error loading alerts:', error);
@@ -1080,6 +1110,7 @@
 
     document.addEventListener('DOMContentLoaded', function () {
         loadRecentDetections();
+        setInterval(loadRecentDetections, 10000); // Refresh every 10 seconds
     });
 
     setInterval(loadRecentDetections, 10000);
@@ -1281,6 +1312,155 @@
             });
     }
 
+    // Face tracking management functions
 
+    function refreshFaceTracking() {
+        fetch('/api/face_tracking_stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const stats = data.stats;
+
+                    // ✅ SAFE ELEMENT UPDATES:
+                    const trackedFacesElement = document.getElementById('trackedFacesCount');
+                    const answeredCallsElement = document.getElementById('answeredCallsCount');
+                    const cooldownElement = document.getElementById('cooldownTime');
+                    const maxCallsElement = document.getElementById('maxCallsPerFace');
+
+                    if (trackedFacesElement) trackedFacesElement.textContent = stats.total_tracked_faces || 0;
+                    if (answeredCallsElement) answeredCallsElement.textContent = stats.total_answered_faces || 0;
+                    if (cooldownElement) cooldownElement.textContent = formatTime(stats.alert_cooldown_seconds);
+                    if (maxCallsElement) maxCallsElement.textContent = stats.max_alerts_per_face;
+
+                    displayTrackedFaces(stats.tracked_faces || []);
+                }
+            })
+            .catch(error => console.error('Error loading face tracking stats:', error));
+    }
+
+    function displayTrackedFaces(faces) {
+        const tbody = document.getElementById('trackedFacesTable');
+
+        if (!tbody) {
+            console.error('Tracked faces table not found');
+            return;
+        }
+
+        if (!faces || faces.length === 0) {
+            tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="px-4 py-4 text-center text-gray-500">
+                    <i class="fas fa-check-circle text-green-400 mr-2"></i>
+                    No faces currently tracked - all clear!
+                </td>
+            </tr>
+        `;
+            return;
+        }
+
+        tbody.innerHTML = '';
+
+        faces.forEach(face => {
+            const row = tbody.insertRow();
+
+            let statusHTML, statusClass, callStatus;
+
+            if (face.answered) {
+                statusHTML = '<i class="fas fa-phone-slash mr-1"></i>Answered';
+                statusClass = 'bg-green-100 text-green-800';
+                callStatus = 'No more calls';
+            } else if (face.alert_count >= 3) {
+                statusHTML = '<i class="fas fa-ban mr-1"></i>Max Reached';
+                statusClass = 'bg-red-100 text-red-800';
+                callStatus = 'No more calls';
+            } else if (face.time_until_reset > 0) {
+                statusHTML = '<i class="fas fa-clock mr-1"></i>Cooldown';
+                statusClass = 'bg-yellow-100 text-yellow-800';
+                callStatus = `${face.time_until_reset}s until next call`;
+            } else {
+                statusHTML = '<i class="fas fa-phone mr-1"></i>Can Call';
+                statusClass = 'bg-blue-100 text-blue-800';
+                callStatus = `Next call ready (${face.alert_count || 0}/3)`;
+            }
+
+            row.innerHTML = `
+            <td class="px-4 py-2 font-mono text-sm">${face.face_id}</td>
+            <td class="px-4 py-2">
+                <span class="px-2 py-1 bg-gray-100 rounded">
+                    ${face.alert_count || 0} / 3
+                </span>
+            </td>
+            <td class="px-4 py-2 text-sm">${face.last_alert_seconds_ago ? formatTime(face.last_alert_seconds_ago) + ' ago' : 'Never'}</td>
+            <td class="px-4 py-2 text-sm">${callStatus}</td>
+            <td class="px-4 py-2">
+                <span class="px-2 py-1 rounded text-xs ${statusClass}">
+                    ${statusHTML}
+                </span>
+            </td>
+            <td class="px-4 py-2">
+                ${face.answered ?
+                    '<button onclick="resetFaceCall(\'' + face.face_id + '\')" class="text-xs bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded">Reset</button>' :
+                    ''
+                }
+            </td>
+        `;
+        });
+    }
+
+    function formatTime(seconds) {
+        if (seconds < 60) {
+            return `${seconds}s`;
+        } else if (seconds < 3600) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${minutes}:${secs.toString().padStart(2, '0')}`;
+        } else {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            return `${hours}h ${minutes}m`;
+        }
+    }
+
+    function cleanupOldFaces() {
+        if (confirm('Remove face tracking for faces older than 24 hours?')) {
+            fetch('/api/cleanup_face_tracking', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: 'hours=24'
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert(`✅ Cleaned up ${data.cleaned_count} old faces`);
+                        refreshFaceTracking();
+                    } else {
+                        alert('❌ Cleanup failed: ' + data.error);
+                    }
+                });
+        }
+    }
+
+    function resetFaceTracking() {
+        if (confirm('⚠️ Reset ALL face tracking? This will allow all faces to trigger alerts again.')) {
+            fetch('/api/reset_face_tracking', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('✅ ' + data.message);
+                        refreshFaceTracking();
+                    } else {
+                        alert('❌ Reset failed: ' + data.error);
+                    }
+                });
+        }
+    }
+
+    // Auto-refresh every 30 seconds
+    setInterval(refreshFaceTracking, 30000);
+
+    // Initial load
+    document.addEventListener('DOMContentLoaded', function () {
+        refreshFaceTracking();
+    });
 </script>
 {% endblock %}

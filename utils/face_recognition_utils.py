@@ -6,6 +6,9 @@ from utils.database import get_all_faces, add_detection, get_face_by_id, delete_
 import datetime
 from utils.alert_system import AlertSystem
 from utils.distance_estimation import get_distance_estimator
+import uuid
+from utils.recording_manager import recording_manager
+
 
 # Global variables for face recognition
 known_face_encodings = []
@@ -159,19 +162,24 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         
         # STEP 4: Handle unauthorized faces (check for duplicates)
         if not is_authorized and distance_analysis['trigger_alert']:
-            # Create a simple hash for the face encoding (using first few values)
-            encoding_key = hash(tuple(face_encoding[:10]))
+            # ✅ UPDATED: Check if we should trigger alert (with face tracking)
+            event_id = trigger_security_alert(
+                "Unauthorized Face", 
+                "Unauthorized Person", 
+                confidence, 
+                frame,
+                face_encoding  # Pass the face encoding for tracking
+            )
             
-            # Check if this face was recently logged
-            if encoding_key in motion_detector.recent_unauthorized_faces:
-                last_detection = motion_detector.recent_unauthorized_faces[encoding_key]
-                elapsed = (datetime.datetime.now() - last_detection).total_seconds()
-                
-                if elapsed < motion_detector.duplicate_detection_window:
-                    print(f"Skipping duplicate unauthorized face (last seen {elapsed:.1f}s ago)")
-                    continue  # Skip logging this duplicate
+            if event_id:
+                print(f"🚨 Alert triggered for unauthorized face: {event_id}")
+            else:
+                print(f"🔄 Alert skipped - face already alerted recently")
             
-            # DETECTION - Log it
+            # Update detection time for ongoing recording
+            recording_manager.update_detection_time()
+            
+            # DETECTION - Log it (even if alert was skipped)
             try:
                 screenshot_path = save_screenshot(
                     frame, 
@@ -189,23 +197,8 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                     alert_level
                 )
                 
-                # Mark this face as recently detected
-                motion_detector.recent_unauthorized_faces[encoding_key] = datetime.datetime.now()
-                
-                # Send alert in background
-                import threading
-                alert_thread = threading.Thread(
-                    target=send_alert_async,
-                    args=(alert_level, "face_detection", str(name), screenshot_path, distance_analysis)
-                )
-                alert_thread.daemon = True
-                alert_thread.start()
-                
             except Exception as e:
                 print(f"Error logging detection: {e}")
-    
-    # Cleanup old detections periodically
-    motion_detector.cleanup_old_detections()
     
     return results
 
@@ -744,3 +737,59 @@ def create_privacy_thumbnail(image_path, blur_faces=True):
     except Exception as e:
         print(f"Error creating privacy thumbnail: {e}")
         return None
+    
+def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=0.0, frame=None, face_encoding=None):
+    """Trigger security alert with Twilio calls and recording - WITH FACE TRACKING"""
+    from utils.twilio_alert_system import twilio_alert_system
+    
+    # ✅ Check if we should trigger alert for this face
+    if face_encoding is not None:
+        if not twilio_alert_system.should_trigger_alert_for_face(face_encoding):
+            print(f"🔄 Skipping alert for face - already alerted recently or answered")
+            return None
+    
+    # Generate event ID
+    event_id = str(uuid.uuid4())
+    
+    # Start recording. This function will return the *final .mp4 path*
+    # (e.g., "static/recordings/recording_123.mp4")
+    # while it starts writing the .avi in the background.
+    final_mp4_path = recording_manager.start_recording_for_event(event_id, trigger_type) 
+        
+    if final_mp4_path is None:
+        print("❌ Failed to start recording, aborting alert.")
+        return None
+    
+    # ❌ REMOVED THIS REDUNDANT LINE:
+    # recording_path = recording_manager.start_recording_for_event(event_id, trigger_type)
+    
+    # Save screenshot
+    screenshot_path = None
+    if frame is not None:
+        screenshot_path = save_screenshot(frame, f"unauthorized_{event_id}")
+    
+    # ✅ UPDATED: Trigger escalation WITH face encoding
+    alert_result = twilio_alert_system.trigger_alert_escalation(
+        event_id, 
+        trigger_type, 
+        final_mp4_path,  # <-- Use the .mp4 path here
+        face_encoding
+    )
+    
+    # Log the result
+    if alert_result.get('status') == 'escalation_started':
+        print(f"🚨 Alert escalation started for event: {event_id}")
+    elif alert_result.get('status') == 'error':
+        print(f"❌ Alert failed: {alert_result.get('error')}")
+    
+    # Log to database
+    from utils.database import add_detection
+    add_detection(
+        trigger_type.lower().replace(' ', '_'),
+        person_name,
+        confidence,
+        screenshot_path,
+        alert_level=3
+    )
+    
+    return event_id

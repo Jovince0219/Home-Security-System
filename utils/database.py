@@ -98,6 +98,49 @@ def init_db():
         )
     ''')
     
+    # === INSERT THE NEW TWILIO TABLES HERE ===
+    
+    # Twilio settings table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS twilio_settings (
+            id INTEGER PRIMARY KEY,
+            account_sid TEXT,
+            auth_token TEXT,
+            twilio_number TEXT,
+            primary_number TEXT,
+            backup_number TEXT,
+            test_mode BOOLEAN DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Alert events table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS alert_events (
+            event_id TEXT PRIMARY KEY,
+            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+            trigger_type TEXT,
+            recording_filepath TEXT,
+            review_status TEXT DEFAULT 'pending',
+            call_status TEXT DEFAULT 'pending',
+            completed_at DATETIME
+        )
+    ''')
+    
+    # Call attempts table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS call_attempts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT,
+            attempt_number INTEGER,
+            timestamp DATETIME,
+            phone_number TEXT,
+            call_sid TEXT,
+            status TEXT,
+            FOREIGN KEY (event_id) REFERENCES alert_events (event_id)
+        )
+    ''')
+    
     conn.commit()
     conn.close()
 

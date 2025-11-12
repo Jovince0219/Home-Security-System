@@ -1,417 +1,515 @@
 {% extends "base.html" %}
 
-{% block title %}Alerts & Notifications - Security System{% endblock %}
+{% block title %}Twilio Alerts - Security System{% endblock %}
 
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- Alert Configuration -->
     <div class="bg-white rounded-lg shadow-lg p-6">
         <h2 class="text-2xl font-bold mb-6 flex items-center">
-            <i class="fas fa-cog mr-3 text-blue-600"></i>
-            Alert Configuration
+            <i class="fas fa-phone-alt mr-3 text-blue-600"></i>
+            Twilio Voice Call Configuration
         </h2>
-        
-        <form id="alertSettingsForm" class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Owner Email</label>
-                <input type="email" id="ownerEmail" name="owner_email" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="owner@example.com">
+
+        <form id="twilioSettingsForm" class="space-y-4">
+            <div class="bg-blue-50 p-4 rounded-lg mb-4">
+                <h3 class="font-semibold text-blue-800 mb-2">
+                    <i class="fas fa-info-circle mr-2"></i>Twilio Account Setup
+                </h3>
+                <p class="text-sm text-blue-700">
+                    You need a Twilio account with a phone number to make voice calls.
+                    Get your credentials from the Twilio console.
+                </p>
             </div>
-            
+
             <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Police/Emergency Email</label>
-                <input type="email" id="policeEmail" name="police_email" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="police@example.com">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Twilio Account SID</label>
+                <input type="text" id="accountSid" name="account_sid"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxx">
             </div>
-            
-            <div class="grid grid-cols-2 gap-4">
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Twilio Auth Token</label>
+                <input type="password" id="authToken" name="auth_token"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="Your auth token">
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">Twilio Phone Number</label>
+                <input type="text" id="twilioNumber" name="twilio_number"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="+1234567890">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">SMTP Server</label>
-                    <input type="text" id="smtpServer" name="smtp_server" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="smtp.gmail.com">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Primary Contact Number</label>
+                    <input type="text" id="primaryNumber" name="primary_number"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="+1234567890">
                 </div>
                 <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">SMTP Port</label>
-                    <input type="number" id="smtpPort" name="smtp_port" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="587">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Backup Contact Number</label>
+                    <input type="text" id="backupNumber" name="backup_number"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="+1234567890">
                 </div>
             </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Email Username</label>
-                <input type="email" id="emailUser" name="email_user" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="your-email@gmail.com">
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Email Password/App Password</label>
-                <input type="password" id="emailPassword" name="email_password" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="your-app-password">
-            </div>
-            
+
             <div class="flex items-center space-x-4">
                 <label class="flex items-center">
-                    <input type="checkbox" id="enableEmail" name="enable_email" class="mr-2">
-                    <span class="text-sm">Enable Email Notifications</span>
-                </label>
-                
-                <label class="flex items-center">
-                    <input type="checkbox" id="enablePoliceAlerts" name="enable_police_alerts" class="mr-2">
-                    <span class="text-sm">Enable Police Alerts</span>
+                    <input type="checkbox" id="testMode" name="test_mode" class="mr-2">
+                    <span class="text-sm">Enable Test Mode (no real calls)</span>
                 </label>
             </div>
-            
+
             <div class="flex space-x-4">
                 <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
                     <i class="fas fa-save mr-2"></i>Save Settings
                 </button>
-                <button type="button" id="testEmail" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
-                    <i class="fas fa-envelope mr-2"></i>Test Email
+                <button type="button" id="testCall"
+                    class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-phone-alt mr-2"></i>Test Call
                 </button>
             </div>
         </form>
     </div>
-    
-    <!-- Manual Alert Testing -->
+
     <div class="bg-white rounded-lg shadow-lg p-6">
         <h2 class="text-2xl font-bold mb-6 flex items-center">
-            <i class="fas fa-bell mr-3 text-red-600"></i>
-            Manual Alert Testing
+            <i class="fas fa-history mr-3 text-gray-600"></i>
+            Alert Events & Status
         </h2>
-        
+
         <div class="space-y-4">
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Alert Level</label>
-                <select id="alertLevel" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="1">Level 1 - Owner Notification Only</option>
-                    <option value="2">Level 2 - Owner + Police Notification</option>
-                    <option value="3">Level 3 - Full Emergency Protocol</option>
-                </select>
+            <div class="grid grid-cols-2 gap-4 mb-4">
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-gray-700">Recording Status</h3>
+                    <p id="recordingStatus" class="text-2xl font-bold text-green-600">Inactive</p>
+                </div>
+                <div class="bg-gray-50 p-4 rounded-lg">
+                    <h3 class="font-semibold text-gray-700">Storage</h3>
+                    <p id="storageStatus" class="text-sm text-gray-600">Loading...</p>
+                </div>
             </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Detection Type</label>
-                <select id="detectionType" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="face_detection">Face Detection</option>
-                    <option value="motion_detection">Motion Detection</option>
-                    <option value="manual_trigger">Manual Trigger</option>
-                    <option value="system_test">System Test</option>
-                </select>
-            </div>
-            
-            <div>
-                <label class="block text-sm font-medium text-gray-700 mb-2">Custom Message</label>
-                <textarea id="customMessage" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" rows="3" placeholder="Enter custom alert message (optional)"></textarea>
-            </div>
-            
+
             <div class="flex space-x-4">
-                <button id="sendAlert" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
-                    <i class="fas fa-exclamation-triangle mr-2"></i>Send Alert
+                <button id="refreshEvents" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-sync-alt mr-2"></i>Refresh Events
                 </button>
-                <button id="triggerEmergency" class="bg-red-800 hover:bg-red-900 text-white px-4 py-2 rounded">
-                    <i class="fas fa-fire mr-2"></i>Emergency Protocol
+                <button id="cleanupRecordings" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-trash-alt mr-2"></i>Cleanup Old Recordings
                 </button>
             </div>
-        </div>
-        
-        <div id="alertResult" class="mt-4 p-3 rounded-lg hidden">
-            <!-- Alert results will be displayed here -->
+
+            <div id="eventsList" class="max-h-96 overflow-y-auto">
+                </div>
         </div>
     </div>
 </div>
 
-<!-- Alert History -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <h2 class="text-2xl font-bold mb-6 flex items-center">
-        <i class="fas fa-history mr-3 text-gray-600"></i>
-        Alert History
+        <i class="fas fa-project-diagram mr-3 text-purple-600"></i>
+        Voice Call Escalation Logic
     </h2>
-    
-    <div class="mb-4">
-        <button id="refreshHistory" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
-            <i class="fas fa-sync-alt mr-2"></i>Refresh History
-        </button>
-    </div>
-    
-    <div class="overflow-x-auto">
-        <table class="min-w-full table-auto">
-            <thead>
-                <tr class="bg-gray-50">
-                    <th class="px-4 py-2 text-left">Timestamp</th>
-                    <th class="px-4 py-2 text-left">Alert Type</th>
-                    <th class="px-4 py-2 text-left">Message</th>
-                    <th class="px-4 py-2 text-left">Recipient</th>
-                </tr>
-            </thead>
-            <tbody id="alertHistoryTable">
-                <!-- Alert history will be loaded here -->
-            </tbody>
-        </table>
-    </div>
-</div>
 
-<!-- Alert Level Information -->
-<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
-    <h2 class="text-2xl font-bold mb-6 flex items-center">
-        <i class="fas fa-info-circle mr-3 text-blue-600"></i>
-        Alert Level Information
-    </h2>
-    
-    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h3 class="text-lg font-semibold text-green-800 mb-2">
-                <i class="fas fa-info-circle mr-2"></i>Level 1 - Information
-            </h3>
-            <ul class="text-sm text-green-700 space-y-1">
-                <li>• Owner email notification</li>
-                <li>• Authorized person detected</li>
-                <li>• Normal system events</li>
-                <li>• Low priority alerts</li>
-            </ul>
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-center">
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-2">1</div>
+            <h3 class="font-semibold text-blue-800">Attempt 1</h3>
+            <p class="text-sm text-blue-700">Call Primary Number</p>
         </div>
-        
-        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-            <h3 class="text-lg font-semibold text-yellow-800 mb-2">
-                <i class="fas fa-exclamation-triangle mr-2"></i>Level 2 - Warning
-            </h3>
-            <ul class="text-sm text-yellow-700 space-y-1">
-                <li>• Owner email notification</li>
-                <li>• Police/Emergency notification</li>
-                <li>• Unauthorized person detected</li>
-                <li>• Suspicious activity</li>
-            </ul>
+
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-2">2</div>
+            <h3 class="font-semibold text-blue-800">Attempt 2</h3>
+            <p class="text-sm text-blue-700">Wait 1 minute, retry Primary</p>
         </div>
-        
+
+        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+            <div class="w-8 h-8 bg-blue-500 text-white rounded-full flex items-center justify-center mx-auto mb-2">3</div>
+            <h3 class="font-semibold text-blue-800">Attempt 3</h3>
+            <p class="text-sm text-blue-700">Wait 1 minute, final retry</p>
+        </div>
+
         <div class="bg-red-50 p-4 rounded-lg border border-red-200">
-            <h3 class="text-lg font-semibold text-red-800 mb-2">
-                <i class="fas fa-fire mr-2"></i>Level 3 - Emergency
-            </h3>
-            <ul class="text-sm text-red-700 space-y-1">
-                <li>• All Level 2 actions</li>
-                <li>• Emergency protocol activation</li>
-                <li>• System lockdown</li>
-                <li>• Immediate response required</li>
-            </ul>
+            <div class="w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center mx-auto mb-2">4</div>
+            <h3 class="font-semibold text-red-800">Escalation</h3>
+            <p class="text-sm text-red-700">Call Backup Number</p>
         </div>
+    </div>
+
+    <div class="mt-6 bg-gray-50 p-4 rounded-lg">
+        <h3 class="font-semibold text-gray-800 mb-2">Alert Message</h3>
+        <p class="text-sm text-gray-700 italic">
+            "There is an unauthorized person detected. Please check the system."
+        </p>
     </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', function() {
-    // Initialize event listeners
-    document.getElementById('alertSettingsForm').addEventListener('submit', saveAlertSettings);
-    document.getElementById('testEmail').addEventListener('click', testEmailConfig);
-    document.getElementById('sendAlert').addEventListener('click', sendManualAlert);
-    document.getElementById('triggerEmergency').addEventListener('click', triggerEmergencyProtocol);
-    document.getElementById('refreshHistory').addEventListener('click', loadAlertHistory);
-    
-    // Load initial data
-    loadAlertSettings();
-    loadAlertHistory();
-});
+    document.addEventListener('DOMContentLoaded', function () {
+        // Initialize
+        loadTwilioSettings();
+        loadAlertEvents();
+        loadRecordingStats();
 
-function saveAlertSettings(event) {
-    event.preventDefault();
-    
-    const formData = new FormData(event.target);
-    formData.append('enable_email', document.getElementById('enableEmail').checked);
-    formData.append('enable_police_alerts', document.getElementById('enablePoliceAlerts').checked);
-    
-    fetch('/api/update_alert_settings', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showResult('Settings saved successfully!', 'success');
-        } else {
-            showResult('Error: ' + data.error, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showResult('An error occurred while saving settings', 'error');
+        // Event listeners
+        document.getElementById('twilioSettingsForm').addEventListener('submit', saveTwilioSettings);
+        document.getElementById('testCall').addEventListener('click', testTwilioCall);
+        document.getElementById('refreshEvents').addEventListener('click', loadAlertEvents);
+        document.getElementById('cleanupRecordings').addEventListener('click', cleanupRecordings);
+
+        // Auto-refresh events every 30 seconds
+        setInterval(loadAlertEvents, 30000);
+        setInterval(loadRecordingStats, 10000);
     });
-}
 
-function testEmailConfig() {
-    const ownerEmail = document.getElementById('ownerEmail').value;
-    if (!ownerEmail) {
-        alert('Please enter an owner email address first');
-        return;
+    function loadTwilioSettings() {
+        fetch('/api/twilio_settings')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const settings = data.settings;
+                    document.getElementById('accountSid').value = settings.account_sid || '';
+                    document.getElementById('authToken').value = settings.auth_token || '';
+                    document.getElementById('twilioNumber').value = settings.twilio_number || '';
+                    document.getElementById('primaryNumber').value = settings.primary_number || '';
+                    document.getElementById('backupNumber').value = settings.backup_number || '';
+                    document.getElementById('testMode').checked = settings.test_mode;
+                }
+            });
     }
-    
-    const formData = new FormData();
-    formData.append('recipient', ownerEmail);
-    
-    fetch('/api/test_email', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showResult('Test email result: ' + data.result, data.result.includes('successfully') ? 'success' : 'warning');
-        } else {
-            showResult('Error: ' + data.error, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showResult('An error occurred while testing email', 'error');
-    });
-}
 
-function sendManualAlert() {
-    const alertLevel = document.getElementById('alertLevel').value;
-    const detectionType = document.getElementById('detectionType').value;
-    const customMessage = document.getElementById('customMessage').value;
-    
-    const formData = new FormData();
-    formData.append('alert_level', alertLevel);
-    formData.append('detection_type', detectionType);
-    if (customMessage) {
-        formData.append('message', customMessage);
-    }
-    
-    fetch('/api/send_alert', {
-        method: 'POST',
-        body: formData
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            displayAlertResult(data.result);
-            loadAlertHistory(); // Refresh history
-        } else {
-            showResult('Error: ' + data.error, 'error');
-        }
-    })
-    .catch(error => {
-        console.error('Error:', error);
-        showResult('An error occurred while sending alert', 'error');
-    });
-}
+    function saveTwilioSettings(event) {
+        event.preventDefault();
 
-function triggerEmergencyProtocol() {
-    if (confirm('This will trigger the full emergency protocol. Are you sure?')) {
-        const reason = prompt('Enter reason for emergency protocol:') || 'Manual emergency trigger';
-        
-        const formData = new FormData();
-        formData.append('reason', reason);
-        
-        fetch('/api/trigger_emergency', {
+        const formData = new FormData(event.target);
+        formData.append('test_mode', document.getElementById('testMode').checked);
+
+        fetch('/api/twilio_settings', {
             method: 'POST',
             body: formData
         })
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                showResult('Emergency protocol result: ' + data.result, 'warning');
-                loadAlertHistory(); // Refresh history
-            } else {
-                showResult('Error: ' + data.error, 'error');
-            }
-        })
-        .catch(error => {
-            console.error('Error:', error);
-            showResult('An error occurred while triggering emergency protocol', 'error');
-        });
-    }
-}
-
-function displayAlertResult(result) {
-    const resultDiv = document.getElementById('alertResult');
-    resultDiv.className = 'mt-4 p-3 rounded-lg bg-blue-50 border border-blue-200';
-    
-    let html = `<h4 class="font-semibold text-blue-800 mb-2">Alert Level ${result.level} Triggered</h4>`;
-    html += '<ul class="text-sm text-blue-700 space-y-1">';
-    
-    result.actions.forEach(action => {
-        html += `<li>• ${action}</li>`;
-    });
-    
-    html += '</ul>';
-    resultDiv.innerHTML = html;
-    resultDiv.classList.remove('hidden');
-}
-
-function loadAlertSettings() {
-    fetch('/api/get_alert_settings')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const settings = data.settings;
-                document.getElementById('ownerEmail').value = settings.owner_email || '';
-                document.getElementById('policeEmail').value = settings.police_email || '';
-                document.getElementById('smtpServer').value = settings.smtp_server || '';
-                document.getElementById('smtpPort').value = settings.smtp_port || '';
-                document.getElementById('emailUser').value = settings.email_user || '';
-                document.getElementById('enableEmail').checked = settings.enable_email;
-                document.getElementById('enablePoliceAlerts').checked = settings.enable_police_alerts;
-            }
-        })
-        .catch(error => {
-            console.error('Error loading settings:', error);
-        });
-}
-
-function loadAlertHistory() {
-    fetch('/api/get_alert_history')
-        .then(response => response.json())
-        .then(data => {
-            if (data.success) {
-                const tbody = document.getElementById('alertHistoryTable');
-                tbody.innerHTML = '';
-                
-                if (data.alerts.length === 0) {
-                    tbody.innerHTML = '<tr><td colspan="4" class="px-4 py-2 text-center text-gray-500">No alerts found</td></tr>';
-                    return;
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Twilio settings saved successfully!', 'success');
+                } else {
+                    showNotification('Error saving settings: ' + data.message, 'error');
                 }
-                
-                data.alerts.forEach(alert => {
-                    const row = tbody.insertRow();
-                    row.innerHTML = `
-                        <td class="px-4 py-2">${new Date(alert.sent_at).toLocaleString()}</td>
-                        <td class="px-4 py-2">
-                            <span class="px-2 py-1 rounded text-sm ${getAlertTypeClass(alert.alert_type)}">
-                                ${alert.alert_type}
-                            </span>
-                        </td>
-                        <td class="px-4 py-2">${alert.message}</td>
-                        <td class="px-4 py-2">${alert.recipient || 'N/A'}</td>
-                    `;
-                });
-            }
-        })
-        .catch(error => {
-            console.error('Error loading alert history:', error);
-        });
-}
-
-function getAlertTypeClass(alertType) {
-    if (alertType.includes('Level 1')) return 'bg-green-100 text-green-800';
-    if (alertType.includes('Level 2')) return 'bg-yellow-100 text-yellow-800';
-    if (alertType.includes('Level 3') || alertType.includes('Emergency')) return 'bg-red-100 text-red-800';
-    return 'bg-gray-100 text-gray-800';
-}
-
-function showResult(message, type) {
-    const resultDiv = document.getElementById('alertResult');
-    let bgClass = 'bg-blue-50 border-blue-200';
-    let textClass = 'text-blue-800';
-    
-    if (type === 'success') {
-        bgClass = 'bg-green-50 border-green-200';
-        textClass = 'text-green-800';
-    } else if (type === 'error') {
-        bgClass = 'bg-red-50 border-red-200';
-        textClass = 'text-red-800';
-    } else if (type === 'warning') {
-        bgClass = 'bg-yellow-50 border-yellow-200';
-        textClass = 'text-yellow-800';
+            });
     }
+
+    function testTwilioCall() {
+        const primaryNumber = document.getElementById('primaryNumber').value;
+        if (!primaryNumber) {
+            alert('Please enter a primary number first');
+            return;
+        }
+
+        const testNumber = prompt('Enter test phone number:', primaryNumber);
+        if (!testNumber) return;
+
+        const formData = new FormData();
+        formData.append('test_number', testNumber);
+
+        fetch('/api/test_twilio_call', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Test call initiated successfully!', 'success');
+                } else {
+                    showNotification('Test call failed: ' + (data.result?.error || 'Unknown error'), 'error');
+                }
+            });
+    }
+
+    function loadAlertEvents() {
+        fetch('/api/alert_events')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    displayEvents(data.events);
+                }
+            });
+    }
+
+    function displayEvents(events) {
+        const container = document.getElementById('eventsList');
+
+        if (!events || events.length === 0) {
+            container.innerHTML = '<p class="text-gray-500 text-center py-4">No alert events found</p>';
+            return;
+        }
+
+        let html = '';
+        events.forEach(event => {
+            const timestamp = new Date(event.timestamp).toLocaleString();
+            const callStatus = event.call_status || 'pending';
+            const reviewStatus = event.review_status || 'pending';
+
+            html += `
+            <div class="border border-gray-200 rounded-lg p-4 mb-4">
+                <div class="flex justify-between items-start mb-2">
+                    <div>
+                        <h4 class="font-semibold">${event.trigger_type}</h4>
+                        <p class="text-sm text-gray-600">${timestamp}</p>
+                        <p class="text-xs text-gray-500">Event ID: ${event.event_id}</p>
+                    </div>
+                    <div class="text-right">
+                        <span class="px-2 py-1 rounded text-xs ${getStatusClass(callStatus)}">Call: ${callStatus}</span>
+                        <span class="px-2 py-1 rounded text-xs ${getReviewClass(reviewStatus)}">Review: ${reviewStatus}</span>
+                    </div>
+                </div>
+                
+                ${event.call_attempts && event.call_attempts.length > 0 ? `
+                    <div class="mt-2">
+                        <h5 class="text-sm font-semibold mb-1">Call Attempts:</h5>
+                        ${event.call_attempts.map(attempt => `
+                            <div class="text-xs text-gray-600 ml-2">
+                                Attempt ${attempt.attempt_number}: ${attempt.phone_number} - 
+                                <span class="${attempt.status === 'answered' ? 'text-green-600' : 'text-red-600'}">${attempt.status}</span>
+                                at ${new Date(attempt.timestamp).toLocaleTimeString()}
+                            </div>
+                        `).join('')}
+                    </div>
+                ` : ''}
+                
+                <div class="mt-3 flex flex-col space-y-2">
+                    <div class="flex space-x-2">
+                        <button onclick="updateReviewStatus('${event.event_id}', 'false_alarm')" 
+                                class="bg-yellow-500 hover:bg-yellow-600 text-white px-2 py-1 rounded text-xs">
+                            False Alarm
+                        </button>
+                        <button onclick="updateReviewStatus('${event.event_id}', 'confirmed')" 
+                                class="bg-green-500 hover:bg-green-600 text-white px-2 py-1 rounded text-xs">
+                            Confirm
+                        </button>
+                        ${event.recording_filepath ? `
+                        <button onclick="showVideoModal('${event.recording_filepath}')" 
+                                class="bg-blue-500 hover:bg-blue-600 text-white px-2 py-1 rounded text-xs">
+                            Play Video
+                        </button>
+                        ` : ''}
+                    </div>
+                    
+                    ${event.recording_filepath ? `
+                    <div id="video-${event.event_id}" class="hidden mt-2">
+                        <div class="bg-gray-100 p-2 rounded-lg">
+                            <p class="text-xs text-gray-600 mb-1">Recording Preview:</p>
+                            <video controls width="100%" class="max-w-full rounded">
+                                <source src="/${event.recording_filepath}" type="video/mp4">
+                                Your browser does not support the video tag.
+                            </video>
+                            <div class="flex justify-between items-center mt-1">
+                                <button onclick="verifyRecording('${event.recording_filepath}')" 
+                                        class="text-xs text-gray-600 hover:text-blue-600">
+                                    Verify Playback
+                                </button>
+                                <button onclick="hideVideo('${event.event_id}')" 
+                                        class="text-xs text-red-600 hover:text-red-800">
+                                    Hide
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    function showVideoModal(recordingPath) {
+        // Create a modal for larger video viewing
+        const modalHtml = `
+        <div class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+            <div class="bg-white rounded-lg p-4 max-w-4xl w-full mx-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-lg font-bold">Security Recording</h3>
+                    <button onclick="closeVideoModal()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <video controls width="100%" class="max-w-full rounded-lg" autoplay>
+                    <source src="/${recordingPath}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+                <div class="mt-4 flex justify-between items-center">
+                    <button onclick="verifyRecording('${recordingPath}')" 
+                            class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">
+                        <i class="fas fa-check-circle mr-1"></i>Verify Playback
+                    </button>
+                    <button onclick="downloadRecording('${recordingPath}')" 
+                            class="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm">
+                        <i class="fas fa-download mr-1"></i>Download
+                    </button>
+                </div>
+            </div>
+        </div>
+        `;
+
+        const modal = document.createElement('div');
+        modal.id = 'videoModal';
+        modal.innerHTML = modalHtml;
+        document.body.appendChild(modal);
+    }
+
+    function closeVideoModal() {
+        const modal = document.getElementById('videoModal');
+        if (modal) {
+            modal.remove();
+        }
+    }
+
+    function showVideo(eventId) {
+        const videoDiv = document.getElementById(`video-${eventId}`);
+        if (videoDiv) {
+            videoDiv.classList.remove('hidden');
+        }
+    }
+
+    function hideVideo(eventId) {
+        const videoDiv = document.getElementById(`video-${eventId}`);
+        if (videoDiv) {
+            videoDiv.classList.add('hidden');
+        }
+    }
+
+    function verifyRecording(recordingPath) {
+        const filename = recordingPath.split('/').pop();
+
+        fetch(`/api/verify_recording/${filename}`)
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const verification = data.verification;
+                    if (verification.playable) {
+                        showNotification(`✅ Video is playable: ${verification.duration_seconds}s, ${verification.file_size_mb}MB`, 'success');
+                    } else {
+                        showNotification(`❌ Video playback issue: ${verification.error}`, 'error');
+                    }
+                } else {
+                    showNotification('❌ Verification failed: ' + data.error, 'error');
+                }
+            })
+            .catch(error => {
+                showNotification('❌ Network error during verification', 'error');
+            });
+    }
+
+    function downloadRecording(recordingPath) {
+        // Create a temporary link to trigger download
+        const link = document.createElement('a');
+        link.href = `/${recordingPath}`;
+        link.download = recordingPath.split('/').pop();
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    }
+
+    // Close modal when clicking outside
+    document.addEventListener('click', function (event) {
+        const modal = document.getElementById('videoModal');
+        if (modal && event.target === modal) {
+            closeVideoModal();
+        }
+    });
+
+    // Remove unused functions
+    // function verifyRecordingPlayback(recordingPath) { ... }
+    // function offerConversion(filename) { ... }
+    // function convertRecording(filename) { ... }
+    // function fixVideoSources() { ... }
+    // function getRecordingInfo(filename) { ... }
     
-    resultDiv.className = `mt-4 p-3 rounded-lg border ${bgClass}`;
-    resultDiv.innerHTML = `<p class="${textClass}">${message}</p>`;
-    resultDiv.classList.remove('hidden');
-}
+    // Remove functions that are no longer needed because conversion is automatic
+    // - convertVideoFormat
+    // - offerConversion
+    // - convertRecording
+    // - fixVideoSources
+    // - getRecordingInfo
+    // - playRecording
+
+    function loadRecordingStats() {
+        fetch('/api/recording_stats')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    const stats = data.stats;
+                    document.getElementById('recordingStatus').textContent =
+                        stats.is_recording ? 'Active' : 'Inactive';
+                    document.getElementById('recordingStatus').className =
+                        stats.is_recording ? 'text-2xl font-bold text-green-600' : 'text-2xl font-bold text-gray-600';
+
+                    document.getElementById('storageStatus').textContent =
+                        `${stats.total_recordings} recordings, ${stats.total_size_gb} GB`;
+                }
+            });
+    }
+
+    function cleanupRecordings() {
+        if (confirm('Delete recordings older than 3 days?')) {
+            // Send an empty FormData for the POST request
+            fetch('/api/cleanup_recordings', { method: 'POST', body: new FormData() })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification(`Cleaned up ${data.deleted_count} old recordings`, 'success');
+                        loadRecordingStats();
+                        loadAlertEvents(); // Refresh events list
+                    }
+                });
+        }
+    }
+
+    function updateReviewStatus(eventId, status) {
+        const formData = new FormData();
+        formData.append('event_id', eventId);
+        formData.append('status', status);
+
+        fetch('/api/update_review_status', {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('Review status updated', 'success');
+                    loadAlertEvents();
+                }
+            });
+    }
+
+    function getStatusClass(status) {
+        switch (status) {
+            case 'answered': return 'bg-green-100 text-green-800';
+            case 'failed': return 'bg-red-100 text-red-800';
+            default: return 'bg-yellow-100 text-yellow-800';
+        }
+    }
+
+    function getReviewClass(status) {
+        switch (status) {
+            case 'confirmed': return 'bg-green-100 text-green-800';
+            case 'false_alarm': return 'bg-yellow-100 text-yellow-800';
+            default: return 'bg-gray-100 text-gray-800';
+        }
+    }
+
+    function showNotification(message, type) {
+        // Simple notification implementation
+        alert(`${type.toUpperCase()}: ${message}`);
+    }
 </script>
 {% endblock %}

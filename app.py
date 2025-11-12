@@ -13,6 +13,10 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import json
 from utils.distance_estimation import get_distance_estimator
+import threading
+import time
+from utils.recording_manager import recording_manager as global_recording_manager 
+
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
@@ -36,6 +40,26 @@ known_face_encodings = []
 known_face_names = []
 motion_detector = None
 recording_manager = None
+
+def start_background_cleanup():
+    """Start background thread to clean up old face tracking data"""
+    def cleanup_loop():
+        while True:
+            try:
+                from utils.twilio_alert_system import twilio_alert_system
+                cleaned_count = twilio_alert_system.cleanup_old_faces(hours=24)
+                if cleaned_count > 0:
+                    print(f"🧹 Background cleanup: Removed {cleaned_count} old faces")
+            except Exception as e:
+                print(f"❌ Background cleanup error: {e}")
+            time.sleep(3600)  # Run every hour
+    
+    thread = threading.Thread(target=cleanup_loop, daemon=True)
+    thread.start()
+
+# Start the background cleanup when your app starts
+start_background_cleanup()
+
 
 @app.route('/')
 def index():
@@ -65,6 +89,564 @@ def playback():
 def controls():
     return render_template('controls.html')
 
+@app.route('/api/debug_verification')
+def debug_verification():
+    """Debug number verification status"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        debug_info = twilio_alert_system.debug_verification_status()
+        return jsonify({'success': True, 'debug': debug_info})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/twilio_settings', methods=['GET', 'POST'])
+def twilio_settings():
+    """Get or update Twilio settings"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        if request.method == 'GET':
+            settings = twilio_alert_system.get_settings()
+            return jsonify({'success': True, 'settings': settings})
+        
+        elif request.method == 'POST':
+            settings = {
+                'account_sid': request.form.get('account_sid'),
+                'auth_token': request.form.get('auth_token'),
+                'twilio_number': request.form.get('twilio_number'),
+                'primary_number': request.form.get('primary_number'),
+                'backup_number': request.form.get('backup_number'),
+                'test_mode': request.form.get('test_mode') == 'true'
+            }
+            
+            success = twilio_alert_system.save_settings(settings)
+            return jsonify({'success': success, 'message': 'Settings updated'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/alert_events')
+def get_alert_events():
+    """Get alert event history"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        limit = int(request.args.get('limit', 50))
+        events = twilio_alert_system.get_event_history(limit)
+        return jsonify({'success': True, 'events': events})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/debug_face_tracking_detailed')
+def debug_face_tracking_detailed():
+    """Detailed debug endpoint for face tracking"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        with twilio_alert_system.lock:
+            debug_info = {
+                'total_tracked_faces': len(twilio_alert_system.alerted_faces),
+                'total_answered_faces': len(twilio_alert_system.answered_calls),
+                'face_grouping_threshold': twilio_alert_system.face_grouping_threshold,
+                'alert_cooldown': twilio_alert_system.alert_cooldown,
+                'max_alerts_per_face': twilio_alert_system.max_alerts_per_face,
+                'tracked_faces': [],
+                'answered_faces': list(twilio_alert_system.answered_calls)
+            }
+            
+            current_time = time.time()
+            for face_hash, data in twilio_alert_system.alerted_faces.items():
+                time_since_alert = current_time - data['last_alert_time']
+                cooldown_remaining = max(0, twilio_alert_system.alert_cooldown - time_since_alert)
+                
+                debug_info['tracked_faces'].append({
+                    'face_id': face_hash[:8],
+                    'alert_count': data['alert_count'],
+                    'last_alert_seconds_ago': int(time_since_alert),
+                    'cooldown_remaining_seconds': int(cooldown_remaining),
+                    'encoding_sample': data.get('encoding_sample', [])
+                })
+        
+        return jsonify({'success': True, 'debug': debug_info})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/reset_answered_calls', methods=['POST'])
+def reset_answered_calls():
+    """Reset answered calls tracking"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        with twilio_alert_system.lock:
+            count = len(twilio_alert_system.answered_calls)
+            twilio_alert_system.answered_calls = set()
+        return jsonify({
+            'success': True, 
+            'message': f'Reset {count} answered calls'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/face_tracking_stats')
+def get_face_tracking_stats():
+    """Get face tracking statistics"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        # ✅ FIX: Ensure the answered_calls attribute exists
+        if not hasattr(twilio_alert_system, 'answered_calls'):
+            twilio_alert_system.answered_calls = set()
+            
+        stats = twilio_alert_system.get_face_tracking_stats()
+        return jsonify({'success': True, 'stats': stats})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/cleanup_face_tracking', methods=['POST'])
+def cleanup_face_tracking():
+    """Clean up old face tracking entries"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        hours = int(request.form.get('hours', 24))
+        cleaned_count = twilio_alert_system.cleanup_old_faces(hours)
+        return jsonify({'success': True, 'cleaned_count': cleaned_count})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/convert_recording', methods=['POST'])
+def convert_recording():
+    """Convert a recording to compatible format"""
+    try:
+        filename = request.form.get('filename')
+        if not filename:
+            return jsonify({'success': False, 'error': 'Filename required'})
+        
+        filepath = os.path.join('static', 'recordings', filename)
+        
+        if not os.path.exists(filepath):
+            return jsonify({'success': False, 'error': 'File not found'})
+        
+        from utils.recording_manager import recording_manager
+        result = recording_manager.convert_to_compatible_format(filepath)
+        
+        return jsonify(result)
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/recording_info/<filename>')
+def get_recording_info(filename):
+    """Get detailed information about a recording"""
+    try:
+        filepath = os.path.join('static', 'recordings', filename)
+        
+        from utils.recording_manager import recording_manager
+        info = recording_manager.get_recording_info(filepath)
+        
+        return jsonify({'success': True, 'info': info})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/reset_face_tracking', methods=['POST'])
+def reset_face_tracking():
+    """Reset all face tracking (clear memory)"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        with twilio_alert_system.lock:
+            count = len(twilio_alert_system.alerted_faces)
+            twilio_alert_system.alerted_faces = {}
+        return jsonify({
+            'success': True, 
+            'message': f'Face tracking reset - cleared {count} faces'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/debug_face_tracking')
+def debug_face_tracking():
+    """Debug endpoint to see current face tracking state"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        with twilio_alert_system.lock:
+            debug_info = {
+                'total_tracked_faces': len(twilio_alert_system.alerted_faces),
+                'alert_cooldown_seconds': twilio_alert_system.alert_cooldown,
+                'max_alerts_per_face': twilio_alert_system.max_alerts_per_face,
+                'faces': []
+            }
+            
+            current_time = time.time()
+            for face_hash, data in list(twilio_alert_system.alerted_faces.items())[:20]:
+                time_since_alert = current_time - data['last_alert_time']
+                cooldown_remaining = max(0, twilio_alert_system.alert_cooldown - time_since_alert)
+                
+                debug_info['faces'].append({
+                    'face_id': face_hash[:8],
+                    'alert_count': data['alert_count'],
+                    'last_alert_seconds_ago': int(time_since_alert),
+                    'cooldown_remaining_seconds': int(cooldown_remaining),
+                    'can_alert_again': cooldown_remaining == 0 and data['alert_count'] < twilio_alert_system.max_alerts_per_face,
+                    'max_alerts_reached': data['alert_count'] >= twilio_alert_system.max_alerts_per_face,
+                    'first_seen': datetime.datetime.fromtimestamp(data['first_seen']).isoformat()
+                })
+        
+        return jsonify({'success': True, 'debug': debug_info})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/fix_recording_url/<filename>')
+def fix_recording_url(filename):
+    """Fix recording URL encoding issues"""
+    try:
+        # Remove any URL encoding artifacts
+        clean_filename = filename.replace('%02', '').replace('%03', '').replace('%04', '')
+        
+        # Ensure it's a valid filename
+        filepath = os.path.join('static', 'recordings', clean_filename)
+        
+        if os.path.exists(filepath):
+            return jsonify({
+                'success': True, 
+                'clean_filename': clean_filename,
+                'url': f'/static/recordings/{clean_filename}'
+            })
+        else:
+            return jsonify({'success': False, 'error': 'File not found'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/list_recordings')
+def list_recordings():
+    """List all recordings with proper URLs"""
+    try:
+        recordings_dir = 'static/recordings'
+        recordings = []
+        
+        for filename in os.listdir(recordings_dir):
+            if filename.endswith(('.mp4', '.avi', '.mov')):
+                filepath = os.path.join(recordings_dir, filename)
+                if os.path.exists(filepath):
+                    recordings.append({
+                        'filename': filename,
+                        'url': f'/static/recordings/{filename}',
+                        'file_size': os.path.getsize(filepath),
+                        'file_size_mb': round(os.path.getsize(filepath) / (1024**2), 2)
+                    })
+        
+        return jsonify({'success': True, 'recordings': recordings})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/diagnose_codecs')
+def diagnose_codecs():
+    """Diagnose available codecs on the system"""
+    try:
+        import cv2
+        
+        # Test different codecs
+        codecs_to_test = [
+            ('MJPG', 'avi', cv2.VideoWriter_fourcc(*'MJPG')),
+            ('XVID', 'avi', cv2.VideoWriter_fourcc(*'XVID')),
+            ('DIVX', 'avi', cv2.VideoWriter_fourcc(*'DIVX')),
+            ('mp4v', 'mp4', cv2.VideoWriter_fourcc(*'mp4v')),
+            ('avc1', 'mp4', cv2.VideoWriter_fourcc(*'avc1')),
+        ]
+        
+        results = []
+        test_resolution = (640, 480)
+        test_fps = 15
+        
+        for codec_name, extension, fourcc in codecs_to_test:
+            test_filename = f"test_{codec_name}.{extension}"
+            test_path = os.path.join('static', 'recordings', test_filename)
+            
+            try:
+                # Test writing
+                writer = cv2.VideoWriter(test_path, fourcc, test_fps, test_resolution)
+                can_write = writer.isOpened()
+                
+                if can_write:
+                    # Write a test frame
+                    test_frame = np.zeros((test_resolution[1], test_resolution[0], 3), dtype=np.uint8)
+                    writer.write(test_frame)
+                    writer.release()
+                    
+                    # Test reading
+                    cap = cv2.VideoCapture(test_path)
+                    can_read = cap.isOpened()
+                    if can_read:
+                        ret, frame = cap.read()
+                        can_read = ret
+                    cap.release()
+                    
+                    # Clean up
+                    if os.path.exists(test_path):
+                        os.path.getsize(test_path)
+                        os.remove(test_path)
+                else:
+                    can_read = False
+                    
+                results.append({
+                    'codec': codec_name,
+                    'extension': extension,
+                    'can_write': can_write,
+                    'can_read': can_read,
+                    'status': '✅ WORKING' if (can_write and can_read) else '❌ FAILED'
+                })
+                
+            except Exception as e:
+                results.append({
+                    'codec': codec_name,
+                    'extension': extension,
+                    'can_write': False,
+                    'can_read': False,
+                    'status': f'❌ ERROR: {str(e)}'
+                })
+        
+        return jsonify({'success': True, 'codec_tests': results})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/test_recording')
+def test_recording():
+    """Create a test recording to verify functionality"""
+    try:
+        from utils.recording_manager import recording_manager
+        
+        # Create a test frame
+        test_frame = np.zeros((480, 640, 3), dtype=np.uint8)
+        # Add some test pattern
+        cv2.rectangle(test_frame, (100, 100), (300, 300), (0, 255, 0), 2)
+        cv2.putText(test_frame, "TEST RECORDING", (150, 200), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
+        
+        # Start recording
+        event_id = f"test_{int(time.time())}"
+        filepath = recording_manager.start_recording_for_event(event_id, "test")
+        
+        if not filepath:
+            return jsonify({'success': False, 'error': 'Failed to start recording'})
+        
+        # Add some test frames
+        for i in range(30):  # 2 seconds at 15fps
+            recording_manager.add_frame(test_frame)
+            time.sleep(0.066)  # ~15fps
+        
+        # Stop recording
+        recording_manager.stop_recording()
+        
+        # Verify the recording
+        verification = recording_manager.verify_recording_playback(filepath)
+        
+        return jsonify({
+            'success': True,
+            'filepath': filepath,
+            'verification': verification,
+            'url': f'/{filepath}'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/start_image_recording', methods=['POST'])
+def start_image_recording():
+    """Record as image sequence instead of video"""
+    try:
+        event_id = f"images_{int(time.time())}"
+        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        folder_name = f"recording_{event_id}_{timestamp}"
+        folder_path = os.path.join('static', 'recordings', folder_name)
+        
+        os.makedirs(folder_path, exist_ok=True)
+        
+        return jsonify({
+            'success': True,
+            'event_id': event_id,
+            'folder_path': folder_path,
+            'message': 'Image recording started'
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/save_recording_frame', methods=['POST'])
+def save_recording_frame():
+    """Save a frame for image sequence recording"""
+    try:
+        event_id = request.form.get('event_id')
+        folder_path = request.form.get('folder_path')
+        image_data = request.form.get('image_data')
+        
+        if not all([event_id, folder_path, image_data]):
+            return jsonify({'success': False, 'error': 'Missing parameters'})
+        
+        # Decode base64 image
+        image_data = image_data.split(',')[1]
+        image_bytes = base64.b64decode(image_data)
+        
+        # Convert to numpy array
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        # Save frame
+        timestamp = datetime.now().strftime('%H%M%S_%f')[:-3]
+        filename = f"frame_{timestamp}.jpg"
+        filepath = os.path.join(folder_path, filename)
+        
+        cv2.imwrite(filepath, frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+        
+        return jsonify({
+            'success': True,
+            'filepath': filepath,
+            'filename': filename
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/unauthorized_detections_unique')
+def unauthorized_detections_unique():
+    """
+    ✅ NEW ENDPOINT: Get unique unauthorized detections (no duplicates)
+    """
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Get all recent detections
+        all_detections = conn.execute('''
+            SELECT * FROM detections 
+            WHERE detection_type IN ('face_detection', 'motion_detection')
+            ORDER BY timestamp DESC 
+            LIMIT 100
+        ''').fetchall()
+        
+        # Deduplicate by person_name + detection_type
+        unique_detections = {}
+        
+        for detection in all_detections:
+            detection_dict = dict(detection)
+            person_name = detection_dict['person_name'] or 'Unknown'
+            detection_type = detection_dict['detection_type']
+            
+            # Create unique key
+            key = f"{person_name}_{detection_type}"
+            
+            # Keep only most recent
+            if key not in unique_detections:
+                unique_detections[key] = {
+                    'id': detection_dict['id'],
+                    'type': detection_type,
+                    'person_name': person_name,
+                    'confidence': detection_dict['confidence'],
+                    'timestamp': detection_dict['timestamp'],
+                    'screenshot_path': detection_dict['screenshot_path'],
+                    'alert_level': detection_dict['alert_level']
+                }
+        
+        # Convert to list and sort by timestamp
+        detections_list = sorted(
+            unique_detections.values(),
+            key=lambda x: x['timestamp'],
+            reverse=True
+        )[:20]  # Return top 20
+        
+        conn.close()
+        
+        print(f"📊 Returning {len(detections_list)} unique detections (from {len(all_detections)} total)")
+        
+        return jsonify({'success': True, 'detections': detections_list})
+        
+    except Exception as e:
+        print(f"❌ ERROR in unauthorized_detections_unique: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/update_review_status', methods=['POST'])
+def update_review_status():
+    """Update event review status"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        event_id = request.form.get('event_id')
+        status = request.form.get('status')
+        
+        success = twilio_alert_system.update_review_status(event_id, status)
+        return jsonify({'success': success})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/test_twilio_call', methods=['POST'])
+def test_twilio_call():
+    """Test Twilio call functionality"""
+    try:
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        test_number = request.form.get('test_number')
+        if not test_number:
+            return jsonify({'success': False, 'error': 'Test number required'})
+        
+        result = twilio_alert_system.make_voice_call(
+            test_number, 
+            "This is a test call from your security system. Everything is working correctly."
+        )
+        
+        return jsonify({'success': result['status'] == 'initiated', 'result': result})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/recording_stats')
+def get_recording_stats():
+    """Get recording statistics"""
+    try:
+        from utils.recording_manager import recording_manager
+        
+        stats = recording_manager.get_recording_stats()
+        return jsonify({'success': True, 'stats': stats})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/cleanup_recordings', methods=['POST'])
+def cleanup_recordings():
+    """Clean up old recordings"""
+    try:
+        from utils.recording_manager import recording_manager
+        
+        days = int(request.form.get('days', 3))
+        deleted_count = recording_manager.cleanup_old_recordings(days)
+        return jsonify({'success': True, 'deleted_count': deleted_count})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/twilio_alerts')
+def twilio_alerts():
+    """Twilio alerts configuration page"""
+    return render_template('twilio_alerts.html')
+
+@app.route('/api/verify_recording/<filename>')
+def verify_recording(filename):
+    """Verify if a recording file is playable"""
+    try:
+        from utils.recording_manager import recording_manager
+        
+        filepath = os.path.join('static', 'recordings', filename)
+        verification = recording_manager.verify_recording_playback(filepath)
+        
+        return jsonify({'success': True, 'verification': verification})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/recognize_faces_with_motion', methods=['POST'])
 def recognize_faces_with_motion():
     """
@@ -83,6 +665,8 @@ def recognize_faces_with_motion():
         nparr = np.frombuffer(image_bytes, np.uint8)
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
+        global_recording_manager.add_frame(frame)
+        
         # Get motion detector instance
         global motion_detector
         if motion_detector is None:
@@ -100,49 +684,48 @@ def recognize_faces_with_motion():
         face_results = []
         motion_only_result = None
         
-        # Always run face detection, but authorized faces are filtered in the function
+        # Always run face detection
         from utils.face_recognition_utils import detect_faces_with_motion_gate
-        face_results = detect_faces_with_motion_gate(frame, motion_detector)
+        try:
+            face_results = detect_faces_with_motion_gate(frame, motion_detector)
+        except Exception as e:
+            print(f"❌ Error in face detection: {e}")
+            # Fallback to basic face detection
+            from utils.face_recognition_utils import detect_faces_in_frame
+            face_results = detect_faces_in_frame(frame)
         
-        # STEP 3: Check for motion without faces using user distance settings
-        # Only check for motion-only if no faces were detected AND human motion is active
+        # STEP 3: Check for motion without faces - BUT NEVER TRIGGER CALLS
         if len(face_results) == 0 and (human_detected or motion_detector.is_human_motion_active()):
-            print(f"🔴 DEBUG: No faces but human motion detected - checking for motion without faces")
+            print(f"🔴 Motion detected without faces")
             
             from utils.face_recognition_utils import detect_motion_without_faces
-            
             motion_only_result = detect_motion_without_faces(frame, motion_detector, distance_estimator)
             
-            print(f"🔴 DEBUG: Motion only result: {motion_only_result}")
-            
-            # If motion without face detected within user's distance, log it
+            # If motion without face detected, log it but DON'T trigger Twilio calls
             if motion_only_result and motion_only_result['trigger_alert']:
                 try:
-                    # Save screenshot
                     screenshot_path = save_screenshot(
                         frame, 
                         f"motion_no_face_{motion_only_result['distance_meters']}m"
                     )
                     
-                    # Add detection to database with proper person_name
+                    # IMPORTANT: Log detection WITHOUT triggering Twilio call
                     from utils.database import add_detection
                     add_detection(
                         "motion_detection", 
-                        motion_only_result['person_name'],  # Use the person_name from the result
+                        motion_only_result['person_name'],
                         float(motion_only_result['confidence']), 
                         screenshot_path, 
                         motion_only_result['alert_level']
                     )
                     
-                    print(f"✅ LOGGED MOTION-ONLY ALERT: {motion_only_result['person_name']} at {motion_only_result['distance_meters']}m")
+                    print(f"✅ LOGGED MOTION-ONLY: {motion_only_result['person_name']} (NO CALL)")
                     
-                    # Send alert
+                    # Send email alert only (not Twilio call)
                     send_motion_alert_async(motion_only_result, screenshot_path)
                     
                 except Exception as e:
                     print(f"❌ Error logging motion-only detection: {e}")
-            else:
-                print(f"🔴 DEBUG: Motion detected but not logged - trigger_alert: {motion_only_result.get('trigger_alert') if motion_only_result else 'No result'}")
         
         # Ensure all data is JSON serializable
         clean_motion_only_result = None
@@ -158,14 +741,14 @@ def recognize_faces_with_motion():
                 'alert_level': int(motion_only_result.get('alert_level', 0)),
                 'within_detection_range': bool(motion_only_result.get('within_detection_range', False)),
                 'motion_area': int(motion_only_result.get('motion_area', 0)),
-                'person_name': 'Motion Detected, Unauthorized Person'  # Add this for frontend
+                'person_name': 'Motion Detected, Unauthorized Person'
             }
         
         return jsonify({
             'success': True, 
             'faces': face_results,
             'motion_only_detection': clean_motion_only_result,
-            'motion_detections': detections,  # Only contains animals now
+            'motion_detections': detections,
             'motion_status': {
                 'human_motion_detected': human_detected,
                 'motion_active': motion_detector.is_human_motion_active(),
@@ -305,6 +888,35 @@ def clear_unauthorized_cache():
             'success': True, 
             'message': f'Cleared {cleared_count} cached unauthorized detections'
         })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/debug_unauthorized_cache')
+def debug_unauthorized_cache():
+    """Debug endpoint to see current unauthorized face cache"""
+    try:
+        global motion_detector
+        if motion_detector is None:
+            from utils.motion_detection_utils import MotionDetector
+            motion_detector = MotionDetector()
+        
+        cache_info = {
+            'total_cached_faces': len(motion_detector.recent_unauthorized_faces),
+            'cache_entries': []
+        }
+        
+        current_time = datetime.datetime.now()
+        for encoding_key, timestamp in motion_detector.recent_unauthorized_faces.items():
+            elapsed = (current_time - timestamp).total_seconds()
+            cache_info['cache_entries'].append({
+                'encoding_key': str(encoding_key)[:20] + '...',
+                'last_detected': timestamp.isoformat(),
+                'elapsed_seconds': round(elapsed, 1),
+                'status': 'ACTIVE' if elapsed < 600 else 'EXPIRED'
+            })
+        
+        return jsonify({'success': True, 'cache_info': cache_info})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -1997,4 +2609,6 @@ def generate_video_thumbnail(video_path):
         
     except Exception as e:
         return None
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000, debug=True)
     
