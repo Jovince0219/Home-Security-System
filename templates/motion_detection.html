@@ -1,632 +1,632 @@
-{% extends "base.html" %}
+    {% extends "base.html" %}
 
-{% block title %}Motion Detection - Security System{% endblock %}
+    {% block title %}Motion Detection - Security System{% endblock %}
 
-{% block content %}
-<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- Live Motion Detection -->
-    <div class="bg-white rounded-lg shadow-lg p-6">
-        <h2 class="text-2xl font-bold mb-6 flex items-center">
-            <i class="fas fa-running mr-3 text-green-600"></i>
-            Live Motion Detection
-        </h2>
+    {% block content %}
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Live Motion Detection -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-running mr-3 text-green-600"></i>
+                Live Motion Detection
+            </h2>
 
-        <div class="relative mb-4">
-            <video id="videoElement" class="w-full h-64 bg-black rounded-lg" autoplay muted></video>
-            <canvas id="motionCanvas" class="hidden"></canvas>
-            <div id="motionStatus" class="absolute top-2 right-2 bg-gray-600 text-white px-2 py-1 rounded text-sm">
-                <i class="fas fa-circle mr-1"></i>STOPPED
-            </div>
-        </div>
-
-        <div class="flex flex-wrap gap-2 mb-4">
-            <button id="startCamera" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
-                <i class="fas fa-video mr-2"></i>Start Camera
-            </button>
-            <button id="startDetection" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded" disabled>
-                <i class="fas fa-play mr-2"></i>Start Detection
-            </button>
-            <button id="stopDetection" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded" disabled>
-                <i class="fas fa-stop mr-2"></i>Stop Detection
-            </button>
-            <button id="detectMotion" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded" disabled>
-                <i class="fas fa-search mr-2"></i>Detect Now
-            </button>
-        </div>
-
-        <div id="detectionResults" class="space-y-2">
-            <p class="text-gray-500">Start camera and detection to see results</p>
-        </div>
-    </div>
-
-    <!-- Training Data Collection -->
-    <div class="bg-white rounded-lg shadow-lg p-6">
-        <h2 class="text-2xl font-bold mb-6 flex items-center">
-            <i class="fas fa-database mr-3 text-blue-600"></i>
-            Upload Training Images
-        </h2>
-
-        <!-- Image Upload Section -->
-        <div class="mb-6 p-4 bg-blue-50 rounded-lg">
-            <h3 class="text-lg font-semibold mb-3">Upload Training Images</h3>
-
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Select Category</label>
-                <select id="uploadCategory"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option value="human">Human</option>
-                    <option value="animal">Animal</option>
-                </select>
+            <div class="relative mb-4">
+                <video id="videoElement" class="w-full h-64 bg-black rounded-lg" autoplay muted></video>
+                <canvas id="motionCanvas" class="hidden"></canvas>
+                <div id="motionStatus" class="absolute top-2 right-2 bg-gray-600 text-white px-2 py-1 rounded text-sm">
+                    <i class="fas fa-circle mr-1"></i>STOPPED
+                </div>
             </div>
 
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Upload Images</label>
-                <input type="file" id="trainingImages" multiple accept="image/*"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                <p class="text-sm text-gray-500 mt-1">Select multiple images (JPG, PNG)</p>
-            </div>
-
-            <div class="flex space-x-4">
-                <button id="uploadImages" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
-                    <i class="fas fa-upload mr-2"></i>Upload Images
+            <div class="flex flex-wrap gap-2 mb-4">
+                <button id="startCamera" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-video mr-2"></i>Start Camera
                 </button>
-                <button id="trainModel" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">
-                    <i class="fas fa-brain mr-2"></i>Train Model
+                <button id="startDetection" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-play mr-2"></i>Start Detection
+                </button>
+                <button id="stopDetection" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-stop mr-2"></i>Stop Detection
+                </button>
+                <button id="detectMotion" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded" disabled>
+                    <i class="fas fa-search mr-2"></i>Detect Now
                 </button>
             </div>
 
-            <div id="uploadProgress" class="mt-3 hidden">
-                <div class="flex justify-between text-sm mb-1">
-                    <span>Uploading...</span>
-                    <span id="uploadStatus">0%</span>
-                </div>
-                <div class="w-full bg-gray-200 rounded-full h-2">
-                    <div id="uploadBar" class="bg-green-600 h-2 rounded-full" style="width: 0%"></div>
-                </div>
+            <div id="detectionResults" class="space-y-2">
+                <p class="text-gray-500">Start camera and detection to see results</p>
             </div>
         </div>
 
-        <!-- Training Images Gallery -->
-        <div class="mb-4">
-            <div class="flex justify-between items-center mb-3">
-                <h3 class="text-lg font-semibold">Training Images</h3>
-                <div class="flex space-x-2">
-                    <select id="filterCategory" class="px-2 py-1 border border-gray-300 rounded text-sm">
-                        <option value="all">All Categories</option>
+        <!-- Training Data Collection -->
+        <div class="bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-database mr-3 text-blue-600"></i>
+                Upload Training Images
+            </h2>
+
+            <!-- Image Upload Section -->
+            <div class="mb-6 p-4 bg-blue-50 rounded-lg">
+                <h3 class="text-lg font-semibold mb-3">Upload Training Images</h3>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Select Category</label>
+                    <select id="uploadCategory"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                         <option value="human">Human</option>
                         <option value="animal">Animal</option>
                     </select>
-                    <button id="refreshImages"
-                        class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">
-                        <i class="fas fa-sync-alt mr-1"></i>Refresh
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">Upload Images</label>
+                    <input type="file" id="trainingImages" multiple accept="image/*"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md">
+                    <p class="text-sm text-gray-500 mt-1">Select multiple images (JPG, PNG)</p>
+                </div>
+
+                <div class="flex space-x-4">
+                    <button id="uploadImages" class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded">
+                        <i class="fas fa-upload mr-2"></i>Upload Images
+                    </button>
+                    <button id="trainModel" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded">
+                        <i class="fas fa-brain mr-2"></i>Train Model
+                    </button>
+                </div>
+
+                <div id="uploadProgress" class="mt-3 hidden">
+                    <div class="flex justify-between text-sm mb-1">
+                        <span>Uploading...</span>
+                        <span id="uploadStatus">0%</span>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2">
+                        <div id="uploadBar" class="bg-green-600 h-2 rounded-full" style="width: 0%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Training Images Gallery -->
+            <div class="mb-4">
+                <div class="flex justify-between items-center mb-3">
+                    <h3 class="text-lg font-semibold">Training Images</h3>
+                    <div class="flex space-x-2">
+                        <select id="filterCategory" class="px-2 py-1 border border-gray-300 rounded text-sm">
+                            <option value="all">All Categories</option>
+                            <option value="human">Human</option>
+                            <option value="animal">Animal</option>
+                        </select>
+                        <button id="refreshImages"
+                            class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm">
+                            <i class="fas fa-sync-alt mr-1"></i>Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div id="trainingGallery"
+                    class="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-64 overflow-y-auto p-2 bg-gray-50 rounded">
+                    <!-- Images will be loaded here -->
+                    <p class="text-gray-500 text-center col-span-full">No training images uploaded yet</p>
+                </div>
+            </div>
+
+            <!-- Training Statistics -->
+            <div id="trainingStats" class="bg-gray-50 p-4 rounded-lg">
+                <h3 class="font-semibold mb-2">Training Statistics</h3>
+                <div class="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                        <div class="text-2xl font-bold text-blue-600" id="humanCount">0</div>
+                        <div class="text-sm text-gray-600">Human Images</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-green-600" id="animalCount">0</div>
+                        <div class="text-sm text-gray-600">Animal Images</div>
+                    </div>
+                    <div>
+                        <div class="text-2xl font-bold text-purple-600" id="totalCount">0</div>
+                        <div class="text-sm text-gray-600">Total Images</div>
+                    </div>
+                </div>
+                <div class="mt-3 text-center">
+                    <div id="trainingReady" class="text-sm font-semibold text-red-600">
+                        ❌ Need more training data
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
+        <!-- Motion Detection Settings -->
+        <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
+            <h2 class="text-2xl font-bold mb-6 flex items-center">
+                <i class="fas fa-cog mr-3 text-gray-600"></i>
+                Detection Settings & Statistics
+            </h2>
+
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Detection Parameters</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Minimum Area Threshold</label>
+                            <input type="range" id="areaThreshold" min="500" max="5000" value="1000" class="w-full">
+                            <span id="areaValue" class="text-sm text-gray-600">1000 pixels</span>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Sensitivity</label>
+                            <input type="range" id="sensitivity" min="0.01" max="0.1" step="0.01" value="0.02"
+                                class="w-full">
+                            <span id="sensitivityValue" class="text-sm text-gray-600">0.02</span>
+                        </div>
+
+                        <button id="updateSettings" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
+                            <i class="fas fa-save mr-2"></i>Update Settings
+                        </button>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Detection Statistics</h3>
+                    <div id="detectionStats" class="space-y-2">
+                        <div class="flex justify-between">
+                            <span>Total Detections:</span>
+                            <span id="totalDetections" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Human Detections:</span>
+                            <span id="humanDetections" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Animal Detections:</span>
+                            <span id="animalDetections" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Object Detections:</span>
+                            <span id="objectDetections" class="font-bold">0</span>
+                        </div>
+                        <div class="flex justify-between">
+                            <span>Model Status:</span>
+                            <span id="modelStatus" class="font-bold">Not Trained</span>
+                        </div>
+                    </div>
+
+                    <button id="refreshStats" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
+                        <i class="fas fa-sync-alt mr-2"></i>Refresh Stats
                     </button>
                 </div>
             </div>
-
-            <div id="trainingGallery"
-                class="grid grid-cols-2 md:grid-cols-4 gap-4 max-h-64 overflow-y-auto p-2 bg-gray-50 rounded">
-                <!-- Images will be loaded here -->
-                <p class="text-gray-500 text-center col-span-full">No training images uploaded yet</p>
-            </div>
         </div>
+        {% endblock %}
 
-        <!-- Training Statistics -->
-        <div id="trainingStats" class="bg-gray-50 p-4 rounded-lg">
-            <h3 class="font-semibold mb-2">Training Statistics</h3>
-            <div class="grid grid-cols-3 gap-4 text-center">
-                <div>
-                    <div class="text-2xl font-bold text-blue-600" id="humanCount">0</div>
-                    <div class="text-sm text-gray-600">Human Images</div>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-green-600" id="animalCount">0</div>
-                    <div class="text-sm text-gray-600">Animal Images</div>
-                </div>
-                <div>
-                    <div class="text-2xl font-bold text-purple-600" id="totalCount">0</div>
-                    <div class="text-sm text-gray-600">Total Images</div>
-                </div>
-            </div>
-            <div class="mt-3 text-center">
-                <div id="trainingReady" class="text-sm font-semibold text-red-600">
-                    ❌ Need more training data
-                </div>
-            </div>
-        </div>
-    </div>
+        {% block scripts %}
+        <script>
+            let videoStream = null;
+            let isDetecting = false;
+            let detectionInterval = null;
 
+            // Initialize event listeners
+            document.addEventListener('DOMContentLoaded', function () {
+                document.getElementById('startCamera').addEventListener('click', startCamera);
+                document.getElementById('startDetection').addEventListener('click', startDetection);
+                document.getElementById('stopDetection').addEventListener('click', stopDetection);
+                document.getElementById('detectMotion').addEventListener('click', detectMotion);
+                document.getElementById('trainModel').addEventListener('click', trainModel);
+                document.getElementById('updateSettings').addEventListener('click', updateSettings);
+                document.getElementById('refreshStats').addEventListener('click', loadStats);
+                document.getElementById('uploadImages').addEventListener('click', uploadTrainingImages);
+                document.getElementById('refreshImages').addEventListener('click', loadTrainingImages);
+                document.getElementById('filterCategory').addEventListener('change', loadTrainingImages);
 
-    <!-- Motion Detection Settings -->
-    <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
-        <h2 class="text-2xl font-bold mb-6 flex items-center">
-            <i class="fas fa-cog mr-3 text-gray-600"></i>
-            Detection Settings & Statistics
-        </h2>
-
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div>
-                <h3 class="text-lg font-semibold mb-4">Detection Parameters</h3>
-                <div class="space-y-4">
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Minimum Area Threshold</label>
-                        <input type="range" id="areaThreshold" min="500" max="5000" value="1000" class="w-full">
-                        <span id="areaValue" class="text-sm text-gray-600">1000 pixels</span>
-                    </div>
-
-                    <div>
-                        <label class="block text-sm font-medium text-gray-700 mb-2">Sensitivity</label>
-                        <input type="range" id="sensitivity" min="0.01" max="0.1" step="0.01" value="0.02"
-                            class="w-full">
-                        <span id="sensitivityValue" class="text-sm text-gray-600">0.02</span>
-                    </div>
-
-                    <button id="updateSettings" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
-                        <i class="fas fa-save mr-2"></i>Update Settings
-                    </button>
-                </div>
-            </div>
-
-            <div>
-                <h3 class="text-lg font-semibold mb-4">Detection Statistics</h3>
-                <div id="detectionStats" class="space-y-2">
-                    <div class="flex justify-between">
-                        <span>Total Detections:</span>
-                        <span id="totalDetections" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Human Detections:</span>
-                        <span id="humanDetections" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Animal Detections:</span>
-                        <span id="animalDetections" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Object Detections:</span>
-                        <span id="objectDetections" class="font-bold">0</span>
-                    </div>
-                    <div class="flex justify-between">
-                        <span>Model Status:</span>
-                        <span id="modelStatus" class="font-bold">Not Trained</span>
-                    </div>
-                </div>
-
-                <button id="refreshStats" class="mt-4 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded">
-                    <i class="fas fa-sync-alt mr-2"></i>Refresh Stats
-                </button>
-            </div>
-        </div>
-    </div>
-    {% endblock %}
-
-    {% block scripts %}
-    <script>
-        let videoStream = null;
-        let isDetecting = false;
-        let detectionInterval = null;
-
-        // Initialize event listeners
-        document.addEventListener('DOMContentLoaded', function () {
-            document.getElementById('startCamera').addEventListener('click', startCamera);
-            document.getElementById('startDetection').addEventListener('click', startDetection);
-            document.getElementById('stopDetection').addEventListener('click', stopDetection);
-            document.getElementById('detectMotion').addEventListener('click', detectMotion);
-            document.getElementById('trainModel').addEventListener('click', trainModel);
-            document.getElementById('updateSettings').addEventListener('click', updateSettings);
-            document.getElementById('refreshStats').addEventListener('click', loadStats);
-            document.getElementById('uploadImages').addEventListener('click', uploadTrainingImages);
-            document.getElementById('refreshImages').addEventListener('click', loadTrainingImages);
-            document.getElementById('filterCategory').addEventListener('change', loadTrainingImages);
-
-            // Range input listeners
-            document.getElementById('areaThreshold').addEventListener('input', function () {
-                document.getElementById('areaValue').textContent = this.value + ' pixels';
-            });
-
-            document.getElementById('sensitivity').addEventListener('input', function () {
-                document.getElementById('sensitivityValue').textContent = this.value;
-            });
-
-            // Load initial stats
-            loadStats();
-        });
-
-        async function startCamera() {
-            try {
-                videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
-                document.getElementById('videoElement').srcObject = videoStream;
-                document.getElementById('startDetection').disabled = false;
-                document.getElementById('detectMotion').disabled = false;
-            } catch (error) {
-                console.error('Error accessing camera:', error);
-                alert('Could not access camera. Please check permissions.');
-            }
-        }
-
-        function startDetection() {
-            if (!isDetecting) {
-                isDetecting = true;
-                document.getElementById('motionStatus').innerHTML = '<i class="fas fa-circle mr-1"></i>DETECTING';
-                document.getElementById('motionStatus').className = 'absolute top-2 right-2 bg-green-600 text-white px-2 py-1 rounded text-sm';
-                document.getElementById('startDetection').disabled = true;
-                document.getElementById('stopDetection').disabled = false;
-
-                // Start server-side detection
-                fetch('/api/start_motion_detection', { method: 'POST' })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            console.log('Motion detection started on server');
-                        }
-                    });
-
-                // Start client-side detection loop
-                detectionInterval = setInterval(detectMotion, 2000); // Detect every 2 seconds
-            }
-        }
-
-        function stopDetection() {
-            if (isDetecting) {
-                isDetecting = false;
-                document.getElementById('motionStatus').innerHTML = '<i class="fas fa-circle mr-1"></i>STOPPED';
-                document.getElementById('motionStatus').className = 'absolute top-2 right-2 bg-gray-600 text-white px-2 py-1 rounded text-sm';
-                document.getElementById('startDetection').disabled = false;
-                document.getElementById('stopDetection').disabled = true;
-
-                if (detectionInterval) {
-                    clearInterval(detectionInterval);
-                }
-
-                // Stop server-side detection
-                fetch('/api/stop_motion_detection', { method: 'POST' })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            console.log('Motion detection stopped on server');
-                        }
-                    });
-            }
-        }
-
-        function detectMotion() {
-            const video = document.getElementById('videoElement');
-            const canvas = document.getElementById('motionCanvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-
-            const imageData = canvas.toDataURL('image/jpeg');
-
-            const formData = new FormData();
-            formData.append('image_data', imageData);
-
-            fetch('/api/detect_motion', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        displayDetectionResults(data.motion_detected, data.detections);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error detecting motion:', error);
+                // Range input listeners
+                document.getElementById('areaThreshold').addEventListener('input', function () {
+                    document.getElementById('areaValue').textContent = this.value + ' pixels';
                 });
-        }
 
-        function displayDetectionResults(motionDetected, detections) {
-            const resultsDiv = document.getElementById('detectionResults');
+                document.getElementById('sensitivity').addEventListener('input', function () {
+                    document.getElementById('sensitivityValue').textContent = this.value;
+                });
 
-            if (!motionDetected || detections.length === 0) {
-                resultsDiv.innerHTML = '<p class="text-gray-500">No motion detected</p>';
-                return;
+                // Load initial stats
+                loadStats();
+            });
+
+            async function startCamera() {
+                try {
+                    videoStream = await navigator.mediaDevices.getUserMedia({ video: true });
+                    document.getElementById('videoElement').srcObject = videoStream;
+                    document.getElementById('startDetection').disabled = false;
+                    document.getElementById('detectMotion').disabled = false;
+                } catch (error) {
+                    console.error('Error accessing camera:', error);
+                    alert('Could not access camera. Please check permissions.');
+                }
             }
 
-            resultsDiv.innerHTML = '';
+            function startDetection() {
+                if (!isDetecting) {
+                    isDetecting = true;
+                    document.getElementById('motionStatus').innerHTML = '<i class="fas fa-circle mr-1"></i>DETECTING';
+                    document.getElementById('motionStatus').className = 'absolute top-2 right-2 bg-green-600 text-white px-2 py-1 rounded text-sm';
+                    document.getElementById('startDetection').disabled = true;
+                    document.getElementById('stopDetection').disabled = false;
 
-            detections.forEach((detection, index) => {
-                const resultDiv = document.createElement('div');
-                resultDiv.className = 'p-3 rounded-lg border';
-
-                let bgClass = 'bg-blue-100 border-blue-300';
-                let iconClass = 'fas fa-circle text-blue-600';
-
-                if (detection.type === 'human') {
-                    bgClass = 'bg-red-100 border-red-300';
-                    iconClass = 'fas fa-user text-red-600';
-                } else if (detection.type === 'animal') {
-                    bgClass = 'bg-yellow-100 border-yellow-300';
-                    iconClass = 'fas fa-paw text-yellow-600';
-                } else {
-                    bgClass = 'bg-gray-100 border-gray-300';
-                    iconClass = 'fas fa-cube text-gray-600';
-                }
-
-                resultDiv.className += ' ' + bgClass;
-
-                resultDiv.innerHTML = `
-            <div class="flex items-center justify-between">
-                <div>
-                    <p class="font-semibold">
-                        <i class="${iconClass} mr-2"></i>
-                        ${detection.type.charAt(0).toUpperCase() + detection.type.slice(1)} Detected
-                    </p>
-                    <p class="text-sm">
-                        Area: ${detection.area} pixels | 
-                        Confidence: ${(detection.confidence * 100).toFixed(1)}%
-                    </p>
-                </div>
-                <div class="text-sm text-gray-600">
-                    ${new Date().toLocaleTimeString()}
-                </div>
-            </div>
-        `;
-
-                resultsDiv.appendChild(resultDiv);
-            });
-        }
-
-        function collectTrainingData() {
-            const motionType = document.getElementById('motionType').value;
-            const video = document.getElementById('videoElement');
-            const canvas = document.getElementById('motionCanvas');
-            canvas.width = video.videoWidth;
-            canvas.height = video.videoHeight;
-
-            const ctx = canvas.getContext('2d');
-            ctx.drawImage(video, 0, 0);
-
-            const imageData = canvas.toDataURL('image/jpeg');
-
-            const formData = new FormData();
-            formData.append('image_data', imageData);
-            formData.append('label', motionType);
-
-            fetch('/api/collect_motion_data', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`Training data collected for ${motionType}`);
-                        loadStats();
-                    } else {
-                        alert('Error: ' + data.error);
-                    }
-                })
-                .catch(error => {
-                    console.error('Error collecting training data:', error);
-                    alert('An error occurred while collecting training data');
-                });
-        }
-
-        function trainModel() {
-            if (confirm('This will train the motion detection model with collected data. Continue?')) {
-                fetch('/api/train_motion_model', { method: 'POST' })
-                    .then(response => response.json())
-                    .then(data => {
-                        if (data.success) {
-                            if (data.result.error) {
-                                alert('Training failed: ' + data.result.error);
-                            } else {
-                                alert(`Model trained successfully!\nAccuracy: ${(data.result.accuracy * 100).toFixed(1)}%\nTraining samples: ${data.result.training_samples}`);
-                                loadStats();
+                    // Start server-side detection
+                    fetch('/api/start_motion_detection', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Motion detection started on server');
                             }
+                        });
+
+                    // Start client-side detection loop
+                    detectionInterval = setInterval(detectMotion, 2000); // Detect every 2 seconds
+                }
+            }
+
+            function stopDetection() {
+                if (isDetecting) {
+                    isDetecting = false;
+                    document.getElementById('motionStatus').innerHTML = '<i class="fas fa-circle mr-1"></i>STOPPED';
+                    document.getElementById('motionStatus').className = 'absolute top-2 right-2 bg-gray-600 text-white px-2 py-1 rounded text-sm';
+                    document.getElementById('startDetection').disabled = false;
+                    document.getElementById('stopDetection').disabled = true;
+
+                    if (detectionInterval) {
+                        clearInterval(detectionInterval);
+                    }
+
+                    // Stop server-side detection
+                    fetch('/api/stop_motion_detection', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                console.log('Motion detection stopped on server');
+                            }
+                        });
+                }
+            }
+
+            function detectMotion() {
+                const video = document.getElementById('videoElement');
+                const canvas = document.getElementById('motionCanvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+
+                const imageData = canvas.toDataURL('image/jpeg');
+
+                const formData = new FormData();
+                formData.append('image_data', imageData);
+
+                fetch('/api/detect_motion', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            displayDetectionResults(data.motion_detected, data.detections);
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error detecting motion:', error);
+                    });
+            }
+
+            function displayDetectionResults(motionDetected, detections) {
+                const resultsDiv = document.getElementById('detectionResults');
+
+                if (!motionDetected || detections.length === 0) {
+                    resultsDiv.innerHTML = '<p class="text-gray-500">No motion detected</p>';
+                    return;
+                }
+
+                resultsDiv.innerHTML = '';
+
+                detections.forEach((detection, index) => {
+                    const resultDiv = document.createElement('div');
+                    resultDiv.className = 'p-3 rounded-lg border';
+
+                    let bgClass = 'bg-blue-100 border-blue-300';
+                    let iconClass = 'fas fa-circle text-blue-600';
+
+                    if (detection.type === 'human') {
+                        bgClass = 'bg-red-100 border-red-300';
+                        iconClass = 'fas fa-user text-red-600';
+                    } else if (detection.type === 'animal') {
+                        bgClass = 'bg-yellow-100 border-yellow-300';
+                        iconClass = 'fas fa-paw text-yellow-600';
+                    } else {
+                        bgClass = 'bg-gray-100 border-gray-300';
+                        iconClass = 'fas fa-cube text-gray-600';
+                    }
+
+                    resultDiv.className += ' ' + bgClass;
+
+                    resultDiv.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="font-semibold">
+                            <i class="${iconClass} mr-2"></i>
+                            ${detection.type.charAt(0).toUpperCase() + detection.type.slice(1)} Detected
+                        </p>
+                        <p class="text-sm">
+                            Area: ${detection.area} pixels | 
+                            Confidence: ${(detection.confidence * 100).toFixed(1)}%
+                        </p>
+                    </div>
+                    <div class="text-sm text-gray-600">
+                        ${new Date().toLocaleTimeString()}
+                    </div>
+                </div>
+            `;
+
+                    resultsDiv.appendChild(resultDiv);
+                });
+            }
+
+            function collectTrainingData() {
+                const motionType = document.getElementById('motionType').value;
+                const video = document.getElementById('videoElement');
+                const canvas = document.getElementById('motionCanvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+
+                const imageData = canvas.toDataURL('image/jpeg');
+
+                const formData = new FormData();
+                formData.append('image_data', imageData);
+                formData.append('label', motionType);
+
+                fetch('/api/collect_motion_data', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            alert(`Training data collected for ${motionType}`);
+                            loadStats();
                         } else {
                             alert('Error: ' + data.error);
                         }
                     })
                     .catch(error => {
-                        console.error('Error training model:', error);
-                        alert('An error occurred while training the model');
+                        console.error('Error collecting training data:', error);
+                        alert('An error occurred while collecting training data');
                     });
             }
-        }
 
-        function updateSettings() {
-            const areaThreshold = document.getElementById('areaThreshold').value;
-            const sensitivity = document.getElementById('sensitivity').value;
-
-            // In a real implementation, you would send these to the server
-            alert(`Settings updated:\nArea Threshold: ${areaThreshold}\nSensitivity: ${sensitivity}`);
-        }
-
-        function loadStats() {
-            fetch('/api/motion_stats')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const stats = data.stats;
-
-                        // Update training data counts
-                        document.getElementById('humanCount').textContent = stats.training_data_count.human;
-                        document.getElementById('animalCount').textContent = stats.training_data_count.animal;
-                        document.getElementById('objectCount').textContent = stats.training_data_count.object;
-
-                        // Update detection counts
-                        document.getElementById('totalDetections').textContent = stats.total_detections;
-                        document.getElementById('humanDetections').textContent = stats.detection_count.human;
-                        document.getElementById('animalDetections').textContent = stats.detection_count.animal;
-                        document.getElementById('objectDetections').textContent = stats.detection_count.object;
-
-                        // Update model status
-                        document.getElementById('modelStatus').textContent = stats.model_trained ? 'Trained' : 'Not Trained';
-                        document.getElementById('modelStatus').className = stats.model_trained ? 'font-bold text-green-600' : 'font-bold text-red-600';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading stats:', error);
-                });
-        }
-
-        function uploadTrainingImages() {
-            const files = document.getElementById('trainingImages').files;
-            const category = document.getElementById('uploadCategory').value;
-
-            if (files.length === 0) {
-                alert('Please select images to upload');
-                return;
-            }
-
-            const formData = new FormData();
-            formData.append('label', category);
-
-            for (let i = 0; i < files.length; i++) {
-                formData.append('images', files[i]);
-            }
-
-            // Show progress
-            const progressDiv = document.getElementById('uploadProgress');
-            const progressBar = document.getElementById('uploadBar');
-            const progressStatus = document.getElementById('uploadStatus');
-
-            progressDiv.classList.remove('hidden');
-            progressBar.style.width = '0%';
-            progressStatus.textContent = '0%';
-
-            fetch('/api/upload_training_images', {
-                method: 'POST',
-                body: formData
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        progressBar.style.width = '100%';
-                        progressStatus.textContent = '100%';
-
-                        setTimeout(() => {
-                            progressDiv.classList.add('hidden');
-                            alert(data.message);
-                            loadTrainingImages();
-                            loadStats();
-                            document.getElementById('trainingImages').value = '';
-                        }, 1000);
-                    } else {
-                        alert('Upload failed: ' + data.error);
-                        progressDiv.classList.add('hidden');
-                    }
-                })
-                .catch(error => {
-                    console.error('Upload error:', error);
-                    alert('Upload failed');
-                    progressDiv.classList.add('hidden');
-                });
-        }
-
-        function loadTrainingImages() {
-            const category = document.getElementById('filterCategory').value;
-            const url = category === 'all' ? '/api/get_training_images' : `/api/get_training_images?category=${category}`;
-
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    const gallery = document.getElementById('trainingGallery');
-
-                    if (data.success && data.images.length > 0) {
-                        gallery.innerHTML = '';
-
-                        data.images.forEach(image => {
-                            const imageDiv = document.createElement('div');
-                            imageDiv.className = 'bg-white rounded-lg shadow-sm border overflow-hidden';
-                            imageDiv.innerHTML = `
-                        <div class="relative">
-                            <img src="${image.web_path}" alt="${image.category}" class="w-full h-24 object-cover">
-                            <div class="absolute top-1 right-1">
-                                <span class="px-2 py-1 text-xs rounded-full ${image.category === 'human' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
-                                    ${image.category}
-                                </span>
-                            </div>
-                        </div>
-                        <div class="p-2">
-                            <p class="text-xs text-gray-600 truncate">${image.filename}</p>
-                            <button onclick="deleteTrainingImage('${image.filename}', '${image.category}')" 
-                                    class="mt-1 bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs w-full">
-                                <i class="fas fa-trash mr-1"></i>Delete
-                            </button>
-                        </div>
-                    `;
-                            gallery.appendChild(imageDiv);
+            function trainModel() {
+                if (confirm('This will train the motion detection model with collected data. Continue?')) {
+                    fetch('/api/train_motion_model', { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                if (data.result.error) {
+                                    alert('Training failed: ' + data.result.error);
+                                } else {
+                                    alert(`Model trained successfully!\nAccuracy: ${(data.result.accuracy * 100).toFixed(1)}%\nTraining samples: ${data.result.training_samples}`);
+                                    loadStats();
+                                }
+                            } else {
+                                alert('Error: ' + data.error);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error training model:', error);
+                            alert('An error occurred while training the model');
                         });
-                    } else {
-                        gallery.innerHTML = '<p class="text-gray-500 text-center col-span-full">No training images found</p>';
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading training images:', error);
-                });
-        }
+                }
+            }
 
-        function deleteTrainingImage(filename, category) {
-            if (confirm('Are you sure you want to delete this training image?')) {
-                fetch('/api/delete_training_image', {
-                    method: 'DELETE',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({
-                        filename: filename,
-                        category: category
+            function updateSettings() {
+                const areaThreshold = document.getElementById('areaThreshold').value;
+                const sensitivity = document.getElementById('sensitivity').value;
+
+                // In a real implementation, you would send these to the server
+                alert(`Settings updated:\nArea Threshold: ${areaThreshold}\nSensitivity: ${sensitivity}`);
+            }
+
+            function loadStats() {
+                fetch('/api/motion_stats')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const stats = data.stats;
+
+                            // Update training data counts
+                            document.getElementById('humanCount').textContent = stats.training_data_count.human;
+                            document.getElementById('animalCount').textContent = stats.training_data_count.animal;
+                            document.getElementById('objectCount').textContent = stats.training_data_count.object;
+
+                            // Update detection counts
+                            document.getElementById('totalDetections').textContent = stats.total_detections;
+                            document.getElementById('humanDetections').textContent = stats.detection_count.human;
+                            document.getElementById('animalDetections').textContent = stats.detection_count.animal;
+                            document.getElementById('objectDetections').textContent = stats.detection_count.object;
+
+                            // Update model status
+                            document.getElementById('modelStatus').textContent = stats.model_trained ? 'Trained' : 'Not Trained';
+                            document.getElementById('modelStatus').className = stats.model_trained ? 'font-bold text-green-600' : 'font-bold text-red-600';
+                        }
                     })
+                    .catch(error => {
+                        console.error('Error loading stats:', error);
+                    });
+            }
+
+            function uploadTrainingImages() {
+                const files = document.getElementById('trainingImages').files;
+                const category = document.getElementById('uploadCategory').value;
+
+                if (files.length === 0) {
+                    alert('Please select images to upload');
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('label', category);
+
+                for (let i = 0; i < files.length; i++) {
+                    formData.append('images', files[i]);
+                }
+
+                // Show progress
+                const progressDiv = document.getElementById('uploadProgress');
+                const progressBar = document.getElementById('uploadBar');
+                const progressStatus = document.getElementById('uploadStatus');
+
+                progressDiv.classList.remove('hidden');
+                progressBar.style.width = '0%';
+                progressStatus.textContent = '0%';
+
+                fetch('/api/upload_training_images', {
+                    method: 'POST',
+                    body: formData
                 })
                     .then(response => response.json())
                     .then(data => {
                         if (data.success) {
-                            alert('Image deleted successfully');
-                            loadTrainingImages();
-                            loadStats();
+                            progressBar.style.width = '100%';
+                            progressStatus.textContent = '100%';
+
+                            setTimeout(() => {
+                                progressDiv.classList.add('hidden');
+                                alert(data.message);
+                                loadTrainingImages();
+                                loadStats();
+                                document.getElementById('trainingImages').value = '';
+                            }, 1000);
                         } else {
-                            alert('Delete failed: ' + data.error);
+                            alert('Upload failed: ' + data.error);
+                            progressDiv.classList.add('hidden');
                         }
                     })
                     .catch(error => {
-                        console.error('Delete error:', error);
-                        alert('Delete failed');
+                        console.error('Upload error:', error);
+                        alert('Upload failed');
+                        progressDiv.classList.add('hidden');
                     });
             }
-        }
 
-        function loadStats() {
-            fetch('/api/motion_stats')
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        const stats = data.stats;
+            function loadTrainingImages() {
+                const category = document.getElementById('filterCategory').value;
+                const url = category === 'all' ? '/api/get_training_images' : `/api/get_training_images?category=${category}`;
 
-                        // Update image counts
-                        document.getElementById('humanCount').textContent = stats.training_data_count.human;
-                        document.getElementById('animalCount').textContent = stats.training_data_count.animal;
-                        document.getElementById('totalCount').textContent = stats.total_training_samples;
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        const gallery = document.getElementById('trainingGallery');
 
-                        // Update training readiness
-                        const trainingReady = document.getElementById('trainingReady');
-                        const humanCount = stats.training_data_count.human;
-                        const animalCount = stats.training_data_count.animal;
+                        if (data.success && data.images.length > 0) {
+                            gallery.innerHTML = '';
 
-                        if (humanCount >= 10 && animalCount >= 10) {
-                            trainingReady.innerHTML = '✅ Ready to train (recommended: 10+ each)';
-                            trainingReady.className = 'text-sm font-semibold text-green-600';
-                        } else if (humanCount >= 5 && animalCount >= 5) {
-                            trainingReady.innerHTML = '⚠️ Can train (minimum: 5 each)';
-                            trainingReady.className = 'text-sm font-semibold text-yellow-600';
+                            data.images.forEach(image => {
+                                const imageDiv = document.createElement('div');
+                                imageDiv.className = 'bg-white rounded-lg shadow-sm border overflow-hidden';
+                                imageDiv.innerHTML = `
+                            <div class="relative">
+                                <img src="${image.web_path}" alt="${image.category}" class="w-full h-24 object-cover">
+                                <div class="absolute top-1 right-1">
+                                    <span class="px-2 py-1 text-xs rounded-full ${image.category === 'human' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'}">
+                                        ${image.category}
+                                    </span>
+                                </div>
+                            </div>
+                            <div class="p-2">
+                                <p class="text-xs text-gray-600 truncate">${image.filename}</p>
+                                <button onclick="deleteTrainingImage('${image.filename}', '${image.category}')" 
+                                        class="mt-1 bg-red-500 hover:bg-red-600 text-white px-2 py-1 rounded text-xs w-full">
+                                    <i class="fas fa-trash mr-1"></i>Delete
+                                </button>
+                            </div>
+                        `;
+                                gallery.appendChild(imageDiv);
+                            });
                         } else {
-                            trainingReady.innerHTML = '❌ Need more training data';
-                            trainingReady.className = 'text-sm font-semibold text-red-600';
+                            gallery.innerHTML = '<p class="text-gray-500 text-center col-span-full">No training images found</p>';
                         }
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading stats:', error);
-                });
-        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading training images:', error);
+                    });
+            }
 
-        // Load images and stats when page loads
-        document.addEventListener('DOMContentLoaded', function () {
-            loadTrainingImages();
-            loadStats();
-        });
-    </script>
-    {% endblock %}
+            function deleteTrainingImage(filename, category) {
+                if (confirm('Are you sure you want to delete this training image?')) {
+                    fetch('/api/delete_training_image', {
+                        method: 'DELETE',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            filename: filename,
+                            category: category
+                        })
+                    })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                alert('Image deleted successfully');
+                                loadTrainingImages();
+                                loadStats();
+                            } else {
+                                alert('Delete failed: ' + data.error);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Delete error:', error);
+                            alert('Delete failed');
+                        });
+                }
+            }
+
+            function loadStats() {
+                fetch('/api/motion_stats')
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success) {
+                            const stats = data.stats;
+
+                            // Update image counts
+                            document.getElementById('humanCount').textContent = stats.training_data_count.human;
+                            document.getElementById('animalCount').textContent = stats.training_data_count.animal;
+                            document.getElementById('totalCount').textContent = stats.total_training_samples;
+
+                            // Update training readiness
+                            const trainingReady = document.getElementById('trainingReady');
+                            const humanCount = stats.training_data_count.human;
+                            const animalCount = stats.training_data_count.animal;
+
+                            if (humanCount >= 10 && animalCount >= 10) {
+                                trainingReady.innerHTML = '✅ Ready to train (recommended: 10+ each)';
+                                trainingReady.className = 'text-sm font-semibold text-green-600';
+                            } else if (humanCount >= 5 && animalCount >= 5) {
+                                trainingReady.innerHTML = '⚠️ Can train (minimum: 5 each)';
+                                trainingReady.className = 'text-sm font-semibold text-yellow-600';
+                            } else {
+                                trainingReady.innerHTML = '❌ Need more training data';
+                                trainingReady.className = 'text-sm font-semibold text-red-600';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error loading stats:', error);
+                    });
+            }
+
+            // Load images and stats when page loads
+            document.addEventListener('DOMContentLoaded', function () {
+                loadTrainingImages();
+                loadStats();
+            });
+        </script>
+        {% endblock %}

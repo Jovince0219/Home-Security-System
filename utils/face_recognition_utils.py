@@ -10,9 +10,14 @@ import uuid
 from utils.recording_manager import recording_manager
 
 
-# Global variables for face recognition
+# Global variables for face recognition (Authorized Persons)
 known_face_encodings = []
 known_face_names = []
+
+# Global variables for known persons (Non-threatening but not authorized)
+known_persons_encodings = []
+known_persons_names = []
+
 
 def load_known_faces():
     """Load all registered faces from database"""
@@ -28,14 +33,43 @@ def load_known_faces():
             known_face_names.append(face['name'])
         except Exception as e:
             print(f"Error loading face encoding for {face['name']}: {e}")
+
+
+def load_known_persons():
+    """Load all known persons (non-threatening but not authorized)"""
+    global known_persons_encodings, known_persons_names
+    known_persons_encodings = []
+    known_persons_names = []
+    
+    try:
+        from utils.database import get_all_known_persons
+        persons = get_all_known_persons()
+        
+        for person in persons:
+            try:
+                encoding = np.array([float(x) for x in person['encoding'].split(',')])
+                known_persons_encodings.append(encoding)
+                known_persons_names.append(person['name'])
+            except Exception as e:
+                print(f"Error loading known person encoding for {person['name']}: {e}")
+        
+        print(f"✅ Loaded {len(known_persons_names)} known persons")
+        
+    except Exception as e:
+        print(f"⚠️ Error loading known persons: {e}")
+        # If table doesn't exist yet, just continue with empty lists
+        known_persons_encodings = []
+        known_persons_names = []
             
 def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     """
     UPDATED: Face detection that works independently for unauthorized persons
     Authorized faces: Only detected when human motion is active
     Unauthorized faces: Always detected regardless of motion
+    Known Persons: Recognized but don't trigger alerts
     """
     global known_face_encodings, known_face_names
+    global known_persons_encodings, known_persons_names
     
     # Get distance estimator with user settings
     distance_estimator = get_distance_estimator()
@@ -64,54 +98,82 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         if distance_meters > distance_estimator.MAX_DETECTION_DISTANCE:
             continue  # Skip face recognition if beyond user's max distance
         
-        # STEP 3: Perform face recognition
-        matches = face_recognition.compare_faces(
-            known_face_encodings, 
-            face_encoding, 
+        # STEP 3: Check against KNOWN PERSONS first (non-threatening)
+        is_known_person = False
+        known_person_matches = face_recognition.compare_faces(
+            known_persons_encodings,
+            face_encoding,
             tolerance=0.55
         )
         
         name = "Unknown"
         confidence = 0.0
+        is_authorized = False
         
-        if True in matches:
-            matched_indices = [i for i, match in enumerate(matches) if match]
-            matched_encodings = [known_face_encodings[i] for i in matched_indices]
+        if True in known_person_matches:
+            # This is a Known Person - don't trigger alerts
+            matched_indices = [i for i, match in enumerate(known_person_matches) if match]
+            matched_encodings = [known_persons_encodings[i] for i in matched_indices]
             
             face_distances = face_recognition.face_distance(matched_encodings, face_encoding)
             best_match_index = np.argmin(face_distances)
             actual_index = matched_indices[best_match_index]
             
-            name = known_face_names[actual_index]
+            name = known_persons_names[actual_index]
             confidence = float(1.0 - face_distances[best_match_index])
             confidence = max(0.0, min(1.0, confidence))
+            is_authorized = False
+            is_known_person = True
             
-            print(f"DEBUG: Authorized face '{name}' detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
-            
-            # FOR AUTHORIZED FACES: Only process if human motion is active
-            if not motion_detector.is_human_motion_active():
-                print(f"SKIPPING AUTHORIZED FACE: No human motion active")
-                continue  # Skip authorized faces when no human motion
+            print(f"DEBUG: Known Person '{name}' detected at {distance_meters:.2f}m - No alert triggered")
             
         else:
-            name = "Unauthorized"
-            # For unauthorized faces, estimate confidence based on face size/quality
-            face_width_pixels = right - left
-            face_height_pixels = bottom - top
-            face_area = face_width_pixels * face_height_pixels
+            # STEP 4: Check against AUTHORIZED PERSONS
+            matches = face_recognition.compare_faces(
+                known_face_encodings, 
+                face_encoding, 
+                tolerance=0.55
+            )
             
-            # Simple confidence estimation for unauthorized faces
-            if face_area > 10000:
-                confidence = 0.85
-            elif face_area > 5000:
-                confidence = 0.70
+            if True in matches:
+                # Authorized person detected
+                matched_indices = [i for i, match in enumerate(matches) if match]
+                matched_encodings = [known_face_encodings[i] for i in matched_indices]
+                
+                face_distances = face_recognition.face_distance(matched_encodings, face_encoding)
+                best_match_index = np.argmin(face_distances)
+                actual_index = matched_indices[best_match_index]
+                
+                name = known_face_names[actual_index]
+                confidence = float(1.0 - face_distances[best_match_index])
+                confidence = max(0.0, min(1.0, confidence))
+                is_authorized = True
+                
+                print(f"DEBUG: Authorized face '{name}' detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
+                
+                # FOR AUTHORIZED FACES: Only process if human motion is active
+                if not motion_detector.is_human_motion_active():
+                    print(f"SKIPPING AUTHORIZED FACE: No human motion active")
+                    continue  # Skip authorized faces when no human motion
+                    
             else:
-                confidence = 0.55
-            
-            print(f"DEBUG: Unauthorized face detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
-            # UNAUTHORIZED FACES: Always process regardless of motion
-
-        is_authorized = name != "Unauthorized"
+                # Unauthorized person detected
+                name = "Unauthorized"
+                is_authorized = False
+                
+                # Estimate confidence based on face size/quality
+                face_width_pixels = right - left
+                face_height_pixels = bottom - top
+                face_area = face_width_pixels * face_height_pixels
+                
+                if face_area > 10000:
+                    confidence = 0.85
+                elif face_area > 5000:
+                    confidence = 0.70
+                else:
+                    confidence = 0.55
+                
+                print(f"DEBUG: Unauthorized face detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
         
         # Use distance estimator with user settings
         distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
@@ -136,6 +198,8 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         # Determine display name based on distance and authorization
         if is_authorized:
             display_name = str(name)
+        elif is_known_person:
+            display_name = f"{name} (Known)"
         else:
             if distance_analysis['within_detection_range']:
                 display_name = 'Unauthorized'
@@ -149,6 +213,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             'location': [int(adjusted_top), int(adjusted_right), int(adjusted_bottom), int(adjusted_left)],
             'face_covered': bool(face_covered),
             'is_authorized': bool(is_authorized),
+            'is_known_person': bool(is_known_person),
             'display_name': display_name,
             'distance_meters': float(distance_analysis['distance_meters']),
             'distance_feet': float(distance_analysis['distance_feet']),
@@ -160,15 +225,15 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         
         results.append(result)
         
-        # STEP 4: Handle unauthorized faces (check for duplicates)
-        if not is_authorized and distance_analysis['trigger_alert']:
-            # ✅ UPDATED: Check if we should trigger alert (with face tracking)
+        # STEP 5: Handle ONLY unauthorized faces (not known persons)
+        if not is_authorized and not is_known_person and distance_analysis['trigger_alert']:
+            # Trigger alert for unauthorized person
             event_id = trigger_security_alert(
                 "Unauthorized Face", 
                 "Unauthorized Person", 
                 confidence, 
                 frame,
-                face_encoding  # Pass the face encoding for tracking
+                face_encoding
             )
             
             if event_id:
@@ -179,7 +244,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             # Update detection time for ongoing recording
             recording_manager.update_detection_time()
             
-            # DETECTION - Log it (even if alert was skipped)
+            # Log detection to database
             try:
                 screenshot_path = save_screenshot(
                     frame, 

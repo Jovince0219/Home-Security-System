@@ -9,42 +9,71 @@
 </head>
 <body class="bg-gray-100 min-h-screen">
     <nav class="bg-blue-900 text-white shadow-lg">
-        <div class="max-w-7xl mx-auto px-4">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center py-4">
-                <div class="flex items-center space-x-4">
-                    <i class="fas fa-shield-alt text-2xl"></i>
-                    <h1 class="text-xl font-bold">Security System</h1>
+                <div class="flex items-center space-x-2 sm:space-x-4">
+                    <i class="fas fa-shield-alt text-xl sm:text-2xl"></i>
+                    <h1 class="text-lg sm:text-xl font-bold">Security System</h1>
                 </div>
-                <div class="flex space-x-6">
-                    <a href="{{ url_for('dashboard') }}" class="hover:text-blue-200 transition-colors">
-                        <i class="fas fa-tachometer-alt mr-2"></i>Dashboard
+                
+                <!-- Mobile menu button -->
+                <div class="md:hidden">
+                    <button id="mobileMenuButton" class="text-white focus:outline-none">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                </div>
+                
+                <!-- Desktop menu -->
+                <div class="hidden md:flex space-x-4 lg:space-x-6">
+                    <a href="{{ url_for('dashboard') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-tachometer-alt mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                        <span class="text-sm sm:text-base">Dashboard</span>
                     </a>
-                    <a href="{{ url_for('face_registration') }}" class="hover:text-blue-200 transition-colors">
-                        <i class="fas fa-user-plus mr-2"></i>Face Registration
+                    <a href="{{ url_for('face_registration') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-user-plus mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                        <span class="text-sm sm:text-base">Faces</span>
                     </a>
-                    <a href="{{ url_for('motion_detection') }}" class="hover:text-blue-200 transition-colors">
-                        <i class="fas fa-running mr-2"></i>Motion Detection
+                    <a href="{{ url_for('motion_detection') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-running mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                        <span class="text-sm sm:text-base">Motion</span>
                     </a>
-                    <a href="{{ url_for('alerts') }}" class="hover:text-blue-200 transition-colors">
-                        <i class="fas fa-bell mr-2"></i>Alerts
+                    <a href="{{ url_for('alerts') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-bell mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                        <span class="text-sm sm:text-base">Alerts</span>
                     </a>
-                    <!-- <a href="{{ url_for('playback') }}" class="hover:text-blue-200 transition-colors">
-                        <i class="fas fa-play mr-2"></i>Playback
-                    </a> -->
-                    <!-- <a href="{{ url_for('controls') }}" class="hover:text-blue-200 transition-colors">
-                        <i class="fas fa-gamepad mr-2"></i>Controls
-                    </a> -->
+                </div>
+            </div>
+            
+            <!-- Mobile menu -->
+            <div id="mobileMenu" class="hidden md:hidden pb-4 border-t border-blue-700">
+                <div class="flex flex-col space-y-3 mt-3">
+                    <a href="{{ url_for('dashboard') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-tachometer-alt mr-3"></i>
+                        Dashboard
+                    </a>
+                    <a href="{{ url_for('face_registration') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-user-plus mr-3"></i>
+                        Face Registration
+                    </a>
+                    <a href="{{ url_for('motion_detection') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-running mr-3"></i>
+                        Motion Detection
+                    </a>
+                    <a href="{{ url_for('alerts') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-bell mr-3"></i>
+                        Alerts
+                    </a>
                 </div>
             </div>
         </div>
     </nav>
 
-    <main class="max-w-7xl mx-auto py-6 px-4">
+    <main class="max-w-7xl mx-auto py-4 sm:py-6 px-3 sm:px-4 lg:px-8">
         {% with messages = get_flashed_messages() %}
             {% if messages %}
                 <div class="mb-4">
                     {% for message in messages %}
-                        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-4 py-3 rounded mb-2">
+                        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-3 sm:px-4 py-3 rounded mb-2 text-sm sm:text-base">
                             {{ message }}
                         </div>
                     {% endfor %}
@@ -56,6 +85,13 @@
     </main>
 
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        // Mobile menu toggle
+        document.getElementById('mobileMenuButton').addEventListener('click', function() {
+            const menu = document.getElementById('mobileMenu');
+            menu.classList.toggle('hidden');
+        });
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

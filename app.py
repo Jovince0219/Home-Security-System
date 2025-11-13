@@ -16,7 +16,7 @@ from utils.distance_estimation import get_distance_estimator
 import threading
 import time
 from utils.recording_manager import recording_manager as global_recording_manager 
-
+from utils.face_recognition_utils import load_known_faces
 
 app = Flask(__name__)
 app.secret_key = 'your-secret-key-here'
@@ -40,6 +40,13 @@ known_face_encodings = []
 known_face_names = []
 motion_detector = None
 recording_manager = None
+# Global variables for face recognition
+known_face_encodings = []
+known_face_names = []
+
+# Global variables for known persons (non-threatening)
+known_persons_encodings = []
+known_persons_names = []
 
 def start_background_cleanup():
     """Start background thread to clean up old face tracking data"""
@@ -795,6 +802,170 @@ def log_motion_detection():
         })
         
     except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+    
+@app.route('/api/get_detection_screenshots/<int:detection_id>')
+def get_detection_screenshots(detection_id):
+    """Get all screenshots from a detection event"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Get the detection
+        detection = conn.execute(
+            'SELECT screenshot_path FROM detections WHERE id = ?', 
+            (detection_id,)
+        ).fetchone()
+        
+        conn.close()
+        
+        if detection and detection['screenshot_path']:
+            screenshots = [detection['screenshot_path']]
+        else:
+            screenshots = []
+        
+        return jsonify({
+            'success': True,
+            'screenshots': screenshots,
+            'detection_id': detection_id
+        })
+        
+    except Exception as e:
+        print(f"Error getting detection screenshots: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/register_known_person', methods=['POST'])
+def register_known_person():
+    """Register a face as a Known Person (from false alarm)"""
+    try:
+        name = request.form.get('name')
+        detection_id = request.form.get('detection_id')
+        selected_images = request.form.getlist('selected_images[]')
+        
+        print(f"📝 Registering Known Person: name={name}, detection_id={detection_id}, images={len(selected_images)}")
+        
+        if not name or not selected_images:
+            return jsonify({'success': False, 'error': 'Name and images required'})
+        
+        # Process each selected image
+        registered_count = 0
+        from utils.database import add_known_person
+        
+        for image_path in selected_images:
+            # Remove leading slash if present
+            clean_path = image_path.lstrip('/')
+            
+            if os.path.exists(clean_path):
+                try:
+                    # Load image and extract face encoding
+                    image = face_recognition.load_image_file(clean_path)
+                    face_locations = face_recognition.face_locations(image)
+                    
+                    if len(face_locations) > 0:
+                        face_encoding = face_recognition.face_encodings(image, face_locations)[0]
+                        
+                        # Save to known_persons database
+                        add_known_person(name, face_encoding, clean_path, detection_id)
+                        registered_count += 1
+                        print(f"✅ Registered image: {clean_path}")
+                    else:
+                        print(f"⚠️ No face found in image: {clean_path}")
+                        
+                except Exception as e:
+                    print(f"❌ Error processing image {clean_path}: {e}")
+            else:
+                print(f"❌ Image not found: {clean_path}")
+        
+        if registered_count == 0:
+            return jsonify({
+                'success': False, 
+                'error': 'No faces could be extracted from selected images'
+            })
+        
+        # Reload face recognition model to include known persons
+        from utils.face_recognition_utils import load_known_faces, load_known_persons
+        load_known_faces()
+        load_known_persons()
+        
+        print(f"✅ Successfully registered {registered_count} images for {name}")
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully registered {registered_count} image(s) for {name} as Known Person',
+            'registered_count': registered_count
+        })
+        
+    except Exception as e:
+        print(f"❌ Error in register_known_person: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/get_known_persons')
+def get_known_persons():
+    """Get all registered known persons"""
+    try:
+        from utils.database import get_all_known_persons
+        known_persons = get_all_known_persons()
+        
+        persons_list = []
+        for person in known_persons:
+            persons_list.append({
+                'id': person['id'],
+                'name': person['name'],
+                'image_path': person['image_path'],
+                'created_at': person['created_at'],
+                'registered_from_false_alarm': bool(person['registered_from_false_alarm'])
+            })
+        
+        return jsonify({
+            'success': True, 
+            'known_persons': persons_list,
+            'total_count': len(persons_list)
+        })
+        
+    except Exception as e:
+        print(f"Error getting known persons: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/api/delete_known_person/<int:person_id>', methods=['DELETE'])
+def delete_known_person(person_id):
+    """Delete a known person"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Get person details first
+        person = conn.execute(
+            'SELECT * FROM known_persons WHERE id = ?', 
+            (person_id,)
+        ).fetchone()
+        
+        if person:
+            # Delete image file if it exists
+            if os.path.exists(person['image_path']):
+                os.remove(person['image_path'])
+            
+            # Delete from database
+            conn.execute('DELETE FROM known_persons WHERE id = ?', (person_id,))
+            conn.commit()
+            
+            # Reload known persons
+            from utils.face_recognition_utils import load_known_persons
+            load_known_persons()
+            
+            conn.close()
+            return jsonify({'success': True, 'message': 'Known person deleted successfully'})
+        else:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Person not found'})
+        
+    except Exception as e:
+        print(f"Error deleting known person: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/debug_detections')
@@ -2515,21 +2686,30 @@ def estimate_distance():
 
 if __name__ == '__main__':
     from utils.database import init_db
-    from utils.face_recognition_utils import load_known_faces
+    from utils.face_recognition_utils import load_known_faces, load_known_persons
     from utils.motion_detection_utils import MotionDetector
     from utils.recording_utils import RecordingManager
     
     # Initialize database
     init_db()
     
-    # Load known faces
+    # Load known faces (Authorized Persons)
+    print("📋 Loading authorized persons...")
     load_known_faces()
+    
+    # Load known persons (Non-threatening)
+    print("📋 Loading known persons...")
+    load_known_persons()
     
     # Initialize motion detector
     motion_detector = MotionDetector()
     
     # Initialize recording manager
     recording_manager = RecordingManager()
+    
+    print("✅ System initialized successfully!")
+    print(f"   - Authorized Persons: {len(known_face_names)}")
+    print(f"   - Known Persons: {len(known_persons_names)}")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
 

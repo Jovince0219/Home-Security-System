@@ -602,10 +602,17 @@
             let borderColor, bgColor, boxShadow;
 
             if (face.is_authorized) {
+                // Green for authorized persons
                 borderColor = '#22c55e';
                 bgColor = 'rgba(34, 197, 94, 0.1)';
                 boxShadow = '0 0 15px rgba(34, 197, 94, 0.6)';
+            } else if (face.is_known_person) {
+                // Yellow for known persons (non-threatening)
+                borderColor = '#eab308';
+                bgColor = 'rgba(234, 179, 8, 0.15)';
+                boxShadow = '0 0 15px rgba(234, 179, 8, 0.6)';
             } else {
+                // Red for unauthorized
                 borderColor = '#dc2626';
                 bgColor = 'rgba(220, 38, 38, 0.15)';
                 boxShadow = '0 0 20px rgba(220, 38, 38, 0.8)';

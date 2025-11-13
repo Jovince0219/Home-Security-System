@@ -10,11 +10,11 @@ def get_db_connection():
     return conn
 
 def init_db():
-    """Initialize database with support for faceless human detections"""
+    """Initialize database with support for faceless human detections and known persons"""
     conn = sqlite3.connect('security_system.db')
     c = conn.cursor()
     
-    # Create faces table
+    # Create faces table (Authorized Persons)
     conn.execute('''
         CREATE TABLE IF NOT EXISTS faces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,6 +22,20 @@ def init_db():
             encoding TEXT NOT NULL,
             image_path TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
+    # Create known_persons table (Non-threatening but not authorized)
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS known_persons (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            encoding TEXT NOT NULL,
+            image_path TEXT NOT NULL,
+            detection_id INTEGER,
+            registered_from_false_alarm BOOLEAN DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (detection_id) REFERENCES detections (id)
         )
     ''')
     
@@ -98,8 +112,6 @@ def init_db():
         )
     ''')
     
-    # === INSERT THE NEW TWILIO TABLES HERE ===
-    
     # Twilio settings table
     conn.execute('''
         CREATE TABLE IF NOT EXISTS twilio_settings (
@@ -143,7 +155,7 @@ def init_db():
     
     conn.commit()
     conn.close()
-
+    
 def add_face(name, encoding, image_path):
     conn = get_db_connection()
     encoding_str = ','.join(map(str, encoding))
@@ -764,3 +776,100 @@ def get_playback_statistics():
         return {}
     finally:
         conn.close()
+
+def add_known_person(name, encoding, image_path, detection_id=None):
+    """Add a person to known persons (non-threatening but not authorized)"""
+    try:
+        conn = get_db_connection()
+        encoding_str = ','.join(map(str, encoding))
+        
+        cursor = conn.execute(
+            '''INSERT INTO known_persons 
+            (name, encoding, image_path, detection_id, registered_from_false_alarm) 
+            VALUES (?, ?, ?, ?, 1)''',
+            (name, encoding_str, image_path, detection_id)
+        )
+        
+        person_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Added known person to database: {name} (ID: {person_id})")
+        return person_id
+        
+    except Exception as e:
+        print(f"❌ Error adding known person: {e}")
+        raise e
+
+
+def get_all_known_persons():
+    """Get all known persons"""
+    try:
+        conn = get_db_connection()
+        known_persons = conn.execute(
+            'SELECT * FROM known_persons ORDER BY created_at DESC'
+        ).fetchall()
+        conn.close()
+        return known_persons
+    except Exception as e:
+        print(f"Error getting known persons: {e}")
+        return []
+
+
+def get_known_person_by_id(person_id):
+    """Get a specific known person by ID"""
+    try:
+        conn = get_db_connection()
+        person = conn.execute(
+            'SELECT * FROM known_persons WHERE id = ?', 
+            (person_id,)
+        ).fetchone()
+        conn.close()
+        return person
+    except Exception as e:
+        print(f"Error getting known person: {e}")
+        return None
+
+
+def get_screenshots_by_detection_id(detection_id):
+    """Get all screenshots related to a specific detection event"""
+    try:
+        conn = get_db_connection()
+        
+        # Get the detection
+        detection = conn.execute(
+            'SELECT screenshot_path FROM detections WHERE id = ?', 
+            (detection_id,)
+        ).fetchone()
+        
+        conn.close()
+        
+        # Return list of screenshot paths
+        if detection and detection['screenshot_path']:
+            return [detection['screenshot_path']]
+        else:
+            return []
+            
+    except Exception as e:
+        print(f"Error getting screenshots by detection ID: {e}")
+        return []
+
+
+def search_known_persons_by_name(query):
+    """Search known persons by name"""
+    try:
+        conn = get_db_connection()
+        if query:
+            persons = conn.execute(
+                'SELECT * FROM known_persons WHERE name LIKE ? ORDER BY created_at DESC', 
+                (f'%{query}%',)
+            ).fetchall()
+        else:
+            persons = conn.execute(
+                'SELECT * FROM known_persons ORDER BY created_at DESC'
+            ).fetchall()
+        conn.close()
+        return persons
+    except Exception as e:
+        print(f"Error searching known persons: {e}")
+        return []
