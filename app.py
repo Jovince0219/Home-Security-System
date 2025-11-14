@@ -131,6 +131,213 @@ def twilio_settings():
             
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/start_event_recording', methods=['POST'])
+def start_event_recording():
+    """Start recording for specific event types with cooldown"""
+    try:
+        event_type = request.form.get('event_type')  # authorized, unauthorized, known, motion
+        event_id = request.form.get('event_id')
+        
+        if not event_type or not event_id:
+            return jsonify({'success': False, 'error': 'Event type and ID required'})
+        
+        # Start recording
+        recording_path = global_recording_manager.start_recording_for_event(event_id, event_type)
+        
+        if recording_path:
+            return jsonify({
+                'success': True, 
+                'recording_path': recording_path,
+                'message': f'Recording started for {event_type}'
+            })
+        else:
+            return jsonify({
+                'success': False, 
+                'error': 'Recording not started (may be in cooldown)'
+            })
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/get_filtered_alerts')
+def get_filtered_alerts():
+    """Get alerts filtered by type using efficient database joins - INCLUDES AUTHORIZED AND KNOWN FACES"""
+    try:
+        filter_type = request.args.get('filter', 'all')
+        
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Updated query to include ALL face detection types with proper categorization
+        # FIXED: Removed the problematic JOIN that was causing the error
+        query = '''
+            SELECT 
+                d.*,
+                CASE 
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM faces) THEN 'authorized'
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM known_persons) THEN 'known'
+                    WHEN d.detection_type = 'face_detection' AND (d.person_name = 'Unauthorized' OR d.person_name LIKE 'Unauthorized (%') THEN 'unauthorized'
+                    WHEN d.detection_type = 'motion_detection' AND d.person_name LIKE 'Motion Detected%' THEN 'motion'
+                    ELSE 'other'
+                END as category
+            FROM detections d 
+            WHERE d.detection_type IN ('face_detection', 'motion_detection')
+        '''
+        params = []
+        
+        # Apply filters
+        if filter_type == 'authorized':
+            query += ' AND category = "authorized"'
+        elif filter_type == 'unauthorized':
+            query += ' AND category = "unauthorized"'
+        elif filter_type == 'known':
+            query += ' AND category = "known"'
+        elif filter_type == 'motion':
+            query += ' AND category = "motion"'
+        elif filter_type == 'all_faces':
+            query += ' AND category IN ("authorized", "known", "unauthorized")'
+        
+        query += ' ORDER BY d.timestamp DESC LIMIT 100'
+        
+        detections = conn.execute(query, params).fetchall()
+        
+        alerts_list = []
+        for detection in detections:
+            # Try to find recording file by filename pattern matching
+            recording_path = find_recording_by_detection(detection)
+            
+            # Determine display name and icon based on category
+            category = detection['category']
+            person_name = detection['person_name']
+            
+            alert_data = {
+                'id': detection['id'],
+                'type': detection['detection_type'],
+                'person_name': person_name,
+                'confidence': detection['confidence'],
+                'timestamp': detection['timestamp'],
+                'screenshot_path': detection['screenshot_path'],
+                'alert_level': detection['alert_level'],
+                'recording_path': recording_path,
+                'category': category
+            }
+            
+            alerts_list.append(alert_data)
+        
+        conn.close()
+        
+        print(f"📊 DEBUG: Returning {len(alerts_list)} alerts for filter '{filter_type}'")
+        for alert in alerts_list[:5]:  # Print first 5 for debugging
+            print(f"  - {alert['person_name']} ({alert['category']}) - Recording: {alert['recording_path']}")
+        
+        return jsonify({'success': True, 'alerts': alerts_list})
+        
+    except Exception as e:
+        print(f"❌ ERROR in get_filtered_alerts: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
+def find_recording_by_detection(detection):
+    """Find recording file by detection timestamp and type"""
+    try:
+        import os
+        import datetime
+        
+        detection_time = datetime.datetime.strptime(detection['timestamp'], '%Y-%m-%d %H:%M:%S')
+        detection_date = detection_time.strftime('%Y%m%d')
+        
+        recordings_dir = 'static/recordings'
+        if not os.path.exists(recordings_dir):
+            return None
+        
+        # Look for recording files that match the detection time and type
+        for filename in os.listdir(recordings_dir):
+            if not filename.endswith(('.mp4', '.avi')):
+                continue
+                
+            # Check if filename contains the detection date
+            if detection_date in filename:
+                # Determine event type based on category
+                category = detection['category']
+                if category == 'authorized' and 'authorized' in filename.lower():
+                    return f"static/recordings/{filename}"
+                elif category == 'known' and 'known' in filename.lower():
+                    return f"static/recordings/{filename}"
+                elif category == 'unauthorized' and 'unauthorized' in filename.lower():
+                    return f"static/recordings/{filename}"
+                elif category == 'motion' and 'motion' in filename.lower():
+                    return f"static/recordings/{filename}"
+        
+        # If no exact match found, return any recording from that day
+        for filename in os.listdir(recordings_dir):
+            if detection_date in filename and filename.endswith(('.mp4', '.avi')):
+                return f"static/recordings/{filename}"
+                
+        return None
+        
+    except Exception as e:
+        print(f"Error finding recording for detection: {e}")
+        return None
+    
+
+@app.route('/api/get_recording_for_alert/<int:alert_id>')
+def get_recording_for_alert(alert_id):
+    """Get recording file for a specific alert"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        recording = conn.execute('''
+            SELECT r.file_path FROM recordings r 
+            JOIN detections d ON r.detection_id = d.id 
+            WHERE d.id = ?
+        ''', (alert_id,)).fetchone()
+        
+        conn.close()
+        
+        if recording and recording['file_path']:
+            return jsonify({
+                'success': True,
+                'recording_path': recording['file_path'],
+                'filename': os.path.basename(recording['file_path'])
+            })
+        else:
+            return jsonify({'success': False, 'error': 'No recording found'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/debug_recordings')
+def debug_recordings():
+    """Debug endpoint to check recording files"""
+    try:
+        recordings_dir = 'static/recordings'
+        files = []
+        
+        if os.path.exists(recordings_dir):
+            for filename in os.listdir(recordings_dir):
+                if filename.endswith('.mp4'):
+                    filepath = os.path.join(recordings_dir, filename)
+                    files.append({
+                        'filename': filename,
+                        'filepath': filepath,
+                        'exists': os.path.exists(filepath),
+                        'size': os.path.getsize(filepath) if os.path.exists(filepath) else 0,
+                        'web_path': f'/static/recordings/{filename}'
+                    })
+        
+        return jsonify({
+            'success': True,
+            'recordings_dir': recordings_dir,
+            'files': files,
+            'total_files': len(files)
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
 
 @app.route('/api/alert_events')
 def get_alert_events():
@@ -194,6 +401,7 @@ def reset_answered_calls():
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+    
     
 @app.route('/api/face_tracking_stats')
 def get_face_tracking_stats():
@@ -2202,16 +2410,26 @@ def dashboard_action():
     
 @app.route('/api/unauthorized_detections')
 def unauthorized_detections():
-    """Get all security-related detections"""
+    """Get all security-related detections - INCLUDES AUTHORIZED AND KNOWN FACES"""
     try:
         from utils.database import get_db_connection
         conn = get_db_connection()
         
-        # Get ALL recent detections - no filtering
+        # Get ALL recent detections including authorized and known faces
         all_detections = conn.execute('''
-            SELECT * FROM detections 
-            ORDER BY timestamp DESC 
-            LIMIT 20
+            SELECT 
+                d.*,
+                CASE 
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM faces) THEN 'authorized'
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM known_persons) THEN 'known'
+                    WHEN d.detection_type = 'face_detection' AND (d.person_name = 'Unauthorized' OR d.person_name LIKE 'Unauthorized (%') THEN 'unauthorized'
+                    WHEN d.detection_type = 'motion_detection' THEN 'motion'
+                    ELSE 'other'
+                END as category
+            FROM detections d 
+            WHERE d.detection_type IN ('face_detection', 'motion_detection')
+            ORDER BY d.timestamp DESC 
+            LIMIT 50
         ''').fetchall()
         
         detections_list = []
@@ -2219,7 +2437,7 @@ def unauthorized_detections():
             detection_dict = dict(detection)
             
             # For debugging, print every detection
-            print(f"📋 DATABASE DETECTION: type={detection_dict['detection_type']}, name='{detection_dict['person_name']}'")
+            print(f"📋 DETECTION: type={detection_dict['detection_type']}, name='{detection_dict['person_name']}', category={detection_dict['category']}")
             
             # Include ALL detections in the results
             detections_list.append({
@@ -2229,7 +2447,8 @@ def unauthorized_detections():
                 'confidence': detection_dict['confidence'],
                 'timestamp': detection_dict['timestamp'],
                 'screenshot_path': detection_dict['screenshot_path'],
-                'alert_level': detection_dict['alert_level']
+                'alert_level': detection_dict['alert_level'],
+                'category': detection_dict['category']
             })
         
         print(f"📊 Returning {len(detections_list)} total detections")

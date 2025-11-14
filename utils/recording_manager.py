@@ -2,361 +2,424 @@ import cv2
 import os
 import threading
 import time
-import uuid
-from datetime import datetime, timedelta
-from collections import deque
+import datetime
+from utils.database import add_recording
 import logging
-import imageio.v3 as iio
+import queue
 
 class RecordingManager:
     def __init__(self):
-        # Setup logging FIRST
-        self.setup_logging()
-        
-        self.recording = False
-        self.current_event_id = None
+        self.is_recording = False
+        self.current_recording_path = None
         self.video_writer = None
-        self.pre_buffer = deque(maxlen=75)  # 5 seconds of pre-buffer at 15fps
+        self.recording_start_time = None
         self.recording_thread = None
-        self.stop_recording_flag = False
-        self.last_detection_time = None
-        self.recording_timeout = 10  # Stop 10s after last detection
-        self.start_time = time.time()
-        self.current_filepath = None  # Tracks the raw .avi filepath
+        self.frame_processing_thread = None
+        self.should_stop_recording = False
+        self.recording_cooldowns = {}
+        self.min_recording_duration = 3  # Minimum seconds to prevent spam
+        self.recording_duration = 20  # Default recording duration
         
-        self.fps = 15
-        self.resolution = (640, 480)
+        # Real-time frame management
+        self.frame_queue = queue.Queue(maxsize=30)  # Limit queue size to prevent memory issues
+        self.target_fps = 15  # Normal FPS for security footage
+        self.frame_interval = 1.0 / self.target_fps
+        self.last_frame_time = None
+        self.frame_count = 0
         
-        # ==========================================================
-        # ✅ STEP 1: Record in the MOST RELIABLE format (XVID/AVI)
-        # This fixes the "Cannot open file - codec issue" error.
-        # ==========================================================
-        self.codec = cv2.VideoWriter_fourcc(*'XVID')  # Use 'XVID'
-        self.file_extension = '.avi'                 # Use '.avi' container
-        
-        self.recordings_folder = 'static/recordings'
-        os.makedirs(self.recordings_folder, exist_ok=True)
-        
-        # Removed emoji to prevent UnicodeEncodeError
-        self.logger.info("RecordingManager initialized with XVID codec and AVI format")
-        
-    def setup_logging(self):
-        logging.basicConfig(
-            level=logging.INFO,
-            format='%(asctime)s - %(levelname)s - %(message)s',
-            handlers=[
-                # Added encoding='utf-8' to file handler
-                logging.FileHandler('recording_manager.log', encoding='utf-8'),
-                logging.StreamHandler()
-            ]
-        )
-        self.logger = logging.getLogger(__name__)
-        
-    def start_recording_for_event(self, event_id, trigger_type):
-        """Start recording for a new event"""
-        if self.recording:
-            if self.current_event_id == event_id:
-                self.last_detection_time = time.time()
-                # Return the *final* path the browser will look for
-                if self.current_filepath:
-                    return self.current_filepath.replace(self.file_extension, '.mp4')
-                return None
-            else:
-                # Stop the previous recording if a new event comes in
-                self.stop_recording()
-                
-        self.current_event_id = event_id
-        self.recording = True
-        self.stop_recording_flag = False
-        self.last_detection_time = time.time()
-        self.start_time = time.time()
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        # We use event_id in the name to make it unique
-        filename = f"recording_{event_id}_{timestamp}{self.file_extension}"
-        filepath = os.path.join(self.recordings_folder, filename)
-        
-        filepath = filepath.replace('\\', '/')
-        
-        self.current_filepath = filepath  # Store the raw .avi filepath
-        
-        self.video_writer = cv2.VideoWriter(
-            filepath, 
-            self.codec, 
-            self.fps, 
-            self.resolution,
-            isColor=True
-        )
-        
-        if not self.video_writer.isOpened():
-            self.logger.error(f"❌ Failed to initialize video writer for {filepath} (Codec: XVID)")
-            self.recording = False
-            return None
-        
-        self._write_pre_buffer()
-        
-        self.recording_thread = threading.Thread(target=self._recording_monitor)
-        self.recording_thread.daemon = True
-        self.recording_thread.start()
-        
-        self.logger.info(f"🎥 Started raw recording for event {event_id}: {filepath}")
-        
-        # Return the *final* .mp4 path that will be created
-        return filepath.replace(self.file_extension, '.mp4')
-        
-    def add_frame(self, frame):
-        """Add frame to recording or pre-buffer"""
-        if frame is None:
-            return
-            
+        # Create recordings directory if it doesn't exist
+        os.makedirs('static/recordings', exist_ok=True)
+
+    def start_recording_for_event(self, event_id, event_type):
+        """Start recording for a specific event with cooldown management"""
         try:
-            # Resize frame to match resolution
-            frame_resized = cv2.resize(frame, self.resolution)
+            # Check cooldown for this event type
+            current_time = time.time()
+            last_recording_time = self.recording_cooldowns.get(event_type, 0)
             
-            if self.recording and self.video_writer and self.video_writer.isOpened():
-                # Write frame in BGR format (OpenCV expectation)
-                self.video_writer.write(frame_resized)
-            else:
-                # Store in pre-buffer
-                self.pre_buffer.append(frame_resized.copy())
-                
-        except Exception as e:
-            self.logger.error(f"Error adding frame to recording: {e}")
+            if current_time - last_recording_time < 20:  # 20 second cooldown
+                print(f"⏳ Recording cooldown active for {event_type}, skipping...")
+                return None
             
-    def _write_pre_buffer(self):
-        """Write pre-buffer frames to current recording"""
-        for frame in self.pre_buffer:
-            if self.video_writer and self.video_writer.isOpened():
-                try:
-                    self.video_writer.write(frame)
-                except Exception as e:
-                    self.logger.error(f"Error writing pre-buffer frame: {e}")
-                    
-    def _recording_monitor(self):
-        """Monitor recording and stop when no detections for timeout period"""
-        
-        MINIMUM_RECORDING_DURATION = 10
-        
-        while self.recording and not self.stop_recording_flag:
-                current_time = time.time()
-
-                if self.last_detection_time is None: # Safety check
-                    self.last_detection_time = current_time
-                if self.start_time is None: # Safety check
-                    self.start_time = current_time
-
-                time_since_last_detection = current_time - self.last_detection_time
-                time_since_start = current_time - self.start_time
-
-                if (time_since_last_detection > self.recording_timeout and
-                    time_since_start > MINIMUM_RECORDING_DURATION):
-
-                    self.stop_recording()
-                    break
-
-                time.sleep(1)
+            # Stop any existing recording
+            if self.is_recording:
+                self.stop_recording()
+                time.sleep(1.0)  # Longer pause between recordings
             
-    def stop_recording(self):
-        """Stop current recording, release the file, and convert it to MP4."""
-        if self.recording and self.video_writer:
-            self.recording = False
-            self.stop_recording_flag = True
+            # Start new recording
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
+            clean_event_type = event_type.replace(' ', '_').replace('/', '_')
+            filename = f"recording_{clean_event_type}_{timestamp}_{event_id}.mp4"
+            filepath = os.path.join('static', 'recordings', filename)
             
-            # Keep a copy of the path before clearing
-            filepath_to_convert = self.current_filepath 
-            
-            try:
-                self.video_writer.release()
-                self.logger.info(f"🛑 Stopped raw recording for event {self.current_event_id} at {filepath_to_convert}")
-            except Exception as e:
-                self.logger.error(f"Error releasing video writer: {e}")
+            # Try different codecs for compatibility
+            fourcc = None
+            codecs_to_try = [
+                ('avc1', '.mp4'),  # H.264
+                ('mp4v', '.mp4'),  # MPEG-4
+                ('XVID', '.avi'),  # XVID
+                ('MJPG', '.avi')   # Motion JPEG
+            ]
             
             self.video_writer = None
-            self.pre_buffer.clear()
-            self.current_event_id = None
-            self.current_filepath = None # Clear this
-            
-            # ==========================================================
-            # ✅ STEP 2: Automatically convert the .avi file to .mp4
-            # ==========================================================
-            if filepath_to_convert:
-                # Run conversion in a separate thread to not block the app
-                convert_thread = threading.Thread(
-                    target=self.convert_to_web_format, 
-                    args=(filepath_to_convert,)
-                )
-                convert_thread.daemon = True
-                convert_thread.start()
-
-    def convert_to_web_format(self, avi_filepath):
-        """
-        Converts the raw .avi file to a web-friendly .mp4 using imageio-ffmpeg.
-        """
-        if not os.path.exists(avi_filepath):
-            self.logger.error(f"Cannot convert: {avi_filepath} does not exist.")
-            return None
-            
-        # Check if file has size, otherwise conversion will fail
-        try:
-            if os.path.getsize(avi_filepath) < 1024:
-                 self.logger.warning(f"Skipping conversion: {avi_filepath} is empty (0 frames).")
-                 try:
-                     os.remove(avi_filepath) # Clean up empty file
-                 except Exception as e:
-                     self.logger.warning(f"Could not delete empty file: {e}")
-                 return None
-        except OSError as e:
-            self.logger.error(f"Error checking file size for {avi_filepath}: {e}")
-            return None
-
-        # Create the new .mp4 filepath
-        base_name = os.path.splitext(avi_filepath)[0]
-        mp4_filepath = base_name + ".mp4"
-        
-        self.logger.info(f"🔄 Converting {avi_filepath} to {mp4_filepath}...")
-        
-        try:
-            # Use imageio to read the AVI and write an MP4
-            # 'libx264' is the universal H.264 codec for web.
-            # 'yuv420p' pixel format is required for max browser compatibility
-            iio.imwrite(
-                iio.imread(avi_filepath, plugin="FFMPEG"), 
-                mp4_filepath, 
-                plugin="FFMPEG", 
-                codec="libx264",
-                ffmpeg_params=["-pix_fmt", "yuv420p"]
-            )
-            
-            self.logger.info(f"✅ Successfully converted to {mp4_filepath}")
-            
-            # Clean up the old .avi file
-            try:
-                os.remove(avi_filepath)
-                self.logger.info(f"🗑️ Cleaned up raw file: {avi_filepath}")
-            except Exception as e:
-                self.logger.warning(f"Could not delete raw file: {e}")
+            for codec, extension in codecs_to_try:
+                test_path = filepath.replace('.mp4', extension) if extension != '.mp4' else filepath
+                fourcc_code = cv2.VideoWriter_fourcc(*codec)
+                test_writer = cv2.VideoWriter(test_path, fourcc_code, self.target_fps, (640, 480))
                 
-            return mp4_filepath
+                if test_writer.isOpened():
+                    self.video_writer = test_writer
+                    filepath = test_path
+                    fourcc = codec
+                    print(f"✅ Using codec: {codec}")
+                    break
+                else:
+                    test_writer.release()
+                    print(f"❌ Codec {codec} failed")
+            
+            if self.video_writer is None:
+                print(f"❌ All codecs failed for recording")
+                return None
+            
+            self.is_recording = True
+            self.current_recording_path = filepath
+            self.recording_start_time = current_time
+            self.recording_cooldowns[event_type] = current_time
+            self.should_stop_recording = False
+            self.last_frame_time = current_time
+            self.frame_count = 0
+            
+            # Clear the frame queue
+            while not self.frame_queue.empty():
+                try:
+                    self.frame_queue.get_nowait()
+                except queue.Empty:
+                    break
+            
+            # Start frame processing thread
+            self.frame_processing_thread = threading.Thread(target=self._process_frames)
+            self.frame_processing_thread.daemon = True
+            self.frame_processing_thread.start()
+            
+            print(f"🎥 Started recording for {event_type}: {filename} at {self.target_fps} FPS using {fourcc}")
+            
+            # Start background thread to stop recording after duration
+            self.recording_thread = threading.Thread(
+                target=self._recording_timer,
+                args=(self.recording_duration,)
+            )
+            self.recording_thread.daemon = True
+            self.recording_thread.start()
+            
+            # Return the web-accessible path
+            return f"static/recordings/{os.path.basename(filepath)}"
             
         except Exception as e:
-            self.logger.error(f"❌ FFMPEG conversion failed: {e}")
+            print(f"❌ Error starting recording: {e}")
             return None
-            
-    def get_current_recording_path(self):
-        """Get path of current recording"""
-        if self.current_filepath:
-            # Return the path of the file *being written*
-            return self.current_filepath
-        return None
-        
-    def update_detection_time(self):
-        """Update last detection time to keep recording active"""
-        if self.recording:
-            self.last_detection_time = time.time()
-            
-    def cleanup_old_recordings(self, days=3):
-        """Remove recordings older than specified days (both .mp4 and .avi)"""
+
+    def add_frame(self, frame):
+        """Add a frame to the recording queue with timestamp"""
         try:
-            cutoff_time = time.time() - (days * 24 * 60 * 60)
-            deleted_count = 0
-            
-            for filename in os.listdir(self.recordings_folder):
-                # Check for both formats
-                if filename.endswith(('.mp4', '.avi')):
-                    filepath = os.path.join(self.recordings_folder, filename)
-                    file_time = os.path.getctime(filepath)
+            if self.is_recording and frame is not None:
+                # Resize frame if necessary
+                if frame.shape[1] != 640 or frame.shape[0] != 480:
+                    frame = cv2.resize(frame, (640, 480))
+                
+                # Add timestamp to frame
+                current_time = time.time()
+                elapsed = current_time - self.recording_start_time
+                
+                # Create frame copy to avoid modifying original
+                frame_copy = frame.copy()
+                
+                # Add detailed timestamp
+                timestamp_text = f"Time: {elapsed:.1f}s | Frame: {self.frame_count}"
+                cv2.putText(frame_copy, timestamp_text, (10, 30), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                
+                # Add actual datetime
+                datetime_text = datetime.datetime.now().strftime('%H:%M:%S')
+                cv2.putText(frame_copy, datetime_text, (10, 60), 
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+                
+                # Try to add frame to queue (non-blocking)
+                try:
+                    self.frame_queue.put((frame_copy, current_time), block=False)
+                    self.frame_count += 1
+                    return True
+                except queue.Full:
+                    # If queue is full, drop the frame to maintain real-time
+                    print("⚠️ Frame queue full, dropping frame")
+                    return False
                     
-                    if file_time < cutoff_time:
-                        try:
-                            os.remove(filepath)
-                            deleted_count += 1
-                            self.logger.info(f"🗑️ Deleted old recording: {filename}")
-                        except Exception as e:
-                             self.logger.warning(f"Could not delete old file: {e}")
-                            
-            self.logger.info(f"🧹 Cleaned up {deleted_count} old recordings")
-            return deleted_count
-            
+            return False
         except Exception as e:
-            self.logger.error(f"Error cleaning up old recordings: {e}")
-            return 0
-            
-    def get_recording_stats(self):
-        """Get recording statistics (looks for .mp4 files)"""
+            print(f"❌ Error adding frame to queue: {e}")
+            return False
+
+    def _process_frames(self):
+        """Process frames from queue with real-time timing"""
+        print("🔄 Starting frame processing thread")
+        
+        frames_processed = 0
+        start_time = time.time()
+        
+        while self.is_recording or not self.frame_queue.empty():
+            try:
+                # Get frame from queue with timeout
+                frame_data = self.frame_queue.get(timeout=1.0)
+                frame, frame_time = frame_data
+                
+                # Calculate when this frame should be written based on real time
+                expected_frame_time = self.recording_start_time + (frames_processed * self.frame_interval)
+                current_time = time.time()
+                
+                # If we're behind schedule, write immediately
+                # If we're ahead of schedule, wait to maintain proper timing
+                if current_time < expected_frame_time:
+                    time_to_wait = expected_frame_time - current_time
+                    time.sleep(time_to_wait)
+                
+                # Write frame to video
+                if self.video_writer is not None:
+                    self.video_writer.write(frame)
+                    frames_processed += 1
+                
+                # Log progress every 30 frames
+                if frames_processed % 30 == 0:
+                    elapsed = time.time() - start_time
+                    actual_fps = frames_processed / elapsed if elapsed > 0 else 0
+                    print(f"📊 Processed {frames_processed} frames, Actual FPS: {actual_fps:.1f}")
+                
+                self.frame_queue.task_done()
+                
+            except queue.Empty:
+                # No frames in queue, continue checking if we should stop
+                continue
+            except Exception as e:
+                print(f"❌ Error in frame processing: {e}")
+                break
+        
+        print(f"🛑 Frame processing stopped. Processed {frames_processed} frames total")
+
+    def _recording_timer(self, duration):
+        """Background thread to stop recording after specified duration"""
         try:
+            print(f"⏰ Recording timer started: {duration} seconds")
+            start_time = time.time()
+            
+            while time.time() - start_time < duration and not self.should_stop_recording:
+                time.sleep(0.5)  # Check every 500ms
+            
+            if self.is_recording:
+                actual_duration = time.time() - self.recording_start_time
+                print(f"🛑 Recording timer expired after {actual_duration:.1f} seconds")
+                self.stop_recording()
+                
+        except Exception as e:
+            print(f"❌ Error in recording timer: {e}")
+
+    def stop_recording(self):
+        """Stop the current recording and save properly"""
+        try:
+            if self.is_recording:
+                print("🛑 Beginning recording stop process...")
+                self.should_stop_recording = True
+                self.is_recording = False
+                
+                # Wait for frame queue to empty (with timeout)
+                print("⏳ Waiting for frame queue to empty...")
+                queue_empty = self.frame_queue.empty()
+                wait_start = time.time()
+                while not queue_empty and (time.time() - wait_start) < 5.0:  # 5 second timeout
+                    time.sleep(0.1)
+                    queue_empty = self.frame_queue.empty()
+                
+                if not queue_empty:
+                    print("⚠️ Frame queue not empty after timeout, proceeding...")
+                
+                # Calculate actual recording duration
+                current_time = time.time()
+                recording_length = current_time - self.recording_start_time
+                
+                print(f"📊 Recording stats: {recording_length:.1f}s, {self.frame_count} frames")
+                
+                # Properly close the video writer
+                if self.video_writer is not None:
+                    self.video_writer.release()
+                    print("💾 Video writer released")
+                
+                # Wait for processing thread to finish
+                if self.frame_processing_thread and self.frame_processing_thread.is_alive():
+                    self.frame_processing_thread.join(timeout=3.0)
+                    print("✅ Frame processing thread stopped")
+                
+                # Validate the recording file
+                if self.current_recording_path and os.path.exists(self.current_recording_path):
+                    file_size = os.path.getsize(self.current_recording_path)
+                    
+                    # Calculate actual FPS
+                    actual_fps = self.frame_count / recording_length if recording_length > 0 else 0
+                    print(f"📊 Final stats: {recording_length:.1f}s, {self.frame_count} frames, {actual_fps:.1f} FPS, {file_size} bytes")
+                    
+                    # Only save to database if recording meets minimum duration
+                    if recording_length >= self.min_recording_duration:
+                        add_recording(
+                            self.current_recording_path,
+                            datetime.datetime.fromtimestamp(self.recording_start_time),
+                            datetime.datetime.fromtimestamp(current_time),
+                            recording_length,
+                            file_size
+                        )
+                        print(f"💾 Saved recording: {os.path.basename(self.current_recording_path)}")
+                    else:
+                        print(f"🗑️ Discarding short recording ({recording_length:.1f}s)")
+                        os.remove(self.current_recording_path)
+                else:
+                    print(f"❌ Recording file not found: {self.current_recording_path}")
+                
+                # Clean up
+                self.current_recording_path = None
+                self.video_writer = None
+                self.recording_start_time = None
+                self.last_frame_time = None
+                self.frame_count = 0
+                
+                # Clear queue
+                while not self.frame_queue.empty():
+                    try:
+                        self.frame_queue.get_nowait()
+                    except queue.Empty:
+                        break
+                
+                if self.recording_thread and self.recording_thread.is_alive():
+                    self.recording_thread.join(timeout=2.0)
+                
+                print("✅ Recording stopped completely")
+                return True
+            return False
+        except Exception as e:
+            print(f"❌ Error stopping recording: {e}")
+            # Force cleanup on error
+            self.is_recording = False
+            self.current_recording_path = None
+            if self.video_writer is not None:
+                self.video_writer.release()
+                self.video_writer = None
+            return False
+
+    def update_detection_time(self):
+        """Update detection time to extend recording if needed"""
+        pass
+
+    def get_recording_stats(self):
+        """Get recording statistics"""
+        try:
+            recordings_dir = 'static/recordings'
             total_size = 0
             file_count = 0
             
-            for filename in os.listdir(self.recordings_folder):
-                # We only care about the final .mp4 files for stats
-                if filename.endswith('.mp4'):
-                    filepath = os.path.join(self.recordings_folder, filename)
-                    if os.path.exists(filepath):
+            if os.path.exists(recordings_dir):
+                for filename in os.listdir(recordings_dir):
+                    if filename.endswith(('.mp4', '.avi')):
+                        filepath = os.path.join(recordings_dir, filename)
                         total_size += os.path.getsize(filepath)
                         file_count += 1
-                        
+            
             return {
+                'is_recording': self.is_recording,
                 'total_recordings': file_count,
                 'total_size_bytes': total_size,
                 'total_size_gb': round(total_size / (1024**3), 2),
-                'total_size_mb': round(total_size / (1024**2), 2),
-                'is_recording': self.recording,
-                'current_event': self.current_event_id,
-                'file_format': 'MP4 (from AVI)',
-                'resolution': f"{self.resolution[0]}x{self.resolution[1]}",
-                'fps': self.fps,
-                'codec': 'H.264 (libx264)'
+                'cooldown_status': self.recording_cooldowns,
+                'target_fps': self.target_fps,
+                'current_frame_count': self.frame_count,
+                'queue_size': self.frame_queue.qsize()
             }
-            
         except Exception as e:
-            self.logger.error(f"Error getting recording stats: {e}")
+            print(f"Error getting recording stats: {e}")
             return {}
+
+    def cleanup_old_recordings(self, days=3):
+        """Clean up recordings older than specified days"""
+        try:
+            recordings_dir = 'static/recordings'
+            cutoff_time = time.time() - (days * 24 * 60 * 60)
+            deleted_count = 0
             
+            if os.path.exists(recordings_dir):
+                for filename in os.listdir(recordings_dir):
+                    if filename.endswith(('.mp4', '.avi')):
+                        filepath = os.path.join(recordings_dir, filename)
+                        if os.path.getctime(filepath) < cutoff_time:
+                            os.remove(filepath)
+                            deleted_count += 1
+                            print(f"🧹 Deleted old recording: {filename}")
+            
+            return deleted_count
+        except Exception as e:
+            print(f"Error cleaning up old recordings: {e}")
+            return 0
+
     def verify_recording_playback(self, filepath):
-        """Verify that a recording can be played back"""
+        """Verify if a recording file is playable and check timing"""
         try:
             if not os.path.exists(filepath):
-                # If we are checking an .mp4, the .avi might still be converting
-                if filepath.endswith('.mp4'):
-                    avi_path = filepath.replace('.mp4', '.avi')
-                    if os.path.exists(avi_path):
-                        return {'playable': False, 'error': 'Video is still converting...'}
                 return {'playable': False, 'error': 'File not found'}
             
-            # Try with OpenCV
             cap = cv2.VideoCapture(filepath)
-            
             if not cap.isOpened():
-                return {'playable': False, 'error': 'Cannot open file - codec issue'}
-                
+                return {'playable': False, 'error': 'Cannot open file'}
+            
             # Get video properties
             fps = cap.get(cv2.CAP_PROP_FPS)
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+            frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
             duration = frame_count / fps if fps > 0 else 0
             
-            # Try to read first frame
-            ret, frame = cap.read()
+            # Read first few frames to check timing
+            frames_checked = 0
+            timestamps_found = []
+            
+            for i in range(min(10, int(frame_count))):
+                ret, frame = cap.read()
+                if not ret:
+                    break
+                
+                # Convert to grayscale for text detection
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                frames_checked += 1
+            
             cap.release()
             
-            if not ret:
-                return {
-                    'playable': False, 
-                    'error': 'Cannot read frames - file corrupted',
-                    'file_size': os.path.getsize(filepath),
-                    'file_size_mb': round(os.path.getsize(filepath) / (1024**2), 2)
-                }
+            file_size = os.path.getsize(filepath)
             
-            return {
+            result = {
                 'playable': True,
-                'fps': fps,
-                'frame_count': frame_count,
+                'file_size_mb': round(file_size / (1024*1024), 2),
                 'duration_seconds': round(duration, 2),
-                'file_size': os.path.getsize(filepath),
-                'file_size_mb': round(os.path.getsize(filepath) / (1024**2), 2)
+                'frame_count': int(frame_count),
+                'fps': round(fps, 1),
+                'frames_checked': frames_checked,
+                'expected_duration': round(frame_count / self.target_fps, 2) if self.target_fps > 0 else 0
             }
             
+            # Check if duration makes sense
+            expected_duration = frame_count / self.target_fps
+            actual_duration = duration
+            duration_diff = abs(expected_duration - actual_duration)
+            
+            if duration_diff > 2.0:  # More than 2 seconds difference
+                result['timing_warning'] = f"Duration mismatch: expected {expected_duration:.1f}s, got {actual_duration:.1f}s"
+                result['speed_issue'] = True
+            else:
+                result['timing_warning'] = "Timing appears normal"
+                result['speed_issue'] = False
+            
+            return result
+                
         except Exception as e:
-            return {'playable': False, 'error': f'Verification error: {str(e)}'}
+            return {'playable': False, 'error': str(e)}
 
 # Global instance
 recording_manager = RecordingManager()
