@@ -200,13 +200,17 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         # Determine display name based on distance and authorization
         if is_authorized:
             display_name = str(name)
+            event_type = "authorized_face"
         elif is_known_person:
             display_name = f"{name} (Known)"
+            event_type = "known_face"
         else:
             if distance_analysis['within_detection_range']:
                 display_name = 'Unauthorized'
+                event_type = "unauthorized_face"
             else:
                 display_name = 'Too Far'
+                event_type = "face_too_far"
         
         # Create result
         result = {
@@ -222,22 +226,39 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             'zone': str(distance_analysis['zone']),
             'trigger_alert': bool(distance_analysis['trigger_alert']),
             'alert_level': int(distance_analysis['alert_level']),
-            'within_detection_range': bool(distance_analysis['within_detection_range'])
+            'within_detection_range': bool(distance_analysis['within_detection_range']),
+            'event_type': event_type
         }
         
         results.append(result)
         
-        # STEP 5: TRIGGER RECORDING FOR ALL FACE TYPES WITHIN DETECTION RANGE
+        # STEP 5: SAVE TO ALERT_EVENTS FOR ALL FACE TYPES WITHIN DETECTION RANGE
         if distance_analysis['within_detection_range']:
-            if is_authorized:
-                # Authorized person detected - trigger recording
-                trigger_event_recording('authorized', frame, confidence, distance_analysis['distance_meters'])
-            elif is_known_person:
-                # Known person detected - trigger recording
-                trigger_event_recording('known', frame, confidence, distance_analysis['distance_meters'])
-            elif not is_authorized and not is_known_person:
-                # Unauthorized person detected - trigger recording
-                trigger_event_recording('unauthorized', frame, confidence, distance_analysis['distance_meters'])
+            # Generate unique event ID for this detection
+            detection_event_id = f"{event_type}_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+            
+            # Start recording for this event
+            recording_path = trigger_event_recording(detection_event_id, event_type, frame, confidence, distance_analysis['distance_meters'])
+            
+            # Save screenshot
+            screenshot_path = save_screenshot(
+                frame, 
+                f"{event_type}_{name}_{distance_analysis['distance_meters']}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+            )
+            
+            # Save to alert_events table for ALL face types
+            save_to_alert_events(
+                event_type=event_type,
+                person_name=name,
+                confidence=confidence,
+                screenshot_path=screenshot_path,
+                recording_path=recording_path,
+                distance_meters=distance_analysis['distance_meters'],
+                is_authorized=is_authorized,
+                is_known_person=is_known_person
+            )
+            
+            print(f"✅ Processed {event_type} event: {name} - Recording: {recording_path}")
         
         # STEP 6: Handle ONLY unauthorized faces (not known persons) for alerts
         if not is_authorized and not is_known_person and distance_analysis['trigger_alert']:
@@ -256,19 +277,13 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                 print(f"🔄 Alert skipped - face already alerted recently")
             
             # Update detection time for ongoing recording
-            from utils.recording_manager import recording_manager
             recording_manager.update_detection_time()
             
-            # Log detection to database
+            # Log detection to database (this is separate from alert_events)
             try:
-                screenshot_path = save_screenshot(
-                    frame, 
-                    f"unauthorized_{distance_analysis['distance_meters']}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
-                )
-                
                 alert_level = distance_analysis['alert_level']
                 
-                # Add detection to database
+                # Add detection to detections table
                 add_detection(
                     "face_detection", 
                     f"Unauthorized ({distance_analysis['distance_meters']}m)", 
@@ -281,6 +296,78 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                 print(f"Error logging detection: {e}")
     
     return results
+
+def save_to_alert_events(event_type, person_name, confidence, screenshot_path, recording_path, distance_meters, is_authorized=False, is_known_person=False):
+    """Save face detection event to alert_events table for ALL face types with duplicate prevention"""
+    try:
+        from utils.database import get_db_connection
+        import uuid
+        import time
+        
+        conn = get_db_connection()
+        
+        # Check for recent duplicate events (within 30 seconds for the same person and type)
+        recent_duplicate = conn.execute('''
+            SELECT event_id FROM alert_events 
+            WHERE person_name = ? AND trigger_type = ? 
+            AND timestamp > datetime('now', '-30 seconds')
+            LIMIT 1
+        ''', (person_name, event_type)).fetchone()
+        
+        if recent_duplicate:
+            print(f"⏳ Skipping duplicate {event_type} event for {person_name} (within 30s cooldown)")
+            conn.close()
+            return None
+        
+        # Generate unique event ID
+        event_id = str(uuid.uuid4())
+        
+        # Determine review status based on face type
+        if is_authorized:
+            review_status = "authorized"
+            call_status = "not_required"
+        elif is_known_person:
+            review_status = "known_person" 
+            call_status = "not_required"
+        else:
+            review_status = "pending"
+            call_status = "pending"
+        
+        # Ensure recording_path is properly formatted
+        if recording_path and isinstance(recording_path, str):
+            # Make sure it starts with static/recordings/
+            if not recording_path.startswith('static/recordings/'):
+                recording_path = f"static/recordings/{os.path.basename(recording_path)}"
+        else:
+            recording_path = None
+        
+        # Insert into alert_events table
+        conn.execute('''
+            INSERT INTO alert_events 
+            (event_id, timestamp, trigger_type, recording_filepath, review_status, call_status, person_name, confidence, distance_meters, is_authorized, is_known_person)
+            VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            event_id, 
+            event_type, 
+            recording_path, 
+            review_status, 
+            call_status,
+            person_name,
+            float(confidence),
+            float(distance_meters),
+            int(is_authorized),
+            int(is_known_person)
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        print(f"✅ Saved to alert_events: {event_type} - {person_name} at {distance_meters}m - Recording: {recording_path}")
+        return event_id
+        
+    except Exception as e:
+        print(f"❌ Error saving to alert_events: {e}")
+        return None
 
 
 def estimate_distance_from_area(self, motion_area):
@@ -408,12 +495,10 @@ def detect_motion_without_faces(frame, motion_detector, distance_estimator):
         traceback.print_exc()
         return None
     
-def trigger_event_recording(event_type, frame, confidence=0.0, distance=0.0):
+def trigger_event_recording(event_id, event_type, frame, confidence=0.0, distance=0.0):
     """Trigger recording for specific event types with cooldown management"""
     try:
         from utils.recording_manager import recording_manager
-        
-        event_id = f"{event_type}_{int(time.time())}"
         
         print(f"🎯 Attempting to trigger recording for {event_type} with confidence {confidence}")
         
@@ -430,19 +515,19 @@ def trigger_event_recording(event_type, frame, confidence=0.0, distance=0.0):
             )
             
             # Determine alert level and detection type based on event type
-            if event_type == 'unauthorized':
+            if event_type == 'unauthorized_face':
                 alert_level = 3
                 person_name = "Unauthorized Person"
                 detection_type = "face_detection"
-            elif event_type == 'motion':
+            elif event_type == 'motion_detection':
                 alert_level = 2
                 person_name = "Motion Detected, Unauthorized Person"
                 detection_type = "motion_detection"
-            elif event_type == 'authorized':
+            elif event_type == 'authorized_face':
                 alert_level = 1
                 person_name = "Authorized Person"
                 detection_type = "face_detection"
-            elif event_type == 'known':
+            elif event_type == 'known_face':
                 alert_level = 1
                 person_name = "Known Person"
                 detection_type = "face_detection"
@@ -476,14 +561,14 @@ def trigger_event_recording(event_type, frame, confidence=0.0, distance=0.0):
                 print(f"🔗 Linked recording to detection ID: {detection_id}")
             
             print(f"✅ Recording and detection saved for {event_type} (Detection ID: {detection_id})")
-            return True
+            return recording_path
         else:
             print(f"⏳ Recording not started for {event_type} (may be in cooldown)")
-            return False
+            return None
         
     except Exception as e:
         print(f"❌ Error triggering recording for {event_type}: {e}")
-        return False
+        return None
 
 def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
     """

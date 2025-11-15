@@ -135,6 +135,11 @@ def init_db():
             recording_filepath TEXT,
             review_status TEXT DEFAULT 'pending',
             call_status TEXT DEFAULT 'pending',
+            person_name TEXT,
+            confidence REAL,
+            distance_meters REAL,
+            is_authorized BOOLEAN DEFAULT 0,
+            is_known_person BOOLEAN DEFAULT 0,
             completed_at DATETIME
         )
     ''')

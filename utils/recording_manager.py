@@ -31,28 +31,47 @@ class RecordingManager:
         os.makedirs('static/recordings', exist_ok=True)
 
     def start_recording_for_event(self, event_id, event_type):
-        """Start recording for a specific event with cooldown management"""
+        """Start recording for a specific event with improved cooldown management"""
         try:
-            # Check cooldown for this event type
             current_time = time.time()
-            last_recording_time = self.recording_cooldowns.get(event_type, 0)
             
-            if current_time - last_recording_time < 20:  # 20 second cooldown
+            # Check cooldown for this specific event (prevent exact duplicates)
+            last_event_recording = self.recording_cooldowns.get(f"event_{event_id}", 0)
+            if current_time - last_event_recording < 30:  # 30 second cooldown per event
+                print(f"⏳ Recording cooldown active for event {event_id}, skipping...")
+                return None
+            
+            # Check cooldown for event type (prevent too many of same type)
+            last_type_recording = self.recording_cooldowns.get(f"type_{event_type}", 0)
+            if current_time - last_type_recording < 10:  # 10 second cooldown per type
                 print(f"⏳ Recording cooldown active for {event_type}, skipping...")
                 return None
             
             # Stop any existing recording
             if self.is_recording:
                 self.stop_recording()
-                time.sleep(1.0)  # Longer pause between recordings
+                time.sleep(1.0)  # Brief pause between recordings
             
-            # Start new recording
+            # Generate proper filename matching unauthorized pattern
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
-            clean_event_type = event_type.replace(' ', '_').replace('/', '_')
-            filename = f"recording_{clean_event_type}_{timestamp}_{event_id}.mp4"
+            
+            # Use consistent naming pattern for all event types
+            if event_type == "authorized_face":
+                clean_type = "Authorized_Face"
+            elif event_type == "known_face":
+                clean_type = "Known_Face" 
+            elif event_type == "unauthorized_face":
+                clean_type = "Unauthorized_Face"
+            else:
+                clean_type = event_type.replace(' ', '_').title()
+            
+            # Use UUID for uniqueness like unauthorized faces do
+            import uuid
+            unique_id = str(uuid.uuid4())
+            filename = f"recording_{clean_type}_{timestamp}_{unique_id}.mp4"
             filepath = os.path.join('static', 'recordings', filename)
             
-            # Try different codecs for compatibility
+            # Try different codecs (your existing codec selection logic)
             fourcc = None
             codecs_to_try = [
                 ('avc1', '.mp4'),  # H.264
@@ -81,13 +100,17 @@ class RecordingManager:
                 print(f"❌ All codecs failed for recording")
                 return None
             
+            # Start recording
             self.is_recording = True
             self.current_recording_path = filepath
             self.recording_start_time = current_time
-            self.recording_cooldowns[event_type] = current_time
             self.should_stop_recording = False
             self.last_frame_time = current_time
             self.frame_count = 0
+            
+            # Update cooldowns
+            self.recording_cooldowns[f"event_{event_id}"] = current_time
+            self.recording_cooldowns[f"type_{event_type}"] = current_time
             
             # Clear the frame queue
             while not self.frame_queue.empty():
@@ -101,7 +124,7 @@ class RecordingManager:
             self.frame_processing_thread.daemon = True
             self.frame_processing_thread.start()
             
-            print(f"🎥 Started recording for {event_type}: {filename} at {self.target_fps} FPS using {fourcc}")
+            print(f"🎥 Started recording for {event_type}: {filename}")
             
             # Start background thread to stop recording after duration
             self.recording_thread = threading.Thread(
@@ -111,8 +134,10 @@ class RecordingManager:
             self.recording_thread.daemon = True
             self.recording_thread.start()
             
-            # Return the web-accessible path
-            return f"static/recordings/{os.path.basename(filepath)}"
+            # Return the web-accessible path (consistent format)
+            web_path = f"static/recordings/{os.path.basename(filepath)}"
+            print(f"📁 Recording path: {web_path}")
+            return web_path
             
         except Exception as e:
             print(f"❌ Error starting recording: {e}")

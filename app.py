@@ -169,8 +169,7 @@ def get_filtered_alerts():
         from utils.database import get_db_connection
         conn = get_db_connection()
         
-        # Updated query to include ALL face detection types with proper categorization
-        # FIXED: Removed the problematic JOIN that was causing the error
+        # Updated query to properly filter face detection types
         query = '''
             SELECT 
                 d.*,
@@ -186,7 +185,7 @@ def get_filtered_alerts():
         '''
         params = []
         
-        # Apply filters
+        # Apply filters - FIXED: Properly filter each category
         if filter_type == 'authorized':
             query += ' AND category = "authorized"'
         elif filter_type == 'unauthorized':
@@ -228,8 +227,7 @@ def get_filtered_alerts():
         conn.close()
         
         print(f"📊 DEBUG: Returning {len(alerts_list)} alerts for filter '{filter_type}'")
-        for alert in alerts_list[:5]:  # Print first 5 for debugging
-            print(f"  - {alert['person_name']} ({alert['category']}) - Recording: {alert['recording_path']}")
+        print(f"📊 DEBUG: Categories found: {set([alert['category'] for alert in alerts_list])}")
         
         return jsonify({'success': True, 'alerts': alerts_list})
         
@@ -238,6 +236,33 @@ def get_filtered_alerts():
         import traceback
         traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
+    
+
+def get_alert_level_from_event(event):
+    """Determine alert level from event data"""
+    if event['is_authorized']:
+        return 1
+    elif event['is_known_person']:
+        return 1
+    elif event['trigger_type'] == 'unauthorized_face':
+        return 3
+    elif event['trigger_type'] == 'motion_detection':
+        return 2
+    else:
+        return 1
+
+def get_category_from_event(event):
+    """Determine category from event data"""
+    if event['is_authorized']:
+        return 'authorized'
+    elif event['is_known_person']:
+        return 'known'
+    elif event['trigger_type'] == 'unauthorized_face':
+        return 'unauthorized'
+    elif event['trigger_type'] == 'motion_detection':
+        return 'motion'
+    else:
+        return 'other'
 
 def find_recording_by_detection(detection):
     """Find recording file by detection timestamp and type"""
@@ -281,6 +306,247 @@ def find_recording_by_detection(detection):
         print(f"Error finding recording for detection: {e}")
         return None
     
+@app.route('/api/get_authorized_events')
+def get_authorized_events():
+    """Get only authorized face detection events with recordings"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        print("🔍 DEBUG: Fetching authorized events from database...")
+        
+        # Get authorized face detections
+        authorized_detections = conn.execute('''
+            SELECT d.* 
+            FROM detections d 
+            WHERE d.detection_type = 'face_detection' 
+            AND d.person_name IN (SELECT name FROM faces)
+            ORDER BY d.timestamp DESC 
+            LIMIT 50
+        ''').fetchall()
+        
+        print(f"🔍 DEBUG: Found {len(authorized_detections)} authorized detections")
+        
+        events_list = []
+        for detection in authorized_detections:
+            recording_path = find_recording_for_authorized_event(detection)
+            
+            event_data = {
+                'id': detection['id'],
+                'type': 'authorized_face',
+                'person_name': detection['person_name'],
+                'confidence': detection['confidence'],
+                'timestamp': detection['timestamp'],
+                'screenshot_path': detection['screenshot_path'],
+                'recording_path': recording_path,
+                'category': 'authorized'
+            }
+            
+            events_list.append(event_data)
+            print(f"🔍 DEBUG: Added authorized event: {detection['person_name']}")
+        
+        conn.close()
+        return jsonify({'success': True, 'events': events_list})
+        
+    except Exception as e:
+        print(f"❌ ERROR in get_authorized_events: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+    
+def find_recording_for_authorized_event(detection):
+    """Find recording specifically for authorized events"""
+    try:
+        import os
+        import datetime
+        
+        detection_time = datetime.datetime.strptime(detection['timestamp'], '%Y-%m-%d %H:%M:%S')
+        detection_date = detection_time.strftime('%Y%m%d')
+        
+        recordings_dir = 'static/recordings'
+        if not os.path.exists(recordings_dir):
+            return None
+        
+        # Look for authorized recordings
+        for filename in os.listdir(recordings_dir):
+            if filename.endswith(('.mp4', '.avi')) and 'authorized' in filename.lower():
+                if detection_date in filename:
+                    return f"static/recordings/{filename}"
+        
+        # Fallback: any recording from that day
+        for filename in os.listdir(recordings_dir):
+            if detection_date in filename and filename.endswith(('.mp4', '.avi')):
+                return f"static/recordings/{filename}"
+                
+        return None
+        
+    except Exception as e:
+        print(f"Error finding authorized recording: {e}")
+        return None
+
+def find_recording_for_known_event(detection):
+    """Find recording specifically for known person events"""
+    try:
+        import os
+        import datetime
+        
+        detection_time = datetime.datetime.strptime(detection['timestamp'], '%Y-%m-%d %H:%M:%S')
+        detection_date = detection_time.strftime('%Y%m%d')
+        
+        recordings_dir = 'static/recordings'
+        if not os.path.exists(recordings_dir):
+            return None
+        
+        # Look for known person recordings
+        for filename in os.listdir(recordings_dir):
+            if filename.endswith(('.mp4', '.avi')) and 'known' in filename.lower():
+                if detection_date in filename:
+                    return f"static/recordings/{filename}"
+        
+        # Fallback: any recording from that day
+        for filename in os.listdir(recordings_dir):
+            if detection_date in filename and filename.endswith(('.mp4', '.avi')):
+                return f"static/recordings/{filename}"
+                
+        return None
+        
+    except Exception as e:
+        print(f"Error finding known recording: {e}")
+        return None
+    
+@app.route('/api/get_all_alert_events')
+def get_all_alert_events():
+    """Get ALL alert events including authorized and known"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        # Get all events from alert_events table
+        events = conn.execute('''
+            SELECT * FROM alert_events 
+            ORDER BY timestamp DESC 
+            LIMIT 100
+        ''').fetchall()
+        
+        events_list = []
+        for event in events:
+            event_data = {
+                'event_id': event['event_id'],
+                'trigger_type': event['trigger_type'],
+                'timestamp': event['timestamp'],
+                'recording_filepath': event['recording_filepath'],
+                'review_status': event['review_status'],
+                'call_status': event['call_status']
+            }
+            events_list.append(event_data)
+        
+        conn.close()
+        return jsonify({'success': True, 'events': events_list})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/get_alert_events_by_type')
+def get_alert_events_by_type():
+    """Get alert events filtered by type - INCLUDES ALL FACE TYPES"""
+    try:
+        event_type = request.args.get('type', 'all')
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        if event_type == 'all':
+            events = conn.execute('''
+                SELECT * FROM alert_events 
+                ORDER BY timestamp DESC 
+                LIMIT 100
+            ''').fetchall()
+        else:
+            # Map filter types to event types in database
+            event_type_map = {
+                'authorized': 'authorized_face',
+                'unauthorized': 'unauthorized_face', 
+                'known': 'known_face',
+                'motion': 'motion_detection'
+            }
+            
+            db_event_type = event_type_map.get(event_type, event_type)
+            events = conn.execute('''
+                SELECT * FROM alert_events 
+                WHERE trigger_type = ?
+                ORDER BY timestamp DESC 
+                LIMIT 100
+            ''', (db_event_type,)).fetchall()
+        
+        events_list = []
+        for event in events:
+            event_data = {
+                'event_id': event['event_id'],
+                'trigger_type': event['trigger_type'],
+                'timestamp': event['timestamp'],
+                'recording_filepath': event['recording_filepath'],
+                'review_status': event['review_status'],
+                'call_status': event['call_status'],
+                'person_name': event.get('person_name', 'Unknown'),
+                'confidence': event.get('confidence', 0),
+                'distance_meters': event.get('distance_meters', 0),
+                'is_authorized': bool(event.get('is_authorized', False)),
+                'is_known_person': bool(event.get('is_known_person', False))
+            }
+            events_list.append(event_data)
+        
+        conn.close()
+        return jsonify({'success': True, 'events': events_list})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/get_known_events')
+def get_known_events():
+    """Get only known person detection events with recordings"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        print("🔍 DEBUG: Fetching known events from database...")
+        
+        # Get known person detections
+        known_detections = conn.execute('''
+            SELECT d.* 
+            FROM detections d 
+            WHERE d.detection_type = 'face_detection' 
+            AND d.person_name IN (SELECT name FROM known_persons)
+            ORDER BY d.timestamp DESC 
+            LIMIT 50
+        ''').fetchall()
+        
+        print(f"🔍 DEBUG: Found {len(known_detections)} known detections")
+        
+        events_list = []
+        for detection in known_detections:
+            recording_path = find_recording_for_known_event(detection)
+            
+            event_data = {
+                'id': detection['id'],
+                'type': 'known_face',
+                'person_name': detection['person_name'],
+                'confidence': detection['confidence'],
+                'timestamp': detection['timestamp'],
+                'screenshot_path': detection['screenshot_path'],
+                'recording_path': recording_path,
+                'category': 'known'
+            }
+            
+            events_list.append(event_data)
+            print(f"🔍 DEBUG: Added known event: {detection['person_name']}")
+        
+        conn.close()
+        return jsonify({'success': True, 'events': events_list})
+        
+    except Exception as e:
+        print(f"❌ ERROR in get_known_events: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})    
 
 @app.route('/api/get_recording_for_alert/<int:alert_id>')
 def get_recording_for_alert(alert_id):
