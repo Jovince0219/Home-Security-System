@@ -119,64 +119,39 @@
     </div>
 </div>
 
-<!-- Face Tracking Status Panel -->
+<!-- Recent Unauthorized Detections -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
-    <div class="flex justify-between items-center mb-4">
-        <h3 class="text-lg font-bold flex items-center">
-            <i class="fas fa-shield-alt mr-2 text-green-600"></i>
-            Face Tracking & Alert Status
-        </h3>
-        <button onclick="refreshFaceTracking()"
-            class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
-            <i class="fas fa-sync-alt mr-1"></i>Refresh
-        </button>
-    </div>
-
-    <!-- Status Cards -->
-    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
-            <h4 class="font-semibold text-blue-800 mb-2">
-                <i class="fas fa-users mr-1"></i>Tracked Faces
-            </h4>
-            <p id="trackedFacesCount" class="text-3xl font-bold text-blue-600">0</p>
-            <p class="text-xs text-blue-700 mt-1">Currently being monitored</p>
-        </div>
-
-        <div class="bg-green-50 p-4 rounded-lg border border-green-200">
-            <h4 class="font-semibold text-green-800 mb-2">
-                <i class="fas fa-phone mr-1"></i>Answered Calls
-            </h4>
-            <p id="answeredCallsCount" class="text-3xl font-bold text-green-600">0</p>
-            <p class="text-xs text-green-700 mt-1">Calls that were answered</p>
-        </div>
-
-        <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
-            <h4 class="font-semibold text-yellow-800 mb-2">
-                <i class="fas fa-clock mr-1"></i>Alert Cooldown
-            </h4>
-            <p id="cooldownTime" class="text-3xl font-bold text-yellow-600">5:00</p>
-            <p class="text-xs text-yellow-700 mt-1">Minutes between alerts</p>
-        </div>
-
-        <div class="bg-red-50 p-4 rounded-lg border border-red-200">
-            <h4 class="font-semibold text-red-800 mb-2">
-                <i class="fas fa-phone-alt mr-1"></i>Max Calls per Face
-            </h4>
-            <p id="maxCallsPerFace" class="text-3xl font-bold text-red-600">3</p>
-            <p class="text-xs text-red-700 mt-1">Before cooldown period</p>
-        </div>
-    </div>
-
-    <!-- Management Actions -->
-    <div class="mt-6 flex space-x-4">
-        <button onclick="cleanupOldFaces()" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded">
-            <i class="fas fa-broom mr-2"></i>Cleanup Old Faces (24h+)
-        </button>
-        <button onclick="resetFaceTracking()" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded">
-            <i class="fas fa-trash-alt mr-2"></i>Reset All Tracking
-        </button>
+    <h3 class="text-lg font-bold mb-4 flex items-center">
+        <i class="fas fa-list-alt mr-2 text-blue-600"></i>
+        Recent Security Logs (All Activities)
+    </h3>
+    <div class="overflow-x-auto">
+        <table class="min-w-full table-auto">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detection
+                    </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Confidence</th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="detectionsTable">
+                <!-- Detections will be loaded here -->
+                <tr>
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
+                        <p class="text-lg font-semibold">Loading security alerts...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
     </div>
 </div>
+
 
 <!-- Distance Settings Panel -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
@@ -213,41 +188,6 @@
                 <i class="fas fa-save mr-2"></i>Save Settings
             </button>
         </div>
-    </div>
-</div>
-
-<!-- Recent Unauthorized Detections -->
-<div class="mt-6 bg-white rounded-lg shadow-lg p-6">
-    <h3 class="text-lg font-bold mb-4 flex items-center">
-        <i class="fas fa-exclamation-triangle mr-2 text-red-600"></i>
-        Recent Security Alerts (Unauthorized Only)
-    </h3>
-    <div class="overflow-x-auto">
-        <table class="min-w-full table-auto">
-            <thead>
-                <tr class="bg-gray-50">
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Type</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detection
-                    </th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                        Confidence</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alert
-                        Level</th>
-                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action
-                    </th>
-                </tr>
-            </thead>
-            <tbody id="detectionsTable">
-                <!-- Detections will be loaded here -->
-                <tr>
-                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
-                        <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
-                        <p class="text-lg font-semibold">Loading security alerts...</p>
-                    </td>
-                </tr>
-            </tbody>
-        </table>
     </div>
 </div>
 {% endblock %}
@@ -925,7 +865,7 @@
                 if (!data.success) {
                     tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="px-4 py-4 text-center text-red-500">
+                    <td colspan="5" class="px-4 py-4 text-center text-red-500">
                         <i class="fas fa-exclamation-triangle mr-2"></i>
                         Error loading alerts
                     </td>
@@ -937,7 +877,7 @@
                 if (!data.detections || data.detections.length === 0) {
                     tbody.innerHTML = `
                 <tr>
-                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                    <td colspan="5" class="px-4 py-8 text-center text-gray-500">
                         <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
                         <p class="text-lg font-semibold">All Clear!</p>
                         <p class="text-sm mt-1">No security alerts detected</p>
@@ -983,29 +923,69 @@
                     const row = tbody.insertRow();
                     const timestamp = new Date(detection.timestamp).toLocaleString();
                     const isFaceDetection = detection.type === 'face_detection';
-                    const typeClass = isFaceDetection ?
-                        'bg-red-100 text-red-800' : 'bg-orange-100 text-orange-800';
-                    const displayName = detection.person_name || 'Unknown';
+
+                    // ✅ FIXED: Determine display based on category
+                    const category = detection.category || 'other';
+                    let displayName = detection.person_name || 'Unknown';
+                    let typeClass = '';
+                    let typeText = '';
+                    let callIndicator = '';
+                    let nameClass = '';
+
+                    // ✅ SET DISPLAY BASED ON CATEGORY
+                    switch (category) {
+                        case 'authorized':
+                            typeClass = 'bg-green-100 text-green-800 border border-green-300';
+                            typeText = 'Authorized Person';
+                            callIndicator = '<span class="ml-2 text-xs bg-green-100 text-green-800 px-2 py-1 rounded">✅ No Call</span>';
+                            nameClass = 'text-green-600';
+                            break;
+
+                        case 'known':
+                            typeClass = 'bg-blue-100 text-blue-800 border border-blue-300';
+                            typeText = 'Known Person';
+                            callIndicator = '<span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">👋 No Call</span>';
+                            nameClass = 'text-blue-600';
+                            break;
+
+                        case 'unauthorized':
+                            typeClass = 'bg-red-100 text-red-800 border border-red-300';
+                            typeText = 'Unauthorized';
+                            callIndicator = isFaceDetection ?
+                                '<span class="ml-2 text-xs bg-red-100 text-red-800 px-2 py-1 rounded">📞 Call Triggered</span>' :
+                                '<span class="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">⚠️ Alert Only</span>';
+                            nameClass = 'text-red-600';
+                            break;
+
+                        case 'motion':
+                            typeClass = 'bg-orange-100 text-orange-800 border border-orange-300';
+                            typeText = 'Motion Detected';
+                            callIndicator = '<span class="ml-2 text-xs bg-orange-100 text-orange-800 px-2 py-1 rounded">📹 Recording</span>';
+                            nameClass = 'text-orange-600';
+                            break;
+
+                        default:
+                            typeClass = 'bg-gray-100 text-gray-800 border border-gray-300';
+                            typeText = detection.type.replace('_', ' ') || 'Detection';
+                            callIndicator = '<span class="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">📋 Logged</span>';
+                            nameClass = 'text-gray-600';
+                    }
 
                     let confidenceDisplay = 'N/A';
                     if (detection.confidence !== null && detection.confidence !== undefined) {
                         confidenceDisplay = (detection.confidence * 100).toFixed(1) + '%';
                     }
 
-                    // ✅ HIGHLIGHT: Show if face detection (triggers Twilio)
-                    const callIndicator = isFaceDetection ?
-                        '<span class="ml-2 text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">📞 Call Triggered</span>' :
-                        '<span class="ml-2 text-xs bg-gray-100 text-gray-600 px-2 py-1 rounded">No Call</span>';
-
+                    // ✅ REMOVED: Alert Level column completely
                     row.innerHTML = `
                 <td class="px-4 py-2 text-sm">${timestamp}</td>
                 <td class="px-4 py-2">
                     <span class="px-2 py-1 rounded text-sm ${typeClass}">
-                        ${detection.type.replace('_', ' ')}
+                        ${typeText}
                     </span>
                     ${callIndicator}
                 </td>
-                <td class="px-4 py-2 font-semibold ${isFaceDetection ? 'text-red-600' : 'text-orange-600'}">
+                <td class="px-4 py-2 font-semibold ${nameClass}">
                     ${displayName}
                 </td>
                 <td class="px-4 py-2">
@@ -1014,15 +994,11 @@
                     </span>
                 </td>
                 <td class="px-4 py-2">
-                    <span class="px-2 py-1 rounded text-sm ${getAlertLevelClass(detection.alert_level)}">
-                        Level ${detection.alert_level}
-                    </span>
-                </td>
-                <td class="px-4 py-2">
                     ${detection.screenshot_path ?
-                            `<a href="/${detection.screenshot_path}" target="_blank" class="text-blue-600 hover:underline">
-                            <i class="fas fa-image mr-1"></i>View
-                        </a>` : 'N/A'}
+                            `<a href="/${detection.screenshot_path}" target="_blank" class="text-blue-600 hover:text-blue-800 hover:underline flex items-center">
+                            <i class="fas fa-image mr-1"></i>View Image
+                        </a>` :
+                            '<span class="text-gray-400">No Image</span>'}
                 </td>
             `;
                 });
@@ -1036,7 +1012,7 @@
                 const tbody = document.getElementById('detectionsTable');
                 tbody.innerHTML = `
             <tr>
-                <td colspan="6" class="px-4 py-4 text-center text-red-500">
+                <td colspan="5" class="px-4 py-4 text-center text-red-500">
                     Network error loading alerts
                 </td>
             </tr>

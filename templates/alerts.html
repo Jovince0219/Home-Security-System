@@ -460,9 +460,48 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
+                    console.log(`📊 Loaded ${data.events.length} events, will deduplicate`);
                     displayEvents(data.events);
+                } else {
+                    document.getElementById('eventsList').innerHTML = `
+                    <div class="py-6 text-center text-red-600">
+                        <i class="fas fa-exclamation-triangle"></i>
+                        <p>Error loading events</p>
+                    </div>
+                `;
                 }
+            })
+            .catch(error => {
+                console.error('Error loading alert events:', error);
+                document.getElementById('eventsList').innerHTML = `
+                <div class="py-6 text-center text-red-600">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <p>Network error loading events</p>
+                </div>
+            `;
             });
+    }
+
+    async function verifyAndDisplayEvent(event) {
+        try {
+            if (event.recording_filepath) {
+                const isPlayable = await checkVideoPlayability(event.recording_filepath);
+                return {
+                    ...event,
+                    videoPlayable: isPlayable
+                };
+            }
+            return {
+                ...event,
+                videoPlayable: false
+            };
+        } catch (error) {
+            console.warn(`Error verifying event ${event.event_id}:`, error);
+            return {
+                ...event,
+                videoPlayable: false
+            };
+        }
     }
 
 
@@ -755,8 +794,11 @@
             return;
         }
 
+        // Step 1: Remove duplicate entries - keep only 1-2 of the same alert type
+        const deduplicatedEvents = deduplicateEvents(events);
+
         let html = '';
-        events.forEach(event => {
+        deduplicatedEvents.forEach(event => {
             const timestamp = new Date(event.timestamp).toLocaleString();
             const callStatus = event.call_status || 'pending';
             const reviewStatus = event.review_status || 'pending';
@@ -772,6 +814,7 @@
                 <div>
                     <h4 class="font-semibold text-gray-800 capitalize tracking-wide">
                         ${event.trigger_type.replace(/_/g, ' ')}
+                        ${event.person_name ? `- ${event.person_name}` : ''}
                     </h4>
                     <p class="text-sm text-gray-500">${timestamp}</p>
                     <p class="text-xs text-gray-400">Event ID: ${event.event_id}</p>
@@ -816,6 +859,176 @@
                     : ''
                 }
 
+            <!-- Video Status -->
+            ${event.recording_filepath ? `
+                <div class="mt-2 flex items-center text-green-600 text-sm">
+                    <i class="fas fa-video mr-2"></i>
+                    Video recording available
+                </div>
+            ` : `
+                <div class="mt-2 flex items-center text-gray-500 text-sm">
+                    <i class="fas fa-video-slash mr-2"></i>
+                    No video recording
+                </div>
+            `}
+
+            <!-- Actions -->
+            <div class="mt-4 flex flex-wrap gap-2">
+                ${!isNonAlertEvent
+                    ? `
+                    <button onclick="handleFalseAlarm('${event.event_id}')"
+                        class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                        <i class="fas fa-user-plus"></i> Mark as False Alarm
+                    </button>
+
+                    <button onclick="updateReviewStatus('${event.event_id}', 'confirmed')"
+                        class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                        <i class="fas fa-check"></i> Confirm
+                    </button>
+                `
+                    : ''
+                }
+
+                ${event.recording_filepath
+                    ? `
+                    <button onclick="showVideoModal('${event.recording_filepath}')"
+                        class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                        <i class="fas fa-play mr-1"></i> Play Video
+                    </button>
+                    <button onclick="verifyRecording('${event.recording_filepath}')" 
+                            class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                        <i class="fas fa-check-circle mr-1"></i>Verify
+                    </button>
+                `
+                    : ''
+                }
+            </div>
+
+        </div>
+        `;
+        });
+
+        container.innerHTML = html;
+    }
+
+    async function processEventsSequentially(events, index, validEvents, container) {
+        if (index >= events.length) {
+            // All events processed, now display them with deduplication
+            displayFilteredEvents(validEvents, container);
+            return;
+        }
+
+        const event = events[index];
+
+        try {
+            // Check if event has a recording and if it's playable
+            if (event.recording_filepath) {
+                const isPlayable = await checkVideoPlayability(event.recording_filepath);
+                if (isPlayable) {
+                    validEvents.push(event);
+                }
+            } else {
+                // Events without videos are still included
+                validEvents.push(event);
+            }
+        } catch (error) {
+            console.warn(`Error checking video for event ${event.event_id}:`, error);
+            // Include event even if check fails
+            validEvents.push(event);
+        }
+
+        // Process next event
+        processEventsSequentially(events, index + 1, validEvents, container);
+    }
+
+    function displayFilteredEvents(events, container) {
+        // Step 2: Remove duplicate entries - keep only 1-2 of the same alert type
+        const deduplicatedEvents = deduplicateEvents(events);
+
+        if (deduplicatedEvents.length === 0) {
+            container.innerHTML = `
+            <div class="py-6 text-center">
+                <p class="text-gray-500 text-sm">No alert events with playable videos found</p>
+            </div>
+        `;
+            return;
+        }
+
+        let html = '';
+        deduplicatedEvents.forEach(event => {
+            const timestamp = new Date(event.timestamp).toLocaleString();
+            const callStatus = event.call_status || 'pending';
+            const reviewStatus = event.review_status || 'pending';
+            const isNonAlertEvent =
+                event.trigger_type === 'authorized_face' ||
+                event.trigger_type === 'known_face';
+
+            html += `
+        <div class="bg-white shadow-sm border border-gray-200 rounded-xl p-4 mb-4 hover:shadow-md transition">
+            
+            <!-- Header -->
+            <div class="flex justify-between items-start mb-3">
+                <div>
+                    <h4 class="font-semibold text-gray-800 capitalize tracking-wide">
+                        ${event.trigger_type.replace(/_/g, ' ')}
+                        ${event.person_name ? `- ${event.person_name}` : ''}
+                    </h4>
+                    <p class="text-sm text-gray-500">${timestamp}</p>
+                    <p class="text-xs text-gray-400">Event ID: ${event.event_id}</p>
+                </div>
+
+                <div class="flex flex-col gap-1 text-right">
+                    <span class="px-2 py-1 rounded-md text-xs font-medium ${getStatusClass(callStatus)}">
+                        Call: ${callStatus}
+                    </span>
+                    <span class="px-2 py-1 rounded-md text-xs font-medium ${getReviewClass(reviewStatus)}">
+                        Review: ${reviewStatus}
+                    </span>
+                </div>
+            </div>
+
+            <!-- Call Attempts -->
+            ${event.call_attempts && event.call_attempts.length > 0
+                    ? `
+                <div class="mt-3 bg-gray-50 p-3 rounded-lg">
+                    <h5 class="text-sm font-semibold mb-2 text-gray-700">Call Attempts:</h5>
+                    <div class="space-y-1">
+                    ${event.call_attempts
+                        .map(
+                            attempt => `
+                        <div class="text-xs text-gray-600">
+                            <span class="font-medium">Attempt ${attempt.attempt_number}</span> — 
+                            ${attempt.phone_number} —
+                            <span class="${attempt.status === 'answered'
+                                    ? 'text-green-600 font-semibold'
+                                    : 'text-red-600 font-semibold'
+                                }">${attempt.status}</span>
+                            <span class="text-gray-400">at ${new Date(
+                                    attempt.timestamp
+                                ).toLocaleTimeString()}</span>
+                        </div>
+                    `
+                        )
+                        .join('')}
+                    </div>
+                </div>
+            `
+                    : ''
+                }
+
+            <!-- Video Status Indicator -->
+            ${event.recording_filepath ? `
+                <div class="mt-2 flex items-center text-green-600 text-sm">
+                    <i class="fas fa-check-circle mr-2"></i>
+                    Video available and playable
+                </div>
+            ` : `
+                <div class="mt-2 flex items-center text-gray-500 text-sm">
+                    <i class="fas fa-video-slash mr-2"></i>
+                    No video recording available
+                </div>
+            `}
+
             <!-- Actions -->
             <div class="mt-4 flex flex-wrap gap-2">
                 ${!isNonAlertEvent
@@ -851,6 +1064,36 @@
         container.innerHTML = html;
     }
 
+    function deduplicateEvents(events) {
+        const eventGroups = {};
+        const maxDuplicates = 2; // Maximum number of duplicate entries to show
+
+        // Group events by type and person
+        events.forEach(event => {
+            // Create a key based on trigger type and person name
+            const key = `${event.trigger_type}_${event.person_name || 'unknown'}`;
+
+            if (!eventGroups[key]) {
+                eventGroups[key] = [];
+            }
+
+            eventGroups[key].push(event);
+        });
+
+        // Sort each group by timestamp (newest first) and take only maxDuplicates
+        const result = [];
+        Object.values(eventGroups).forEach(group => {
+            // Sort by timestamp, newest first
+            group.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            // Take only the most recent entries (up to maxDuplicates)
+            const recentEvents = group.slice(0, maxDuplicates);
+            result.push(...recentEvents);
+        });
+
+        // Sort final result by timestamp (newest first)
+        return result.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    }
 
     function handleFalseAlarm(eventId) {
         // Find the detection ID associated with this event
