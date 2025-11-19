@@ -1,2 +1,5 @@
 "twilio_alerts.log" 
 "*.log" 
+"*.log" 
+"*.db" 
+"logs/" 
