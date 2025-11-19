@@ -193,6 +193,7 @@ class DistanceEstimator:
             return 6.0  # Beyond detection range
 
 
+
 # Global instance
 distance_estimator = DistanceEstimator()
 
