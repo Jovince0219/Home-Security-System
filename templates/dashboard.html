@@ -67,52 +67,72 @@
     </div>
 
     <!-- System Status -->
-    <div class="space-y-6">
-        <div class="bg-white rounded-lg shadow-lg p-6">
-            <h3 class="text-lg font-bold mb-4 flex items-center">
-                <i class="fas fa-heartbeat mr-2 text-green-600"></i>
-                System Status
-            </h3>
-            <div class="space-y-3">
-                <div class="flex justify-between items-center">
-                    <span>Camera Feed</span>
-                    <span id="cameraStatus" class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span>Face Recognition</span>
-                    <span id="faceRecognitionStatus"
-                        class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span>Motion Detection</span>
-                    <span id="motionDetectionStatus"
-                        class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
-                </div>
-                <div class="flex justify-between items-center">
-                    <span>Recording</span>
-                    <span id="recordingStatus"
-                        class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Recording</span>
-                </div>
+    <div class="bg-white rounded-lg shadow-lg p-6">
+        <h3 class="text-lg font-bold mb-4 flex items-center">
+            <i class="fas fa-heartbeat mr-2 text-green-600"></i>
+            System Status
+        </h3>
+        <div class="space-y-3">
+            <div class="flex justify-between items-center">
+                <span>Camera Feed</span>
+                <span id="cameraStatus" class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span>Face Recognition</span>
+                <span id="faceRecognitionStatus"
+                    class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span>Motion Detection</span>
+                <span id="motionDetectionStatus"
+                    class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Active</span>
+            </div>
+            <div class="flex justify-between items-center">
+                <span>Recording</span>
+                <span id="recordingStatus"
+                    class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Recording</span>
             </div>
         </div>
-
+        <!-- Twilio Alert Control (Replaces Today's Stats) -->
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h3 class="text-lg font-bold mb-4 flex items-center">
-                <i class="fas fa-chart-line mr-2 text-blue-600"></i>
-                Today's Stats
+                <i class="fas fa-phone-alt mr-2 text-blue-600"></i>
+                Alert Controls
             </h3>
-            <div class="space-y-3" id="todayStats">
-                <div class="flex justify-between">
-                    <span>Face Detections</span>
-                    <span class="font-bold">0</span>
+            <div class="space-y-4">
+                <!-- Twilio Toggle -->
+                <div class="flex justify-between items-center">
+                    <div>
+                        <span class="font-semibold">Twilio Phone Alerts</span>
+                        <p class="text-sm text-gray-600">Enable/disable automatic phone calls</p>
+                    </div>
+                    <div class="flex items-center space-x-3">
+                        <span id="twilioStatusText" class="text-sm font-medium px-2 py-1 rounded 
+                    bg-green-100 text-green-800">ENABLED</span>
+                        <button id="twilioToggle"
+                            class="relative inline-flex h-6 w-11 items-center rounded-full bg-green-600 transition-colors duration-200 ease-in-out">
+                            <span
+                                class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-200 ease-in-out translate-x-6"></span>
+                        </button>
+                    </div>
                 </div>
-                <div class="flex justify-between">
-                    <span>Motion Events</span>
-                    <span class="font-bold">0</span>
+
+                <!-- Status Indicator -->
+                <div class="bg-gray-50 rounded-lg p-3">
+                    <div class="flex items-center text-sm">
+                        <i class="fas fa-info-circle mr-2 text-blue-500"></i>
+                        <span id="twilioCurrentStatus" class="font-semibold text-green-600">
+                            📞 Phone calls will be made for security alerts
+                        </span>
+                    </div>
                 </div>
-                <div class="flex justify-between">
-                    <span>Alerts Sent</span>
-                    <span class="font-bold">0</span>
+
+                <!-- Quick Actions -->
+                <div class="grid grid-cols-2 gap-2 mt-2">
+                    <button onclick="viewAlertSettings()"
+                        class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">
+                        <i class="fas fa-cog mr-1"></i>Settings
+                    </button>
                 </div>
             </div>
         </div>
@@ -215,6 +235,9 @@
     let faceRecognitionQueue = [];
     let pendingFaceRecognition = null;
 
+    let twilioAlertsEnabled = true; // Default to enabled
+
+
     // Camera controls
     document.getElementById('startCamera').addEventListener('click', startCamera);
     document.getElementById('stopCamera').addEventListener('click', stopCamera);
@@ -240,6 +263,12 @@
         loadRecentDetections();
         loadDistanceSettings();
         refreshFaceTracking();
+
+        // Load saved Twilio state from localStorage
+        loadTwilioState();
+
+        // Initialize Twilio toggle
+        initializeTwilioToggle();
 
         // Update UI to show everything is active
         updateRecordingStatus('Recording');
@@ -300,6 +329,241 @@
                 alert('Could not start camera: ' + error.message);
             }
         }
+    }
+
+    // Load Twilio state from localStorage
+    function loadTwilioState() {
+        const savedState = localStorage.getItem('twilioAlertsEnabled');
+        if (savedState !== null) {
+            twilioAlertsEnabled = savedState === 'true';
+            console.log(`📱 Loaded Twilio state: ${twilioAlertsEnabled ? 'ENABLED' : 'DISABLED'}`);
+        } else {
+            // Default to enabled if no saved state
+            twilioAlertsEnabled = true;
+            localStorage.setItem('twilioAlertsEnabled', 'true');
+            console.log('📱 No saved Twilio state, defaulting to ENABLED');
+        }
+    }
+
+    // Save Twilio state to localStorage
+    function saveTwilioState(enabled) {
+        localStorage.setItem('twilioAlertsEnabled', enabled.toString());
+        console.log(`📱 Saved Twilio state: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    }
+
+    // Working Twilio toggle functionality with persistence
+    function initializeTwilioToggle() {
+        const toggle = document.getElementById('twilioToggle');
+        const statusText = document.getElementById('twilioStatusText');
+        const currentStatus = document.getElementById('twilioCurrentStatus');
+
+        // Initialize the toggle based on saved state
+        updateToggleAppearance();
+        updateTwilioUI();
+
+        // Add click event to the button
+        toggle.addEventListener('click', function () {
+            twilioAlertsEnabled = !twilioAlertsEnabled;
+
+            // Save state to localStorage
+            saveTwilioState(twilioAlertsEnabled);
+
+            // Update button appearance
+            updateToggleAppearance();
+            updateTwilioUI();
+
+            // Show confirmation
+            if (twilioAlertsEnabled) {
+                showNotification('📞 Twilio alerts ENABLED - Phone calls will be made for security alerts', 'success');
+            } else {
+                showNotification('🔕 Twilio alerts DISABLED - Phone calls will be blocked', 'warning');
+            }
+
+            // Log the state change
+            console.log(`Twilio alerts ${twilioAlertsEnabled ? 'ENABLED' : 'DISABLED'}`);
+        });
+
+        function updateToggleAppearance() {
+            if (twilioAlertsEnabled) {
+                toggle.classList.remove('bg-gray-400');
+                toggle.classList.add('bg-green-600');
+                toggle.querySelector('span').classList.remove('translate-x-1');
+                toggle.querySelector('span').classList.add('translate-x-6');
+            } else {
+                toggle.classList.remove('bg-green-600');
+                toggle.classList.add('bg-gray-400');
+                toggle.querySelector('span').classList.remove('translate-x-6');
+                toggle.querySelector('span').classList.add('translate-x-1');
+            }
+        }
+
+        function updateTwilioUI() {
+            if (twilioAlertsEnabled) {
+                statusText.textContent = 'ENABLED';
+                statusText.className = 'text-sm font-medium px-2 py-1 rounded bg-green-100 text-green-800';
+                currentStatus.textContent = '📞 Phone calls will be made for security alerts';
+                currentStatus.className = 'font-semibold text-green-600';
+            } else {
+                statusText.textContent = 'DISABLED';
+                statusText.className = 'text-sm font-medium px-2 py-1 rounded bg-red-100 text-red-800';
+                currentStatus.textContent = '🔕 Phone calls are BLOCKED - alerts will be logged only';
+                currentStatus.className = 'font-semibold text-red-600';
+            }
+        }
+    }
+
+    // Modified recognizeFaces function with Twilio blocking
+    function recognizeFaces() {
+        return new Promise((resolve, reject) => {
+            const video = document.getElementById('videoElement');
+            if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) {
+                reject(new Error('Video not ready'));
+                return;
+            }
+
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = video.videoWidth;
+                canvas.height = video.videoHeight;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(video, 0, 0);
+
+                const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
+
+                const formData = new FormData();
+                formData.append('image_data', imageData);
+
+                // Include Twilio state in the request
+                formData.append('twilio_enabled', twilioAlertsEnabled.toString());
+
+                fetch(endpoint, {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(response => {
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! status: ${response.status}`);
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        if (data.success) {
+                            displayFaceBoxes(data.faces || []);
+                            if (data.motion_status) {
+                                updateMotionStatusIndicator(data.motion_status);
+                            }
+
+                            // Show Twilio status in console for debugging
+                            if (!twilioAlertsEnabled) {
+                                console.log('🔕 Twilio alerts are disabled - calls blocked');
+                            }
+                        } else {
+                            console.error('Face recognition failed:', data.error);
+                        }
+                        resolve(data);
+                    })
+                    .catch(error => {
+                        console.error('Face recognition fetch error:', error);
+                        reject(error);
+                    });
+            } catch (error) {
+                console.error('Error in recognizeFaces:', error);
+                reject(error);
+            }
+        });
+    }
+
+    // Test call function
+    function testTwilioCall() {
+        if (!twilioAlertsEnabled) {
+            showNotification('❌ Twilio alerts are currently disabled. Enable them first to test calls.', 'error');
+            return;
+        }
+
+        const testNumber = prompt('Enter a phone number to test Twilio call (include country code, e.g., +1234567890):');
+
+        if (!testNumber) return;
+
+        showNotification('📞 Making test call...', 'info');
+
+        fetch('/api/test_twilio_call', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `test_number=${encodeURIComponent(testNumber)}`
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showNotification('✅ Test call initiated successfully!', 'success');
+                } else {
+                    showNotification('❌ Test call failed: ' + (data.error || 'Unknown error'), 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Test call error:', error);
+                showNotification('❌ Test call failed: Network error', 'error');
+            });
+    }
+
+    // View alert settings function
+    function viewAlertSettings() {
+        window.location.href = '/twilio_alerts';
+    }
+
+    // Add function to manually reset Twilio state (for debugging)
+    function resetTwilioState() {
+        if (confirm('Reset Twilio state to default (ENABLED)?')) {
+            localStorage.removeItem('twilioAlertsEnabled');
+            twilioAlertsEnabled = true;
+            initializeTwilioToggle();
+            showNotification('🔄 Twilio state reset to ENABLED', 'info');
+        }
+    }
+
+    // Add this utility function if you don't have it
+    function showNotification(message, type = 'info') {
+        // Remove any existing notifications
+        const existingNotifications = document.querySelectorAll('[data-notification]');
+        existingNotifications.forEach(notification => notification.remove());
+
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.setAttribute('data-notification', 'true');
+        notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white max-w-sm transform transition-all duration-300 ${type === 'success' ? 'bg-green-600' :
+            type === 'warning' ? 'bg-orange-600' :
+                type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+            }`;
+
+        notification.innerHTML = `
+        <div class="flex items-center justify-between">
+            <div class="flex items-center">
+                <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : type === 'error' ? 'times-circle' : 'info-circle'} mr-2"></i>
+                <span>${message}</span>
+            </div>
+            <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+    `;
+
+        document.body.appendChild(notification);
+
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        document.body.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, 5000);
     }
 
     function startAutoRecording() {
@@ -402,60 +666,6 @@
                 isProcessingFaceRecognition = false;
             }, 200);
         }
-    }
-
-    function recognizeFaces() {
-        return new Promise((resolve, reject) => {
-            const video = document.getElementById('videoElement');
-            if (!video.srcObject || video.readyState !== video.HAVE_ENOUGH_DATA) {
-                reject(new Error('Video not ready'));
-                return;
-            }
-
-            try {
-                const canvas = document.createElement('canvas');
-                canvas.width = video.videoWidth;
-                canvas.height = video.videoHeight;
-                const ctx = canvas.getContext('2d');
-                ctx.drawImage(video, 0, 0);
-
-                const imageData = canvas.toDataURL('image/jpeg', 0.8);
-
-                const endpoint = motionGatedRecognition ? '/api/recognize_faces_with_motion' : '/api/recognize_faces';
-
-                const formData = new FormData();
-                formData.append('image_data', imageData);
-
-                fetch(endpoint, {
-                    method: 'POST',
-                    body: formData
-                })
-                    .then(response => {
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
-                        return response.json();
-                    })
-                    .then(data => {
-                        if (data.success) {
-                            displayFaceBoxes(data.faces || []);
-                            if (data.motion_status) {
-                                updateMotionStatusIndicator(data.motion_status);
-                            }
-                        } else {
-                            console.error('Face recognition failed:', data.error);
-                        }
-                        resolve(data);
-                    })
-                    .catch(error => {
-                        console.error('Face recognition fetch error:', error);
-                        reject(error);
-                    });
-            } catch (error) {
-                console.error('Error in recognizeFaces:', error);
-                reject(error);
-            }
-        });
     }
 
     function updateMotionStatusIndicator(status) {

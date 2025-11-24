@@ -1112,7 +1112,7 @@ def cleanup_recordings():
 @app.route('/twilio_alerts')
 def twilio_alerts():
     """Twilio alerts configuration page"""
-    return render_template('twilio_alerts.html')
+    return render_template('alerts.html')
 
 @app.route('/api/verify_recording/<filename>')
 def verify_recording(filename):
@@ -1131,10 +1131,12 @@ def verify_recording(filename):
 @app.route('/api/recognize_faces_with_motion', methods=['POST'])
 def recognize_faces_with_motion():
     """
-    Enhanced motion-gated face recognition with independent unauthorized face detection
+    Enhanced motion-gated face recognition with Twilio control
     """
     try:
         image_data = request.form.get('image_data')
+        twilio_enabled = request.form.get('twilio_enabled', 'true').lower() == 'true'
+        
         if not image_data:
             return jsonify({'success': False, 'error': 'No image data provided'})
         
@@ -1175,14 +1177,14 @@ def recognize_faces_with_motion():
             from utils.face_recognition_utils import detect_faces_in_frame
             face_results = detect_faces_in_frame(frame)
         
-        # STEP 3: Check for motion without faces - BUT NEVER TRIGGER CALLS
+        # STEP 3: Check for motion without faces - RESPECT TWILIO SETTING
         if len(face_results) == 0 and (human_detected or motion_detector.is_human_motion_active()):
-            print(f"🔴 Motion detected without faces")
+            print(f"🔴 Motion detected without faces - Twilio enabled: {twilio_enabled}")
             
             from utils.face_recognition_utils import detect_motion_without_faces
             motion_only_result = detect_motion_without_faces(frame, motion_detector, distance_estimator)
             
-            # If motion without face detected, log it but DON'T trigger Twilio calls
+            # If motion without face detected, log it but respect Twilio setting
             if motion_only_result and motion_only_result['trigger_alert']:
                 try:
                     screenshot_path = save_screenshot(
@@ -1190,7 +1192,7 @@ def recognize_faces_with_motion():
                         f"motion_no_face_{motion_only_result['distance_meters']}m"
                     )
                     
-                    # IMPORTANT: Log detection WITHOUT triggering Twilio call
+                    # Log detection (Twilio calls handled based on frontend setting)
                     from utils.database import add_detection
                     add_detection(
                         "motion_detection", 
@@ -1200,10 +1202,13 @@ def recognize_faces_with_motion():
                         motion_only_result['alert_level']
                     )
                     
-                    print(f"✅ LOGGED MOTION-ONLY: {motion_only_result['person_name']} (NO CALL)")
+                    status_text = "WITH CALL" if twilio_enabled else "NO CALL (Blocked)"
+                    print(f"✅ LOGGED MOTION-ONLY: {motion_only_result['person_name']} ({status_text})")
                     
-                    # Send email alert only (not Twilio call)
-                    send_motion_alert_async(motion_only_result, screenshot_path)
+                    # Send email alert only if Twilio is disabled
+                    if not twilio_enabled:
+                        send_motion_alert_async(motion_only_result, screenshot_path)
+                    # If Twilio is enabled, the normal alert flow will handle it
                     
                 except Exception as e:
                     print(f"❌ Error logging motion-only detection: {e}")
@@ -1222,7 +1227,8 @@ def recognize_faces_with_motion():
                 'alert_level': int(motion_only_result.get('alert_level', 0)),
                 'within_detection_range': bool(motion_only_result.get('within_detection_range', False)),
                 'motion_area': int(motion_only_result.get('motion_area', 0)),
-                'person_name': 'Motion Detected, Unauthorized Person'
+                'person_name': 'Motion Detected, Unauthorized Person',
+                'twilio_blocked': not twilio_enabled  # Add this flag
             }
         
         return jsonify({
@@ -1235,6 +1241,7 @@ def recognize_faces_with_motion():
                 'motion_active': motion_detector.is_human_motion_active(),
                 'face_detection_enabled': len(face_results) > 0 or motion_detector.is_human_motion_active(),
                 'motion_only_alert': motion_only_result is not None,
+                'twilio_enabled': twilio_enabled,  # Echo back the setting
                 'distance_settings': {
                     'max_distance': float(distance_estimator.MAX_DETECTION_DISTANCE),
                     'warning_distance': float(distance_estimator.WARNING_DISTANCE),

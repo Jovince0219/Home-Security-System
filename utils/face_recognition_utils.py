@@ -76,6 +76,17 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     from utils.distance_estimation import get_distance_estimator
     distance_estimator = get_distance_estimator()
     
+    # ✅ Get Twilio state from request (if available)
+    twilio_enabled = True  # Default to enabled
+    try:
+        from flask import request
+        if hasattr(request, 'form'):
+            twilio_enabled = request.form.get('twilio_enabled', 'true').lower() == 'true'
+    except:
+        pass  # Use default if can't get from request
+    
+    print(f"🔍 TWILIO STATE IN FACE DETECTION: {'ENABLED' if twilio_enabled else 'DISABLED'}")
+
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     
@@ -262,19 +273,24 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         
         # STEP 6: Handle ONLY unauthorized faces (not known persons) for alerts
         if not is_authorized and not is_known_person and distance_analysis['trigger_alert']:
-            # Trigger alert for unauthorized person
+            # ✅ UPDATED: Pass Twilio state to trigger_security_alert
             event_id = trigger_security_alert(
                 "Unauthorized Face", 
                 "Unauthorized Person", 
                 confidence, 
                 frame,
-                face_encoding
+                face_encoding,
+                twilio_enabled  # ✅ ADD THIS PARAMETER
             )
             
             if event_id:
-                print(f"🚨 Alert triggered for unauthorized face: {event_id}")
+                status_text = "CALL TRIGGERED" if twilio_enabled else "CALL BLOCKED"
+                print(f"🚨 Alert {status_text} for unauthorized face: {event_id}")
             else:
-                print(f"🔄 Alert skipped - face already alerted recently")
+                if not twilio_enabled:
+                    print(f"🔕 Alert skipped - Twilio disabled")
+                else:
+                    print(f"🔄 Alert skipped - face already alerted recently")
             
             # Update detection time for ongoing recording
             recording_manager.update_detection_time()
@@ -981,9 +997,23 @@ def create_privacy_thumbnail(image_path, blur_faces=True):
         print(f"Error creating privacy thumbnail: {e}")
         return None
     
-def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=0.0, frame=None, face_encoding=None):
-    """Trigger security alert with Twilio calls and recording - WITH FACE TRACKING"""
+def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=0.0, frame=None, face_encoding=None, twilio_enabled=True):
+    """Trigger security alert with Twilio calls and recording - WITH FACE TRACKING AND TWILIO CONTROL"""
     from utils.twilio_alert_system import twilio_alert_system
+    
+    # ✅ Check if Twilio is enabled
+    if not twilio_enabled:
+        print(f"🔕 Twilio alerts disabled - skipping call for {person_name}")
+        # Still log the event but don't call
+        from utils.database import add_detection
+        add_detection(
+            trigger_type.lower().replace(' ', '_'),
+            person_name,
+            confidence,
+            None,  # No screenshot for blocked calls
+            alert_level=3
+        )
+        return None
     
     # ✅ Check if we should trigger alert for this face
     if face_encoding is not None:
@@ -1002,9 +1032,6 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
     if final_mp4_path is None:
         print("❌ Failed to start recording, aborting alert.")
         return None
-    
-    # ❌ REMOVED THIS REDUNDANT LINE:
-    # recording_path = recording_manager.start_recording_for_event(event_id, trigger_type)
     
     # Save screenshot
     screenshot_path = None
