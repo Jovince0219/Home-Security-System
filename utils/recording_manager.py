@@ -290,14 +290,19 @@ class RecordingManager:
                     
                     # Only save to database if recording meets minimum duration
                     if recording_length >= self.min_recording_duration:
+                        # Use Python datetime for accurate timestamps
+                        from datetime import datetime
+                        start_dt = datetime.fromtimestamp(self.recording_start_time)
+                        end_dt = datetime.fromtimestamp(current_time)
+                        
                         add_recording(
                             self.current_recording_path,
-                            datetime.datetime.fromtimestamp(self.recording_start_time),
-                            datetime.datetime.fromtimestamp(current_time),
+                            start_dt,
+                            end_dt,
                             recording_length,
                             file_size
                         )
-                        print(f"💾 Saved recording: {os.path.basename(self.current_recording_path)}")
+                        print(f"💾 Saved recording: {os.path.basename(self.current_recording_path)} - Start: {start_dt}, End: {end_dt}")
                     else:
                         print(f"🗑️ Discarding short recording ({recording_length:.1f}s)")
                         os.remove(self.current_recording_path)

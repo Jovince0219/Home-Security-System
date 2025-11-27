@@ -432,7 +432,7 @@ class TwilioAlertSystem:
             }
     
     def log_event(self, event_id, trigger_type, recording_filepath):
-        """Log alert event"""
+        """Log alert event with correct timestamp"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
@@ -440,7 +440,7 @@ class TwilioAlertSystem:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS alert_events (
                     event_id TEXT PRIMARY KEY,
-                    timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                    timestamp DATETIME,
                     trigger_type TEXT,
                     recording_filepath TEXT,
                     review_status TEXT DEFAULT 'pending',
@@ -449,9 +449,12 @@ class TwilioAlertSystem:
                 )
             ''')
             
+            # Use current datetime from Python
+            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            
             cursor.execute(
-                'INSERT INTO alert_events (event_id, trigger_type, recording_filepath) VALUES (?, ?, ?)',
-                (event_id, trigger_type, recording_filepath)
+                'INSERT INTO alert_events (event_id, timestamp, trigger_type, recording_filepath) VALUES (?, ?, ?, ?)',
+                (event_id, current_time, trigger_type, recording_filepath)
             )
             
             conn.commit()

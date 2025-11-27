@@ -322,13 +322,16 @@ def save_to_alert_events(event_type, person_name, confidence, screenshot_path, r
         
         conn = get_db_connection()
         
+        # Use current datetime from Python
+        current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
         # Check for recent duplicate events (within 30 seconds for the same person and type)
         recent_duplicate = conn.execute('''
             SELECT event_id FROM alert_events 
             WHERE person_name = ? AND trigger_type = ? 
-            AND timestamp > datetime('now', '-30 seconds')
+            AND timestamp > datetime(?, '-30 seconds')
             LIMIT 1
-        ''', (person_name, event_type)).fetchone()
+        ''', (person_name, event_type, current_time)).fetchone()
         
         if recent_duplicate:
             print(f"⏳ Skipping duplicate {event_type} event for {person_name} (within 30s cooldown)")
@@ -357,13 +360,14 @@ def save_to_alert_events(event_type, person_name, confidence, screenshot_path, r
         else:
             recording_path = None
         
-        # Insert into alert_events table
+        # Insert into alert_events table with explicit timestamp
         conn.execute('''
             INSERT INTO alert_events 
             (event_id, timestamp, trigger_type, recording_filepath, review_status, call_status, person_name, confidence, distance_meters, is_authorized, is_known_person)
-            VALUES (?, CURRENT_TIMESTAMP, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             event_id, 
+            current_time,  # Use Python datetime instead of CURRENT_TIMESTAMP
             event_type, 
             recording_path, 
             review_status, 
@@ -378,7 +382,7 @@ def save_to_alert_events(event_type, person_name, confidence, screenshot_path, r
         conn.commit()
         conn.close()
         
-        print(f"✅ Saved to alert_events: {event_type} - {person_name} at {distance_meters}m - Recording: {recording_path}")
+        print(f"✅ Saved to alert_events: {event_type} - {person_name} at {distance_meters}m - Time: {current_time} - Recording: {recording_path}")
         return event_id
         
     except Exception as e:

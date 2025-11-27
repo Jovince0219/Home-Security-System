@@ -40,7 +40,7 @@ def init_db():
     ''')
     
     # Create detections table
-    c.execute('''
+    conn.execute('''
         CREATE TABLE IF NOT EXISTS detections (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             detection_type TEXT NOT NULL,
@@ -48,7 +48,7 @@ def init_db():
             confidence REAL,
             screenshot_path TEXT,
             alert_level INTEGER DEFAULT 1,
-            timestamp DATETIME DEFAULT CURRENT_TIMESTAMP
+            timestamp TEXT  -- Changed to TEXT for consistent formatting
         )
     ''')
     
@@ -212,7 +212,7 @@ def search_faces_by_name(query):
     return faces
 
 def add_detection(detection_type, person_name=None, confidence=None, screenshot_path=None, alert_level=1):
-    """Add detection with proper confidence handling"""
+    """Add detection with proper confidence handling and correct timestamp"""
     conn = get_db_connection()
     
     # Ensure confidence is a float and handle None values
@@ -227,11 +227,14 @@ def add_detection(detection_type, person_name=None, confidence=None, screenshot_
         else:
             confidence = 0.0
     
-    print(f"📝 DEBUG: Adding detection - Type: {detection_type}, Name: {person_name}, Confidence: {confidence}")
+    # Use current datetime from Python (matches your system time)
+    current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    
+    print(f"📝 DEBUG: Adding detection - Type: {detection_type}, Name: {person_name}, Confidence: {confidence}, Time: {current_time}")
     
     conn.execute(
-        'INSERT INTO detections (detection_type, person_name, confidence, screenshot_path, alert_level) VALUES (?, ?, ?, ?, ?)',
-        (detection_type, person_name, confidence, screenshot_path, alert_level)
+        'INSERT INTO detections (detection_type, person_name, confidence, screenshot_path, alert_level, timestamp) VALUES (?, ?, ?, ?, ?, ?)',
+        (detection_type, person_name, confidence, screenshot_path, alert_level, current_time)
     )
     conn.commit()
     conn.close()
