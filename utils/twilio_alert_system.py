@@ -3,6 +3,7 @@ import time
 import uuid
 import sqlite3
 from datetime import datetime, timedelta
+import datetime as dt
 from threading import Thread, Lock
 from twilio.rest import Client
 from twilio.base.exceptions import TwilioRestException
@@ -24,6 +25,9 @@ class TwilioAlertSystem:
         self.account_sid = None
         self.auth_token = None
         
+        self.phone_numbers = []
+        self.load_phone_numbers()
+
         # ✅ FACE TRACKING: Track faces that triggered alerts
         self.alerted_faces = {}  # {face_hash: {'last_alert_time': timestamp, 'alert_count': count, 'encoding': face_encoding}}
         self.alert_cooldown = 300  # 5 minutes (300 seconds)
@@ -53,7 +57,7 @@ class TwilioAlertSystem:
         self.logger = logging.getLogger(__name__)
         
     def load_settings(self):
-        """Load Twilio settings from database"""
+        """Load Twilio settings from database with proper auth token handling"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
@@ -64,8 +68,6 @@ class TwilioAlertSystem:
                     account_sid TEXT,
                     auth_token TEXT,
                     twilio_number TEXT,
-                    primary_number TEXT,
-                    backup_number TEXT,
                     test_mode BOOLEAN DEFAULT 1,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 )
@@ -75,15 +77,24 @@ class TwilioAlertSystem:
             
             if settings:
                 self.account_sid = settings[1]
-                self.auth_token = settings[2]
+                self.auth_token = settings[2]  # Store the full auth token
                 self.twilio_number = settings[3]
-                self.primary_number = settings[4]
-                self.backup_number = settings[5]
-                self.test_mode = bool(settings[6])
+                self.test_mode = bool(settings[4])
                 
-                if self.account_sid and self.auth_token:
-                    self.client = Client(self.account_sid, self.auth_token)
-                    self.logger.info("✅ Twilio client initialized")
+                # Only initialize Twilio client if we have valid credentials
+                if self.account_sid and self.auth_token and self.twilio_number:
+                    try:
+                        self.client = Client(self.account_sid, self.auth_token)
+                        # Test the client by making a simple API call
+                        self.client.api.accounts(self.account_sid).fetch()
+                        self.logger.info("✅ Twilio client initialized and authenticated")
+                    except Exception as e:
+                        self.logger.error(f"❌ Twilio authentication failed: {e}")
+                        self.client = None
+                        self.test_mode = True  # Fallback to test mode
+                else:
+                    self.client = None
+                    self.logger.info("Twilio credentials incomplete - using test mode")
             else:
                 self.test_mode = True
                 self.logger.info("No settings found - using test mode")
@@ -93,6 +104,7 @@ class TwilioAlertSystem:
         except Exception as e:
             self.logger.error(f"Error loading settings: {e}")
             self.test_mode = True
+            self.client = None
     
     def _get_face_hash(self, face_encoding):
         """Create unique hash from face encoding"""
@@ -103,6 +115,35 @@ class TwilioAlertSystem:
         encoding_str = ','.join([f"{x:.6f}" for x in face_encoding[:30]])
         return hashlib.md5(encoding_str.encode()).hexdigest()
     
+    def load_phone_numbers(self):
+        """Load all active phone numbers from database"""
+        try:
+            from utils.database import get_all_phone_numbers
+            numbers = get_all_phone_numbers()
+            
+            self.phone_numbers = []
+            for number in numbers:
+                if number['is_active']:
+                    self.phone_numbers.append({
+                        'id': number['id'],
+                        'phone_number': number['phone_number'],
+                        'display_name': number['display_name'],
+                        'sort_order': number['sort_order']
+                    })
+            
+            # Sort by sort_order
+            self.phone_numbers.sort(key=lambda x: x['sort_order'])
+            
+            self.logger.info(f"✅ Loaded {len(self.phone_numbers)} active phone numbers")
+            
+        except Exception as e:
+            self.logger.error(f"Error loading phone numbers: {e}")
+            self.phone_numbers = []
+    
+    def get_active_phone_numbers(self):
+        """Get list of active phone numbers in order"""
+        return [num['phone_number'] for num in self.phone_numbers]
+
     def _find_similar_face(self, new_encoding):
         """Find if a similar face already exists in tracking"""
         if not self.alerted_faces:
@@ -283,7 +324,9 @@ class TwilioAlertSystem:
             
     def trigger_alert_escalation(self, event_id, trigger_type, recording_filepath=None, face_encoding=None):
         """Trigger voice call escalation with face tracking"""
-        if not self.primary_number:
+        # ✅ FIX: Check if we have any active phone numbers
+        active_numbers = self.get_active_phone_numbers()
+        if not active_numbers:
             return {'status': 'error', 'error': 'No phone numbers configured'}
             
         self.log_event(event_id, trigger_type, recording_filepath)
@@ -296,62 +339,75 @@ class TwilioAlertSystem:
         return {'status': 'escalation_started', 'event_id': event_id}
         
     def _execute_escalation(self, event_id, face_encoding=None):
-        """Execute escalation logic with answer tracking"""
-        escalation_result = {
-            'event_id': event_id,
-            'start_time': datetime.now(),
-            'attempts': [],
-            'final_status': 'failed',
-            'answered': False
-        }
-        
-        max_attempts = 3
-        attempt_interval = 60  # 1 minute
-        
-        # Attempt 1-3: Primary number
-        for attempt in range(1, max_attempts + 1):
-            result = self._make_call_attempt(event_id, attempt, self.primary_number)
-            escalation_result['attempts'].append(result)
-            
-            # ✅ CHECK IF CALL WAS ANSWERED
-            if result['status'] == 'answered':
-                escalation_result['final_status'] = 'answered'
-                escalation_result['answered'] = True
-                
-                # Mark this face as answered - stop future alerts
-                if face_encoding is not None:
-                    self.mark_call_answered(face_encoding)
-                    
-                self.update_event_status(event_id, 'answered', escalation_result)
+        """Execute escalation logic with multiple numbers"""
+        try:
+            # ✅ FIX: Get active phone numbers
+            active_numbers = self.get_active_phone_numbers()
+            if not active_numbers:
+                self.logger.error("No active phone numbers available for escalation")
                 return
                 
-            # If not answered and we have more attempts, wait
-            if attempt < max_attempts:
-                self.logger.info(f"🔄 Waiting {attempt_interval}s before next attempt...")
-                time.sleep(attempt_interval)
+            escalation_result = {
+                'event_id': event_id,
+                'start_time': datetime.now(),
+                'attempts': [],
+                'final_status': 'failed',
+                'answered': False
+            }
+            
+            max_attempts_per_number = 3
+            attempt_interval = 60  # 1 minute
+            
+            # For each number in sequence
+            for number_index, phone_number in enumerate(active_numbers):
+                if escalation_result['answered']:
+                    break
+                    
+                # Attempt 1-3 for current number
+                for attempt in range(1, max_attempts_per_number + 1):
+                    # ✅ FIX: Call with correct number of arguments
+                    result = self._make_call_attempt(event_id, attempt, phone_number, number_index + 1)
+                    escalation_result['attempts'].append(result)
+                    
+                    # ✅ CHECK IF CALL WAS ANSWERED
+                    if result['status'] == 'answered':
+                        escalation_result['final_status'] = 'answered'
+                        escalation_result['answered'] = True
+                        
+                        # Mark this face as answered - stop future alerts
+                        if face_encoding is not None:
+                            self.mark_call_answered(face_encoding)
+                            
+                        self.update_event_status(event_id, 'answered', escalation_result)
+                        return
+                        
+                    # If not answered and we have more attempts, wait
+                    if attempt < max_attempts_per_number:
+                        self.logger.info(f"🔄 Waiting {attempt_interval}s before next attempt...")
+                        time.sleep(attempt_interval)
                 
-        # If primary number failed all attempts, try backup
-        if not escalation_result['answered'] and self.backup_number:
-            result = self._make_call_attempt(event_id, max_attempts + 1, self.backup_number)
-            escalation_result['attempts'].append(result)
+                # If we have more numbers to try, log the transition
+                if number_index < len(active_numbers) - 1 and not escalation_result['answered']:
+                    next_number = active_numbers[number_index + 1]
+                    self.logger.info(f"🔄 Escalating to next number: {next_number}")
             
-            if result['status'] == 'answered':
-                escalation_result['final_status'] = 'answered'
-                escalation_result['answered'] = True
-                if face_encoding is not None:
-                    self.mark_call_answered(face_encoding)
-        
-        # Mark as not answered if all attempts failed
-        if not escalation_result['answered'] and face_encoding is not None:
-            self.mark_call_not_answered(face_encoding)
+            # Mark as not answered if all attempts failed
+            if not escalation_result['answered'] and face_encoding is not None:
+                self.mark_call_not_answered(face_encoding)
+                
+            self.update_event_status(event_id, escalation_result['final_status'], escalation_result)
             
-        self.update_event_status(event_id, escalation_result['final_status'], escalation_result)
+        except Exception as e:
+            self.logger.error(f"Error in escalation: {e}")
+            import traceback
+            traceback.print_exc()
         
-    def _make_call_attempt(self, event_id, attempt_number, phone_number):
-        """Make single call attempt"""
+    def _make_call_attempt(self, event_id, attempt_number, phone_number, number_sequence=None):
+        """Make single call attempt with enhanced logging"""
         attempt_result = {
             'attempt_number': attempt_number,
             'phone_number': phone_number,
+            'number_sequence': number_sequence,
             'timestamp': datetime.now(),
             'status': 'failed'
         }
@@ -449,8 +505,8 @@ class TwilioAlertSystem:
                 )
             ''')
             
-            # Use current datetime from Python
-            current_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            # ✅ FIX: Use datetime correctly
+            current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             cursor.execute(
                 'INSERT INTO alert_events (event_id, timestamp, trigger_type, recording_filepath) VALUES (?, ?, ?, ?)',
@@ -520,27 +576,33 @@ class TwilioAlertSystem:
             self.logger.error(f"Error updating event: {e}")
     
     def save_settings(self, settings):
-        """Save Twilio settings"""
+        """Save Twilio settings with proper auth token handling"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
             
+            # Get current settings to preserve auth token if not changed
+            current_settings = cursor.execute('SELECT * FROM twilio_settings WHERE id = 1').fetchone()
+            
+            account_sid = settings.get('account_sid', '').strip()
+            auth_token = settings.get('auth_token', '').strip()
+            twilio_number = settings.get('twilio_number', '').strip()
+            test_mode = 1 if settings.get('test_mode', True) else 0
+            
+            # If auth token is "***" or empty, use the existing one
+            if auth_token in ['***', ''] and current_settings:
+                auth_token = current_settings[2]  # Use existing auth token
+            
             cursor.execute('''
                 INSERT OR REPLACE INTO twilio_settings 
-                (id, account_sid, auth_token, twilio_number, primary_number, backup_number, test_mode)
-                VALUES (1, ?, ?, ?, ?, ?, ?)
-            ''', (
-                settings.get('account_sid', '').strip(),
-                settings.get('auth_token', '').strip(),
-                settings.get('twilio_number', '').strip(),
-                settings.get('primary_number', '').strip(),
-                settings.get('backup_number', '').strip(),
-                1 if settings.get('test_mode', True) else 0
-            ))
+                (id, account_sid, auth_token, twilio_number, test_mode)
+                VALUES (1, ?, ?, ?, ?)
+            ''', (account_sid, auth_token, twilio_number, test_mode))
             
             conn.commit()
             conn.close()
             
+            # Reload settings to update the client
             self.load_settings()
             return True
             
@@ -549,15 +611,14 @@ class TwilioAlertSystem:
             return False
     
     def get_settings(self):
-        """Get current settings"""
+        """Get current settings - mask auth token for display"""
         return {
-            'account_sid': self.account_sid,
-            'auth_token': '***' if self.auth_token else '',
-            'twilio_number': self.twilio_number,
-            'primary_number': self.primary_number,
-            'backup_number': self.backup_number,
+            'account_sid': self.account_sid or '',
+            'auth_token': '***' if self.auth_token else '',  # Always mask for display
+            'twilio_number': self.twilio_number or '',
             'test_mode': self.test_mode,
-            'configured': bool(self.account_sid and self.auth_token and self.twilio_number)
+            'configured': bool(self.account_sid and self.auth_token and self.twilio_number),
+            'authenticated': self.client is not None
         }
     
     def get_event_history(self, limit=50):

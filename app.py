@@ -108,7 +108,7 @@ def debug_verification():
 
 @app.route('/api/twilio_settings', methods=['GET', 'POST'])
 def twilio_settings():
-    """Get or update Twilio settings"""
+    """Get or update Twilio settings with proper auth token handling"""
     try:
         from utils.twilio_alert_system import twilio_alert_system
         
@@ -121,13 +121,18 @@ def twilio_settings():
                 'account_sid': request.form.get('account_sid'),
                 'auth_token': request.form.get('auth_token'),
                 'twilio_number': request.form.get('twilio_number'),
-                'primary_number': request.form.get('primary_number'),
-                'backup_number': request.form.get('backup_number'),
                 'test_mode': request.form.get('test_mode') == 'true'
             }
             
+            # Validate required fields
+            if not settings['account_sid'] or not settings['twilio_number']:
+                return jsonify({'success': False, 'error': 'Account SID and Twilio Number are required'})
+            
             success = twilio_alert_system.save_settings(settings)
-            return jsonify({'success': success, 'message': 'Settings updated'})
+            if success:
+                return jsonify({'success': True, 'message': 'Settings updated successfully'})
+            else:
+                return jsonify({'success': False, 'error': 'Failed to save settings'})
             
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -546,7 +551,94 @@ def get_known_events():
         print(f"❌ ERROR in get_known_events: {e}")
         import traceback
         traceback.print_exc()
-        return jsonify({'success': False, 'error': str(e)})    
+        return jsonify({'success': False, 'error': str(e)})  
+    
+@app.route('/api/phone_numbers', methods=['GET', 'POST', 'PUT', 'DELETE'])
+def manage_phone_numbers():
+    """Manage phone numbers for alerts"""
+    try:
+        from utils.database import (
+            get_all_phone_numbers, add_phone_number, update_phone_number_order,
+            toggle_phone_number_active, delete_phone_number, update_phone_number
+        )
+        from utils.twilio_alert_system import twilio_alert_system
+        
+        if request.method == 'GET':
+            numbers = get_all_phone_numbers()
+            numbers_list = []
+            for number in numbers:
+                numbers_list.append({
+                    'id': number['id'],
+                    'phone_number': number['phone_number'],
+                    'display_name': number['display_name'],
+                    'is_active': bool(number['is_active']),
+                    'sort_order': number['sort_order'],
+                    'created_at': number['created_at']
+                })
+            return jsonify({'success': True, 'phone_numbers': numbers_list})
+        
+        elif request.method == 'POST':
+            phone_number = request.form.get('phone_number')
+            display_name = request.form.get('display_name')
+            
+            if not phone_number:
+                return jsonify({'success': False, 'error': 'Phone number required'})
+            
+            add_phone_number(phone_number, display_name)
+            
+            # Reload numbers in alert system
+            twilio_alert_system.load_phone_numbers()
+            
+            return jsonify({'success': True, 'message': 'Phone number added'})
+        
+        elif request.method == 'PUT':
+            if request.form.get('action') == 'reorder':
+                phone_numbers = request.json.get('phone_numbers', [])
+                update_phone_number_order(phone_numbers)
+                
+                # Reload numbers in alert system
+                twilio_alert_system.load_phone_numbers()
+                
+                return jsonify({'success': True, 'message': 'Phone numbers reordered'})
+            
+            elif request.form.get('action') == 'toggle':
+                phone_id = request.form.get('phone_id')
+                is_active = request.form.get('is_active') == 'true'
+                
+                toggle_phone_number_active(phone_id, is_active)
+                
+                # Reload numbers in alert system
+                twilio_alert_system.load_phone_numbers()
+                
+                return jsonify({'success': True, 'message': 'Phone number status updated'})
+            
+            elif request.form.get('action') == 'update':
+                phone_id = request.form.get('phone_id')
+                phone_number = request.form.get('phone_number')
+                display_name = request.form.get('display_name')
+                
+                update_phone_number(phone_id, phone_number, display_name)
+                
+                # Reload numbers in alert system
+                twilio_alert_system.load_phone_numbers()
+                
+                return jsonify({'success': True, 'message': 'Phone number updated'})
+        
+        elif request.method == 'DELETE':
+            phone_id = request.args.get('phone_id')
+            
+            if not phone_id:
+                return jsonify({'success': False, 'error': 'Phone ID required'})
+            
+            delete_phone_number(phone_id)
+            
+            # Reload numbers in alert system
+            twilio_alert_system.load_phone_numbers()
+            
+            return jsonify({'success': True, 'message': 'Phone number deleted'})
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})  
 
 @app.route('/api/get_recording_for_alert/<int:alert_id>')
 def get_recording_for_alert(alert_id):

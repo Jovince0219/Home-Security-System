@@ -63,6 +63,18 @@ def init_db():
         )
     ''')
     
+    # Create phone_numbers table for multiple contacts
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS phone_numbers (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            phone_number TEXT NOT NULL,
+            display_name TEXT,
+            is_active BOOLEAN DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+    
     # Create recordings table
     conn.execute('''
         CREATE TABLE IF NOT EXISTS recordings (
@@ -315,6 +327,70 @@ def save_alert_settings(settings):
         raise e
     finally:
         conn.close()
+        
+def get_all_phone_numbers():
+    """Get all phone numbers with sorting"""
+    conn = get_db_connection()
+    numbers = conn.execute('''
+        SELECT * FROM phone_numbers 
+        ORDER BY sort_order ASC, created_at ASC
+    ''').fetchall()
+    conn.close()
+    return numbers
+
+def add_phone_number(phone_number, display_name=None, is_active=True):
+    """Add a new phone number"""
+    conn = get_db_connection()
+    
+    # Get the next sort order
+    max_order = conn.execute('SELECT MAX(sort_order) FROM phone_numbers').fetchone()[0] or 0
+    
+    conn.execute(
+        'INSERT INTO phone_numbers (phone_number, display_name, is_active, sort_order) VALUES (?, ?, ?, ?)',
+        (phone_number, display_name, 1 if is_active else 0, max_order + 1)
+    )
+    conn.commit()
+    conn.close()
+
+def update_phone_number_order(phone_numbers):
+    """Update the sort order of phone numbers"""
+    conn = get_db_connection()
+    
+    for index, phone_id in enumerate(phone_numbers):
+        conn.execute(
+            'UPDATE phone_numbers SET sort_order = ? WHERE id = ?',
+            (index, phone_id)
+        )
+    
+    conn.commit()
+    conn.close()
+
+def toggle_phone_number_active(phone_id, is_active):
+    """Toggle phone number active status"""
+    conn = get_db_connection()
+    conn.execute(
+        'UPDATE phone_numbers SET is_active = ? WHERE id = ?',
+        (1 if is_active else 0, phone_id)
+    )
+    conn.commit()
+    conn.close()
+
+def delete_phone_number(phone_id):
+    """Delete a phone number"""
+    conn = get_db_connection()
+    conn.execute('DELETE FROM phone_numbers WHERE id = ?', (phone_id,))
+    conn.commit()
+    conn.close()
+
+def update_phone_number(phone_id, phone_number, display_name):
+    """Update phone number details"""
+    conn = get_db_connection()
+    conn.execute(
+        'UPDATE phone_numbers SET phone_number = ?, display_name = ? WHERE id = ?',
+        (phone_number, display_name, phone_id)
+    )
+    conn.commit()
+    conn.close()
 
 def get_alert_settings():
     """Enhanced alert settings retrieval with better error handling"""

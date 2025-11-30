@@ -65,12 +65,11 @@ def load_known_persons():
 def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     """
     UPDATED: Face detection that works independently for unauthorized persons
-    Authorized faces: Only detected when human motion is active
-    Unauthorized faces: Always detected regardless of motion
-    Known Persons: Recognized but don't trigger alerts
     """
     global known_face_encodings, known_face_names
     global known_persons_encodings, known_persons_names
+    
+    print("🎯 DEBUG: detect_faces_with_motion_gate called")
     
     # Get distance estimator with user settings
     from utils.distance_estimation import get_distance_estimator
@@ -85,7 +84,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     except:
         pass  # Use default if can't get from request
     
-    print(f"🔍 TWILIO STATE IN FACE DETECTION: {'ENABLED' if twilio_enabled else 'DISABLED'}")
+    print(f"🔍 DEBUG: TWILIO STATE IN FACE DETECTION: {'ENABLED' if twilio_enabled else 'DISABLED'}")
 
     # Convert BGR to RGB
     rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -93,22 +92,31 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     # Detect faces
     face_locations = face_recognition.face_locations(rgb_frame, model='hog')
     
+    print(f"🔍 DEBUG: Found {len(face_locations)} face locations")
+    
     if len(face_locations) == 0:
         return []
     
     # Encode all faces at once
     face_encodings = face_recognition.face_encodings(rgb_frame, face_locations)
     
+    print(f"🔍 DEBUG: Encoded {len(face_encodings)} faces")
+    
     results = []
     
-    for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+    for i, ((top, right, bottom, left), face_encoding) in enumerate(zip(face_locations, face_encodings)):
+        print(f"🔍 DEBUG: Processing face {i+1}/{len(face_locations)}")
+        
         # STEP 1: Estimate distance FIRST using user settings
         face_location = [top, right, bottom, left]
         face_width_pixels = right - left
         distance_meters = distance_estimator.estimate_distance(face_width_pixels)
         
+        print(f"🔍 DEBUG: Face {i+1} - Distance: {distance_meters:.2f}m")
+        
         # STEP 2: Check if within user's configured MAX Detection Distance
         if distance_meters > distance_estimator.MAX_DETECTION_DISTANCE:
+            print(f"🔍 DEBUG: Face {i+1} - Beyond max distance, skipping")
             continue  # Skip face recognition if beyond user's max distance
         
         # STEP 3: Check against KNOWN PERSONS first (non-threatening)
@@ -273,6 +281,12 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         
         # STEP 6: Handle ONLY unauthorized faces (not known persons) for alerts
         if not is_authorized and not is_known_person and distance_analysis['trigger_alert']:
+            print(f"🚨 DEBUG: Unauthorized face detected - should trigger alert!")
+            print(f"  - is_authorized: {is_authorized}")
+            print(f"  - is_known_person: {is_known_person}")
+            print(f"  - trigger_alert: {distance_analysis['trigger_alert']}")
+            print(f"  - alert_level: {distance_analysis['alert_level']}")
+            
             # ✅ UPDATED: Pass Twilio state to trigger_security_alert
             event_id = trigger_security_alert(
                 "Unauthorized Face", 
@@ -280,7 +294,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                 confidence, 
                 frame,
                 face_encoding,
-                twilio_enabled  # ✅ ADD THIS PARAMETER
+                twilio_enabled
             )
             
             if event_id:
@@ -307,9 +321,15 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                     screenshot_path, 
                     alert_level
                 )
+                print(f"📝 DEBUG: Detection logged to database")
                 
             except Exception as e:
-                print(f"Error logging detection: {e}")
+                print(f"❌ Error logging detection: {e}")
+        else:
+            print(f"🔍 DEBUG: Face {i+1} - No alert triggered:")
+            print(f"  - is_authorized: {is_authorized}")
+            print(f"  - is_known_person: {is_known_person}") 
+            print(f"  - trigger_alert: {distance_analysis.get('trigger_alert', False)}")
     
     return results
 
@@ -1005,6 +1025,13 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
     """Trigger security alert with Twilio calls and recording - WITH FACE TRACKING AND TWILIO CONTROL"""
     from utils.twilio_alert_system import twilio_alert_system
     
+    print(f"🔍 DEBUG: trigger_security_alert called with:")
+    print(f"  - trigger_type: {trigger_type}")
+    print(f"  - person_name: {person_name}")
+    print(f"  - confidence: {confidence}")
+    print(f"  - twilio_enabled: {twilio_enabled}")
+    print(f"  - face_encoding: {'Provided' if face_encoding is not None else 'None'}")
+    
     # ✅ Check if Twilio is enabled
     if not twilio_enabled:
         print(f"🔕 Twilio alerts disabled - skipping call for {person_name}")
@@ -1021,34 +1048,44 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
     
     # ✅ Check if we should trigger alert for this face
     if face_encoding is not None:
-        if not twilio_alert_system.should_trigger_alert_for_face(face_encoding):
+        should_alert = twilio_alert_system.should_trigger_alert_for_face(face_encoding)
+        print(f"🔍 DEBUG: should_trigger_alert_for_face returned: {should_alert}")
+        
+        if not should_alert:
             print(f"🔄 Skipping alert for face - already alerted recently or answered")
             return None
+    else:
+        print(f"⚠️ WARNING: No face encoding provided - proceeding without face tracking")
     
     # Generate event ID
     event_id = str(uuid.uuid4())
+    print(f"🔍 DEBUG: Generated event_id: {event_id}")
     
-    # Start recording. This function will return the *final .mp4 path*
-    # (e.g., "static/recordings/recording_123.mp4")
-    # while it starts writing the .avi in the background.
+    # Start recording
     final_mp4_path = recording_manager.start_recording_for_event(event_id, trigger_type) 
         
     if final_mp4_path is None:
         print("❌ Failed to start recording, aborting alert.")
         return None
     
+    print(f"🔍 DEBUG: Recording started: {final_mp4_path}")
+    
     # Save screenshot
     screenshot_path = None
     if frame is not None:
         screenshot_path = save_screenshot(frame, f"unauthorized_{event_id}")
+        print(f"🔍 DEBUG: Screenshot saved: {screenshot_path}")
     
     # ✅ UPDATED: Trigger escalation WITH face encoding
+    print(f"🔍 DEBUG: Calling trigger_alert_escalation...")
     alert_result = twilio_alert_system.trigger_alert_escalation(
         event_id, 
         trigger_type, 
-        final_mp4_path,  # <-- Use the .mp4 path here
+        final_mp4_path,
         face_encoding
     )
+    
+    print(f"🔍 DEBUG: trigger_alert_escalation returned: {alert_result}")
     
     # Log the result
     if alert_result.get('status') == 'escalation_started':
@@ -1065,5 +1102,7 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
         screenshot_path,
         alert_level=3
     )
+    
+    print(f"✅ Detection logged to database for event: {event_id}")
     
     return event_id
