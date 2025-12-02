@@ -533,6 +533,7 @@
     `;
     }
 
+
     function saveTwilioSettings(event) {
         event.preventDefault();
 
@@ -2201,56 +2202,49 @@
             });
     }
 
-    function displayPhoneNumbers(phoneNumbers) {
-        const container = document.getElementById('phoneNumbersList');
+    // Helper function to update toggle visual state
+    function updateToggleVisual(button, isActive) {
+        if (isActive) {
+            button.classList.remove('bg-gray-300', 'hover:bg-gray-400');
+            button.classList.add('bg-green-500', 'hover:bg-green-600');
 
-        if (!phoneNumbers || phoneNumbers.length === 0) {
-            container.innerHTML = `
-            <div class="text-center py-4 text-gray-500">
-                <i class="fas fa-phone text-2xl mb-2"></i>
-                <p>No phone numbers added yet</p>
-            </div>
-        `;
-            return;
+            const knob = button.querySelector('span:first-of-type');
+            if (knob) {
+                knob.classList.remove('translate-x-1');
+                knob.classList.add('translate-x-9');
+            }
+
+            const icon = knob ? knob.querySelector('i') : null;
+            if (icon) {
+                icon.classList.remove('fa-times', 'text-gray-400');
+                icon.classList.add('fa-check', 'text-green-600');
+            }
+
+            const onText = button.querySelector('span:nth-of-type(2)');
+            const offText = button.querySelector('span:nth-of-type(3)');
+            if (onText) onText.classList.remove('opacity-0');
+            if (offText) offText.classList.add('opacity-0');
+        } else {
+            button.classList.remove('bg-green-500', 'hover:bg-green-600');
+            button.classList.add('bg-gray-300', 'hover:bg-gray-400');
+
+            const knob = button.querySelector('span:first-of-type');
+            if (knob) {
+                knob.classList.remove('translate-x-9');
+                knob.classList.add('translate-x-1');
+            }
+
+            const icon = knob ? knob.querySelector('i') : null;
+            if (icon) {
+                icon.classList.remove('fa-check', 'text-green-600');
+                icon.classList.add('fa-times', 'text-gray-400');
+            }
+
+            const onText = button.querySelector('span:nth-of-type(2)');
+            const offText = button.querySelector('span:nth-of-type(3)');
+            if (onText) onText.classList.add('opacity-0');
+            if (offText) offText.classList.remove('opacity-0');
         }
-
-        let html = '';
-        phoneNumbers.forEach(number => {
-            html += `
-        <div class="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between phone-number-item" 
-             data-id="${number.id}">
-            <div class="flex items-center space-x-3 flex-1">
-                <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600">
-                    <i class="fas fa-grip-vertical"></i>
-                </div>
-                <div class="flex items-center space-x-2">
-                    <input type="checkbox" ${number.is_active ? 'checked' : ''} 
-                           onchange="togglePhoneNumber(${number.id}, this.checked)"
-                           class="phone-toggle w-4 h-4 text-blue-600 rounded focus:ring-blue-500">
-                </div>
-                <div class="flex-1">
-                    <div class="font-medium text-gray-800">${number.phone_number}</div>
-                    ${number.display_name ? `<div class="text-sm text-gray-500">${number.display_name}</div>` : ''}
-                </div>
-            </div>
-            <div class="flex items-center space-x-2">
-                <button onclick="editPhoneNumber(${number.id}, '${number.phone_number}', '${number.display_name || ''}')"
-                        class="text-blue-600 hover:text-blue-800 p-1">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button onclick="deletePhoneNumber(${number.id})"
-                        class="text-red-600 hover:text-red-800 p-1">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-        `;
-        });
-
-        container.innerHTML = html;
-
-        // Initialize drag and drop
-        initDragAndDrop();
     }
 
     function initDragAndDrop() {
@@ -2287,11 +2281,91 @@
             });
     }
 
-    function togglePhoneNumber(phoneId, isActive) {
+    function displayPhoneNumbers(phoneNumbers) {
+        const container = document.getElementById('phoneNumbersList');
+
+        if (!phoneNumbers || phoneNumbers.length === 0) {
+            container.innerHTML = `
+            <div class="text-center py-4 text-gray-500">
+                <i class="fas fa-phone text-2xl mb-2"></i>
+                <p>No phone numbers added yet</p>
+            </div>
+        `;
+            return;
+        }
+
+        let html = '';
+        phoneNumbers.forEach(number => {
+            const isActive = number.is_active;
+            html += `
+        <div class="bg-white border border-gray-200 rounded-lg p-4 flex items-center justify-between phone-number-item" 
+             data-id="${number.id}">
+            <div class="flex items-center space-x-3 flex-1">
+                <div class="drag-handle cursor-move text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-grip-vertical"></i>
+                </div>
+                <div class="flex items-center space-x-3">
+                    <!-- Enhanced Toggle Button - Fixed onclick parameter -->
+                    <button onclick="togglePhoneNumber(${number.id})"
+                            class="group relative inline-flex h-8 w-16 items-center rounded-full transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${isActive ? 'bg-green-500 hover:bg-green-600' : 'bg-gray-300 hover:bg-gray-400'}">
+                        <span class="sr-only">Enable/Disable</span>
+                        <span class="inline-flex h-6 w-6 transform items-center justify-center rounded-full bg-white shadow-sm transition-transform duration-200 ${isActive ? 'translate-x-9' : 'translate-x-1'}">
+                            ${isActive ?
+                    '<i class="fas fa-check text-xs text-green-600"></i>' :
+                    '<i class="fas fa-times text-xs text-gray-400"></i>'}
+                        </span>
+                        <span class="absolute left-1.5 text-xs font-medium text-white opacity-0 transition-opacity duration-200 ${isActive ? 'opacity-100' : 'opacity-0'}">
+                            ON
+                        </span>
+                        <span class="absolute right-1.5 text-xs font-medium text-gray-600 opacity-0 transition-opacity duration-200 ${isActive ? 'opacity-0' : 'opacity-100'}">
+                            OFF
+                        </span>
+                    </button>
+                </div>
+                <div class="flex-1">
+                    <div class="font-medium text-gray-800">${number.phone_number}</div>
+                    ${number.display_name ? `<div class="text-sm text-gray-500">${number.display_name}</div>` : ''}
+                </div>
+            </div>
+            <div class="flex items-center space-x-2">
+                <button onclick="editPhoneNumber(${number.id}, '${number.phone_number}', '${number.display_name || ''}')"
+                        class="text-blue-600 hover:text-blue-800 p-1 hover:bg-blue-50 rounded transition-colors">
+                    <i class="fas fa-edit"></i>
+                </button>
+                <button onclick="deletePhoneNumber(${number.id})"
+                        class="text-red-600 hover:text-red-800 p-1 hover:bg-red-50 rounded transition-colors">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+        `;
+        });
+
+        container.innerHTML = html;
+
+        // Initialize drag and drop
+        initDragAndDrop();
+    }
+
+    function togglePhoneNumber(phoneId) {
+        const button = event.currentTarget;
+        const container = button.closest('.phone-number-item');
+
+        // Determine current state from button appearance
+        const isCurrentlyActive = button.classList.contains('bg-green-500');
+        const newActiveState = !isCurrentlyActive;
+
+        // Show immediate visual feedback (optimistic update)
+        updateToggleButton(button, newActiveState);
+
+        // Send update to server
         const formData = new FormData();
         formData.append('phone_id', phoneId);
-        formData.append('is_active', isActive);
+        formData.append('is_active', newActiveState);
         formData.append('action', 'toggle');
+
+        // Disable button temporarily to prevent double clicks
+        button.disabled = true;
 
         fetch('/api/phone_numbers', {
             method: 'PUT',
@@ -2300,9 +2374,128 @@
             .then(response => response.json())
             .then(data => {
                 if (data.success) {
-                    showNotification(`Phone number ${isActive ? 'enabled' : 'disabled'}`, 'success');
+                    showNotification(`Phone number ${newActiveState ? 'enabled' : 'disabled'}`, 'success');
+                    // Update escalation visualization
+                    updateEscalationVisualization();
+                } else {
+                    showNotification('Error: ' + data.error, 'error');
+                    // If server failed, revert to original state
+                    updateToggleButton(button, isCurrentlyActive);
                 }
+            })
+            .catch(error => {
+                showNotification('Network error', 'error');
+                // Revert on network error
+                updateToggleButton(button, isCurrentlyActive);
+            })
+            .finally(() => {
+                // Re-enable button after a short delay
+                setTimeout(() => {
+                    button.disabled = false;
+                }, 500);
             });
+    }
+
+    // Helper function to update toggle button appearance
+    function updateToggleButton(button, isActive) {
+        // Update button background color
+        if (isActive) {
+            button.classList.remove('bg-gray-300', 'hover:bg-gray-400');
+            button.classList.add('bg-green-500', 'hover:bg-green-600');
+        } else {
+            button.classList.remove('bg-green-500', 'hover:bg-green-600');
+            button.classList.add('bg-gray-300', 'hover:bg-gray-400');
+        }
+
+        // Find all the child elements
+        const knob = button.children[1]; // The second span (knob)
+        const onText = button.children[2]; // The "ON" text span
+        const offText = button.children[3]; // The "OFF" text span
+
+        // Update knob position
+        if (isActive) {
+            knob.classList.remove('translate-x-1');
+            knob.classList.add('translate-x-9');
+        } else {
+            knob.classList.remove('translate-x-9');
+            knob.classList.add('translate-x-1');
+        }
+
+        // Update icon inside knob
+        const icon = knob.querySelector('i');
+        if (icon) {
+            if (isActive) {
+                icon.className = 'fas fa-check text-xs text-green-600';
+            } else {
+                icon.className = 'fas fa-times text-xs text-gray-400';
+            }
+        }
+
+        // Update text visibility
+        if (onText) {
+            if (isActive) {
+                onText.classList.remove('opacity-0');
+                onText.classList.add('opacity-100');
+            } else {
+                onText.classList.remove('opacity-100');
+                onText.classList.add('opacity-0');
+            }
+        }
+
+        if (offText) {
+            if (isActive) {
+                offText.classList.remove('opacity-100');
+                offText.classList.add('opacity-0');
+            } else {
+                offText.classList.remove('opacity-0');
+                offText.classList.add('opacity-100');
+            }
+        }
+    }
+
+    // Helper function to update toggle visual state
+    function updateToggleVisual(button, isActive) {
+        if (isActive) {
+            button.classList.remove('bg-gray-300', 'hover:bg-gray-400');
+            button.classList.add('bg-green-500', 'hover:bg-green-600');
+
+            const knob = button.querySelector('span:first-of-type');
+            if (knob) {
+                knob.classList.remove('translate-x-1');
+                knob.classList.add('translate-x-9');
+            }
+
+            const icon = knob ? knob.querySelector('i') : null;
+            if (icon) {
+                icon.classList.remove('fa-times', 'text-gray-400');
+                icon.classList.add('fa-check', 'text-green-600');
+            }
+
+            const onText = button.querySelector('span:nth-of-type(2)');
+            const offText = button.querySelector('span:nth-of-type(3)');
+            if (onText) onText.classList.remove('opacity-0');
+            if (offText) offText.classList.add('opacity-0');
+        } else {
+            button.classList.remove('bg-green-500', 'hover:bg-green-600');
+            button.classList.add('bg-gray-300', 'hover:bg-gray-400');
+
+            const knob = button.querySelector('span:first-of-type');
+            if (knob) {
+                knob.classList.remove('translate-x-9');
+                knob.classList.add('translate-x-1');
+            }
+
+            const icon = knob ? knob.querySelector('i') : null;
+            if (icon) {
+                icon.classList.remove('fa-check', 'text-green-600');
+                icon.classList.add('fa-times', 'text-gray-400');
+            }
+
+            const onText = button.querySelector('span:nth-of-type(2)');
+            const offText = button.querySelector('span:nth-of-type(3)');
+            if (onText) onText.classList.add('opacity-0');
+            if (offText) offText.classList.remove('opacity-0');
+        }
     }
 
     function deletePhoneNumber(phoneId) {
