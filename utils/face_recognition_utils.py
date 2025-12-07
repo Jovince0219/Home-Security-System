@@ -9,6 +9,7 @@ from utils.distance_estimation import get_distance_estimator
 import uuid
 from utils.recording_manager import recording_manager
 import time
+from utils.motion_gated_tracker import MotionGatedFaceTracker
 
 
 # Global variables for face recognition (Authorized Persons)
@@ -19,6 +20,7 @@ known_face_names = []
 known_persons_encodings = []
 known_persons_names = []
 
+motion_gated_tracker = MotionGatedFaceTracker(motion_timeout=3.0)
 
 def load_known_faces():
     """Load all registered faces from database"""
@@ -64,12 +66,16 @@ def load_known_persons():
             
 def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     """
-    UPDATED: Face detection that works independently for unauthorized persons
+    UPDATED: Motion-gated face detection with state stabilization.
     """
     global known_face_encodings, known_face_names
     global known_persons_encodings, known_persons_names
     
-    print("🎯 DEBUG: detect_faces_with_motion_gate called")
+    print("🎯 DEBUG: Motion-gated face detection called")
+    
+    # Get motion status - use human motion detection status
+    motion_detected = motion_detector.is_human_motion_active() if motion_detector else False
+    motion_gated_tracker.update_motion_status(motion_detected)
     
     # Get distance estimator with user settings
     from utils.distance_estimation import get_distance_estimator
@@ -171,11 +177,6 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                 is_authorized = True
                 
                 print(f"DEBUG: Authorized face '{name}' detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
-                
-                # FOR AUTHORIZED FACES: Only process if human motion is active
-                if not motion_detector.is_human_motion_active():
-                    print(f"SKIPPING AUTHORIZED FACE: No human motion active")
-                    continue  # Skip authorized faces when no human motion
                     
             else:
                 # Unauthorized person detected
@@ -195,6 +196,25 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                     confidence = 0.55
                 
                 print(f"DEBUG: Unauthorized face detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
+        
+        # STEP 5: MOTION-GATED TRACKING - This is the core fix
+        tracker_info = motion_gated_tracker.register_face(
+            face_encoding=face_encoding,
+            face_location=face_location,
+            is_authorized=is_authorized,
+            is_known_person=is_known_person,
+            name=name
+        )
+        
+        print(f"🎯 TRACKER: {tracker_info['reason']}")
+        
+        # Use tracker state if it says we should maintain it
+        if not tracker_info['should_process']:
+            # Use the tracker's state instead of new detection
+            is_authorized = tracker_info['is_authorized']
+            is_known_person = tracker_info.get('is_known_person', False)
+            name = tracker_info['name']
+            print(f"🔒 USING TRACKER STATE: {name} - {'Authorized' if is_authorized else 'Known' if is_known_person else 'Unauthorized'}")
         
         # Use distance estimator with user settings
         distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
@@ -246,13 +266,14 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             'trigger_alert': bool(distance_analysis['trigger_alert']),
             'alert_level': int(distance_analysis['alert_level']),
             'within_detection_range': bool(distance_analysis['within_detection_range']),
-            'event_type': event_type
+            'event_type': event_type,
+            'tracker_id': tracker_info['tracker_id']
         }
         
         results.append(result)
         
-        # STEP 5: SAVE TO ALERT_EVENTS FOR ALL FACE TYPES WITHIN DETECTION RANGE
-        if distance_analysis['within_detection_range']:
+        # STEP 6: SAVE TO ALERT_EVENTS ONLY if tracker says we should process
+        if distance_analysis['within_detection_range'] and tracker_info['should_process']:
             # Generate unique event ID for this detection
             detection_event_id = f"{event_type}_{int(time.time())}_{uuid.uuid4().hex[:8]}"
             
@@ -279,13 +300,9 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             
             print(f"✅ Processed {event_type} event: {name} - Recording: {recording_path}")
         
-        # STEP 6: Handle ONLY unauthorized faces (not known persons) for alerts
-        if not is_authorized and not is_known_person and distance_analysis['trigger_alert']:
+        # STEP 7: Handle ONLY unauthorized faces (not known persons) for alerts
+        if not is_authorized and not is_known_person and distance_analysis['trigger_alert'] and tracker_info['should_process']:
             print(f"🚨 DEBUG: Unauthorized face detected - should trigger alert!")
-            print(f"  - is_authorized: {is_authorized}")
-            print(f"  - is_known_person: {is_known_person}")
-            print(f"  - trigger_alert: {distance_analysis['trigger_alert']}")
-            print(f"  - alert_level: {distance_analysis['alert_level']}")
             
             # ✅ UPDATED: Pass Twilio state to trigger_security_alert
             event_id = trigger_security_alert(
@@ -330,6 +347,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             print(f"  - is_authorized: {is_authorized}")
             print(f"  - is_known_person: {is_known_person}") 
             print(f"  - trigger_alert: {distance_analysis.get('trigger_alert', False)}")
+            print(f"  - should_process: {tracker_info.get('should_process', False)}")
     
     return results
 

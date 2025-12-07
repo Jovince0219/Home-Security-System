@@ -137,6 +137,95 @@ def twilio_settings():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
     
+@app.route('/api/motion_tracking_status')
+def get_motion_tracking_status():
+    """Get motion-gated tracking status"""
+    try:
+        from utils.face_recognition_utils import motion_gated_tracker
+        stats = motion_gated_tracker.get_tracking_stats()
+        return jsonify({'success': True, 'stats': stats})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/reset_motion_tracking', methods=['POST'])
+def reset_motion_tracking():
+    """Reset motion-gated tracking"""
+    try:
+        from utils.face_recognition_utils import motion_gated_tracker
+        motion_gated_tracker.reset_tracking()
+        return jsonify({'success': True, 'message': 'Motion tracking reset'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/update_motion_timeout', methods=['POST'])
+def update_motion_timeout():
+    """Update motion timeout setting"""
+    try:
+        from utils.face_recognition_utils import motion_gated_tracker
+        timeout = float(request.form.get('timeout', 3.0))
+        motion_gated_tracker.motion_timeout = timeout
+        return jsonify({'success': True, 'message': f'Motion timeout updated to {timeout}s'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/cleanup_old_trackers', methods=['POST'])
+def cleanup_old_trackers():
+    """Clean up old trackers manually"""
+    try:
+        from utils.face_recognition_utils import motion_gated_tracker
+        
+        # Count before cleanup
+        before_count = len(motion_gated_tracker.tracked_faces)
+        
+        # Run cleanup
+        motion_gated_tracker._cleanup_old_trackers()
+        
+        # Count after cleanup
+        after_count = len(motion_gated_tracker.tracked_faces)
+        cleaned_count = before_count - after_count
+        
+        return jsonify({
+            'success': True, 
+            'cleaned_count': cleaned_count,
+            'remaining': after_count,
+            'message': f'Cleaned up {cleaned_count} old trackers, {after_count} remain'
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/debug_tracking')
+def debug_tracking():
+    """Debug endpoint to see tracking details"""
+    try:
+        from utils.face_recognition_utils import motion_gated_tracker
+        
+        with motion_gated_tracker.lock:
+            debug_info = {
+                'total_tracked': len(motion_gated_tracker.tracked_faces),
+                'unique_hashes': len(motion_gated_tracker.face_to_tracker),
+                'motion_active': motion_gated_tracker.motion_active,
+                'last_motion_time': motion_gated_tracker.last_motion_time,
+                'trackers': []
+            }
+            
+            current_time = time.time()
+            for tracker_id, data in motion_gated_tracker.tracked_faces.items():
+                time_since_seen = current_time - data['last_seen']
+                debug_info['trackers'].append({
+                    'id': tracker_id[:8],
+                    'hash': data.get('face_hash', '')[:20] + '...',
+                    'state': data['state'],
+                    'name': data['name'],
+                    'time_since_seen': round(time_since_seen, 1),
+                    'motion_active': data['motion_active'],
+                    'encoding_sample': data.get('encoding_sample', '')[:50] + '...' if data.get('encoding_sample') else None
+                })
+        
+        return jsonify({'success': True, 'debug': debug_info})
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+    
 @app.route('/api/start_event_recording', methods=['POST'])
 def start_event_recording():
     """Start recording for specific event types with cooldown"""
