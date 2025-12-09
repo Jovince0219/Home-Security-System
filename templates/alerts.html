@@ -3,6 +3,25 @@
 {% block title %}Twilio Alerts - Security System{% endblock %}
 
 {% block content %}
+<style>
+    #eventsList {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        /* gap-4 in Tailwind */
+    }
+
+    #eventsList .event-card {
+        flex-shrink: 0;
+        height: 11rem;
+        /* Adjust based on your event card height */
+    }
+
+    /* Show 4 events: 4 × 7.5rem + gaps = ~32rem */
+    #eventsList {
+        max-height: calc(11rem * 4 + 1rem * 3);
+    }
+</style>
 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
     <div class="bg-white rounded-lg shadow-lg p-6">
         <h2 class="text-2xl font-bold mb-6 flex items-center">
@@ -122,39 +141,9 @@
             <i class="fas fa-history mr-3 text-gray-600"></i>
             Alert Events & Status
         </h2>
-        <!-- 
-        <div class="bg-white rounded-lg shadow-lg p-6 mb-6">
-            <h2 class="text-2xl font-bold mb-4">Alert Filtering</h2>
-            <div class="flex flex-wrap gap-2">
-                <button class="filter-btn active bg-gray-200 hover:bg-gray-300 px-4 py-2 rounded transition-colors"
-                    data-filter="all">
-                    All Alerts
-                </button>
-                <button class="filter-btn bg-green-200 hover:bg-green-300 px-4 py-2 rounded transition-colors"
-                    data-filter="authorized">
-                    Authorized
-                </button>
-                <button class="filter-btn bg-red-200 hover:bg-red-300 px-4 py-2 rounded transition-colors"
-                    data-filter="unauthorized">
-                    Unauthorized
-                </button>
-                <button class="filter-btn bg-blue-200 hover:bg-blue-300 px-4 py-2 rounded transition-colors"
-                    data-filter="known">
-                    Known Persons
-                </button>
-            </div>
-        </div> -->
 
         <div class="space-y-4">
             <div class="grid grid-cols-2 gap-4 mb-4">
-                <div class="bg-gray-50 p-4 rounded-lg">
-                    <h3 class="font-semibold text-gray-700">Recording Status</h3>
-                    <p id="recordingStatus" class="text-2xl font-bold text-green-600">Inactive</p>
-                </div>
-                <div class="bg-gray-50 p-4 rounded-lg">
-                    <h3 class="font-semibold text-gray-700">Storage</h3>
-                    <p id="storageStatus" class="text-sm text-gray-600">Loading...</p>
-                </div>
             </div>
 
             <div class="flex space-x-4">
@@ -166,7 +155,7 @@
                 </button>
             </div>
 
-            <div id="eventsList" class="max-h-96 overflow-y-auto">
+            <div id="eventsList" class="flex-1 overflow-y-auto">
             </div>
         </div>
     </div>
@@ -959,10 +948,10 @@
 
         if (!events || events.length === 0) {
             container.innerHTML = `
-            <div class="py-6 text-center">
-                <p class="text-gray-500 text-sm">No alert events found</p>
-            </div>
-        `;
+        <div class="py-6 text-center">
+            <p class="text-gray-500 text-sm">No alert events found</p>
+        </div>
+    `;
             return;
         }
 
@@ -978,106 +967,119 @@
                 event.trigger_type === 'authorized_face' ||
                 event.trigger_type === 'known_face';
 
-            html += `
-        <div class="bg-white shadow-sm border border-gray-200 rounded-xl p-4 mb-4 hover:shadow-md transition">
-            
-            <!-- Header -->
-            <div class="flex justify-between items-start mb-3">
-                <div>
-                    <h4 class="font-semibold text-gray-800 capitalize tracking-wide">
-                        ${event.trigger_type.replace(/_/g, ' ')}
-                        ${event.person_name ? `- ${event.person_name}` : ''}
-                    </h4>
-                    <p class="text-sm text-gray-500">${timestamp}</p>
-                    <p class="text-xs text-gray-400">Event ID: ${event.event_id}</p>
-                </div>
+            // Determine text color based on trigger type
+            let titleColor = '';
 
-                <div class="flex flex-col gap-1 text-right">
-                    <span class="px-2 py-1 rounded-md text-xs font-medium ${getStatusClass(callStatus)}">
-                        Call: ${callStatus}
-                    </span>
-                    <span class="px-2 py-1 rounded-md text-xs font-medium ${getReviewClass(reviewStatus)}">
-                        Review: ${reviewStatus}
-                    </span>
-                </div>
+            if (event.trigger_type === 'authorized_face') {
+                titleColor = 'text-green-600';
+            } else if (event.trigger_type === 'unauthorized_face') {
+                titleColor = 'text-red-600';
+            } else if (event.trigger_type === 'known_face') {
+                titleColor = 'text-yellow-600';
+            } else {
+                titleColor = 'text-gray-800';
+            }
+
+            html += `
+    <div class="bg-white shadow-sm border border-gray-200 rounded-xl p-4 mb-4 hover:shadow-md transition">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-start mb-3">
+            <div>
+                <h4 class="font-semibold capitalize tracking-wide ${titleColor}">
+                    ${event.trigger_type.replace(/_/g, ' ')}
+                    ${event.person_name ? `- ${event.person_name}` : ''}
+                </h4>
+                <p class="text-sm text-gray-500">${timestamp}</p>
+                <p class="text-xs text-gray-400">Event ID: ${event.event_id}</p>
             </div>
 
-            <!-- Call Attempts -->
-            ${event.call_attempts && event.call_attempts.length > 0
+            <div class="flex flex-col gap-1 text-right">
+                <span class="px-2 py-1 rounded-md text-xs font-medium ${getStatusClass(callStatus)}">
+                    Call: ${callStatus}
+                </span>
+                <span class="px-2 py-1 rounded-md text-xs font-medium ${getReviewClass(reviewStatus)}">
+                    Review: ${reviewStatus}
+                </span>
+            </div>
+        </div>
+
+        <!-- Call Attempts -->
+        ${event.call_attempts && event.call_attempts.length > 0
                     ? `
-                <div class="mt-3 bg-gray-50 p-3 rounded-lg">
-                    <h5 class="text-sm font-semibold mb-2 text-gray-700">Call Attempts:</h5>
-                    <div class="space-y-1">
-                    ${event.call_attempts
+            <div class="mt-3 bg-gray-50 p-3 rounded-lg">
+                <h5 class="text-sm font-semibold mb-2 text-gray-700">Call Attempts:</h5>
+                <div class="space-y-1">
+                ${event.call_attempts
                         .map(
                             attempt => `
-                        <div class="text-xs text-gray-600">
-                            <span class="font-medium">Attempt ${attempt.attempt_number}</span> — 
-                            ${attempt.phone_number} —
-                            <span class="${attempt.status === 'answered'
+                    <div class="text-xs text-gray-600">
+                        <span class="font-medium">Attempt ${attempt.attempt_number}</span> — 
+                        ${attempt.phone_number} —
+                        <span class="${attempt.status === 'answered'
                                     ? 'text-green-600 font-semibold'
                                     : 'text-red-600 font-semibold'
                                 }">${attempt.status}</span>
-                            <span class="text-gray-400">at ${new Date(
+                        <span class="text-gray-400">at ${new Date(
                                     attempt.timestamp
                                 ).toLocaleTimeString()}</span>
-                        </div>
-                    `
+                    </div>
+                `
                         )
                         .join('')}
-                    </div>
                 </div>
+            </div>
+        `
+                    : ''
+                }
+
+        <!-- Video Status -->
+        ${event.recording_filepath ? `
+            <div class="mt-2 flex items-center text-green-600 text-sm">
+                <i class="fas fa-video mr-2"></i>
+                Video recording available
+            </div>
+        ` : `
+            <div class="mt-2 flex items-center text-gray-500 text-sm">
+                <i class="fas fa-video-slash mr-2"></i>
+                No video recording
+            </div>
+        `}
+
+        <!-- Actions -->
+        <div class="mt-4 flex flex-wrap gap-2">
+            ${!isNonAlertEvent
+                    ? `
+                <button onclick="handleFalseAlarm('${event.event_id}')"
+                    class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                    <i class="fas fa-user-plus"></i> Mark as False Alarm
+                </button>
+
+                <button onclick="updateReviewStatus('${event.event_id}', 'confirmed')"
+                    class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                    <i class="fas fa-check"></i> Confirm
+                </button>
             `
                     : ''
                 }
 
-            <!-- Video Status -->
-            ${event.recording_filepath ? `
-                <div class="mt-2 flex items-center text-green-600 text-sm">
-                    <i class="fas fa-video mr-2"></i>
-                    Video recording available
-                </div>
-            ` : `
-                <div class="mt-2 flex items-center text-gray-500 text-sm">
-                    <i class="fas fa-video-slash mr-2"></i>
-                    No video recording
-                </div>
-            `}
-
-            <!-- Actions -->
-            <div class="mt-4 flex flex-wrap gap-2">
-                ${!isNonAlertEvent
+            ${event.recording_filepath
                     ? `
-                    <button onclick="handleFalseAlarm('${event.event_id}')"
-                        class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                        <i class="fas fa-user-plus"></i> Mark as False Alarm
-                    </button>
-
-                    <button onclick="updateReviewStatus('${event.event_id}', 'confirmed')"
-                        class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                        <i class="fas fa-check"></i> Confirm
-                    </button>
-                `
+                <button onclick="showVideoModal('${event.recording_filepath}')"
+                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                    <i class="fas fa-play mr-1"></i> Play Video
+                </button>
+                <button onclick="verifyRecording('${event.recording_filepath}')" 
+                        class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                    <i class="fas fa-check-circle mr-1"></i>Verify
+                </button>
+            `
                     : ''
                 }
-
-                ${event.recording_filepath
-                    ? `
-                    <button onclick="showVideoModal('${event.recording_filepath}')"
-                        class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                        <i class="fas fa-play mr-1"></i> Play Video
-                    </button>
-                    <button onclick="verifyRecording('${event.recording_filepath}')" 
-                            class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                        <i class="fas fa-check-circle mr-1"></i>Verify
-                    </button>
-                `
-                    : ''
-                }
-            </div>
-
         </div>
-        `;
+
+    </div>
+    `;
         });
 
         container.innerHTML = html;
