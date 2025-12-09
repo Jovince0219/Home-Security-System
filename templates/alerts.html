@@ -465,12 +465,6 @@
     `;
     }
 
-    // Initialize when page loads
-    $(document).ready(function () {
-        setupAlertFilters();
-        loadAlerts('all'); // Load all alerts by default
-    });
-
     function loadTwilioSettings() {
         fetch('/api/twilio_settings')
             .then(response => response.json())

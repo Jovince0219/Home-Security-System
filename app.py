@@ -149,12 +149,34 @@ def get_motion_tracking_status():
 
 @app.route('/api/reset_motion_tracking', methods=['POST'])
 def reset_motion_tracking():
-    """Reset motion-gated tracking"""
+    """Reset motion-gated tracking - safe version that handles both old and new code"""
     try:
         from utils.face_recognition_utils import motion_gated_tracker
-        motion_gated_tracker.reset_tracking()
-        return jsonify({'success': True, 'message': 'Motion tracking reset'})
+        
+        # Get count before reset for logging
+        before_count = len(motion_gated_tracker.tracked_faces)
+        
+        # Use a safe reset approach
+        with motion_gated_tracker.lock:
+            # Clear tracked faces
+            motion_gated_tracker.tracked_faces.clear()
+            
+            # Clear face_to_tracker if it exists (backward compatibility)
+            if hasattr(motion_gated_tracker, 'face_to_tracker'):
+                motion_gated_tracker.face_to_tracker.clear()
+            
+            # Reset motion tracking
+            motion_gated_tracker.last_motion_time = None
+            motion_gated_tracker.motion_active = False
+            
+            print(f"✅ Tracking reset - cleared {before_count} tracked faces")
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Motion tracking reset - cleared {before_count} tracked faces'
+        })
     except Exception as e:
+        print(f"❌ Error resetting tracking: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update_motion_timeout', methods=['POST'])
@@ -170,15 +192,29 @@ def update_motion_timeout():
     
 @app.route('/api/cleanup_old_trackers', methods=['POST'])
 def cleanup_old_trackers():
-    """Clean up old trackers manually"""
+    """Clean up old trackers manually - safe version"""
     try:
         from utils.face_recognition_utils import motion_gated_tracker
         
         # Count before cleanup
         before_count = len(motion_gated_tracker.tracked_faces)
         
-        # Run cleanup
-        motion_gated_tracker._cleanup_old_trackers()
+        # Use the tracker's cleanup method if it exists, otherwise do manual cleanup
+        if hasattr(motion_gated_tracker, '_cleanup_old_trackers'):
+            motion_gated_tracker._cleanup_old_trackers()
+        else:
+            # Manual cleanup
+            current_time = time.time()
+            remove_trackers = []
+            
+            with motion_gated_tracker.lock:
+                for tracker_id, tracker in motion_gated_tracker.tracked_faces.items():
+                    time_since_last_seen = current_time - tracker.get('last_seen', 0)
+                    if time_since_last_seen > 300:  # 5 minutes
+                        remove_trackers.append(tracker_id)
+                
+                for tracker_id in remove_trackers:
+                    del motion_gated_tracker.tracked_faces[tracker_id]
         
         # Count after cleanup
         after_count = len(motion_gated_tracker.tracked_faces)
@@ -190,6 +226,18 @@ def cleanup_old_trackers():
             'remaining': after_count,
             'message': f'Cleaned up {cleaned_count} old trackers, {after_count} remain'
         })
+    except Exception as e:
+        print(f"❌ Error cleaning up trackers: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/update_authorized_cooldown', methods=['POST'])
+def update_authorized_cooldown():
+    """Update authorized cooldown setting"""
+    try:
+        from utils.face_recognition_utils import motion_gated_tracker
+        cooldown = float(request.form.get('cooldown', 5.0))
+        motion_gated_tracker.authorized_cooldown = cooldown
+        return jsonify({'success': True, 'message': f'Authorized cooldown updated to {cooldown}s'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
     

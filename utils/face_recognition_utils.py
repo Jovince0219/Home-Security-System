@@ -20,7 +20,7 @@ known_face_names = []
 known_persons_encodings = []
 known_persons_names = []
 
-motion_gated_tracker = MotionGatedFaceTracker(motion_timeout=3.0)
+motion_gated_tracker = MotionGatedFaceTracker(motion_timeout=3.0, authorized_cooldown=5.0)
 
 def load_known_faces():
     """Load all registered faces from database"""
@@ -66,7 +66,7 @@ def load_known_persons():
             
 def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
     """
-    UPDATED: Motion-gated face detection with state stabilization.
+    UPDATED: Motion-gated face detection with per-face state stabilization.
     """
     global known_face_encodings, known_face_names
     global known_persons_encodings, known_persons_names
@@ -125,7 +125,8 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             print(f"🔍 DEBUG: Face {i+1} - Beyond max distance, skipping")
             continue  # Skip face recognition if beyond user's max distance
         
-        # STEP 3: Check against KNOWN PERSONS first (non-threatening)
+        # STEP 3: Perform face recognition to get actual identity
+        # Check against KNOWN PERSONS first (non-threatening)
         is_known_person = False
         known_person_matches = face_recognition.compare_faces(
             known_persons_encodings,
@@ -198,6 +199,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                 print(f"DEBUG: Unauthorized face detected at {distance_meters:.2f}m with confidence: {confidence:.3f}")
         
         # STEP 5: MOTION-GATED TRACKING - This is the core fix
+        # Pass the ACTUAL recognized identity to the tracker
         tracker_info = motion_gated_tracker.register_face(
             face_encoding=face_encoding,
             face_location=face_location,
@@ -207,17 +209,19 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         )
         
         print(f"🎯 TRACKER: {tracker_info['reason']}")
+        print(f"   - Tracker ID: {tracker_info['tracker_id'][:8] if tracker_info['tracker_id'] else 'None'}")
+        print(f"   - Name: {tracker_info['name']}")
+        print(f"   - State: {'Authorized' if tracker_info['is_authorized'] else 'Known' if tracker_info['is_known_person'] else 'Unauthorized'}")
+        print(f"   - Should Process: {tracker_info['should_process']}")
         
-        # Use tracker state if it says we should maintain it
-        if not tracker_info['should_process']:
-            # Use the tracker's state instead of new detection
-            is_authorized = tracker_info['is_authorized']
-            is_known_person = tracker_info.get('is_known_person', False)
-            name = tracker_info['name']
-            print(f"🔒 USING TRACKER STATE: {name} - {'Authorized' if is_authorized else 'Known' if is_known_person else 'Unauthorized'}")
+        # IMPORTANT: Use the tracker's name and state (which should match the face recognition)
+        # The tracker now maintains separate states for each unique face
+        final_name = tracker_info['name']
+        final_is_authorized = tracker_info['is_authorized']
+        final_is_known_person = tracker_info.get('is_known_person', False)
         
         # Use distance estimator with user settings
-        distance_analysis = distance_estimator.analyze_face_detection(face_location, is_authorized)
+        distance_analysis = distance_estimator.analyze_face_detection(face_location, final_is_authorized)
         
         # Check face covering
         face_region = rgb_frame[top:bottom, left:right]
@@ -237,11 +241,11 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         adjusted_bottom = min(rgb_frame.shape[0], bottom - height_bottom_reduction)
         
         # Determine display name based on distance and authorization
-        if is_authorized:
-            display_name = str(name)
+        if final_is_authorized:
+            display_name = str(final_name)
             event_type = "authorized_face"
-        elif is_known_person:
-            display_name = f"{name} (Known)"
+        elif final_is_known_person:
+            display_name = f"{final_name} (Known)"
             event_type = "known_face"
         else:
             if distance_analysis['within_detection_range']:
@@ -253,12 +257,12 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
         
         # Create result
         result = {
-            'name': str(name),
+            'name': str(final_name),
             'confidence': float(confidence),
             'location': [int(adjusted_top), int(adjusted_right), int(adjusted_bottom), int(adjusted_left)],
             'face_covered': bool(face_covered),
-            'is_authorized': bool(is_authorized),
-            'is_known_person': bool(is_known_person),
+            'is_authorized': bool(final_is_authorized),
+            'is_known_person': bool(final_is_known_person),
             'display_name': display_name,
             'distance_meters': float(distance_analysis['distance_meters']),
             'distance_feet': float(distance_analysis['distance_feet']),
@@ -283,25 +287,25 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             # Save screenshot
             screenshot_path = save_screenshot(
                 frame, 
-                f"{event_type}_{name}_{distance_analysis['distance_meters']}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
+                f"{event_type}_{final_name}_{distance_analysis['distance_meters']}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
             
             # Save to alert_events table for ALL face types
             save_to_alert_events(
                 event_type=event_type,
-                person_name=name,
+                person_name=final_name,
                 confidence=confidence,
                 screenshot_path=screenshot_path,
                 recording_path=recording_path,
                 distance_meters=distance_analysis['distance_meters'],
-                is_authorized=is_authorized,
-                is_known_person=is_known_person
+                is_authorized=final_is_authorized,
+                is_known_person=final_is_known_person
             )
             
-            print(f"✅ Processed {event_type} event: {name} - Recording: {recording_path}")
+            print(f"✅ Processed {event_type} event: {final_name} - Recording: {recording_path}")
         
         # STEP 7: Handle ONLY unauthorized faces (not known persons) for alerts
-        if not is_authorized and not is_known_person and distance_analysis['trigger_alert'] and tracker_info['should_process']:
+        if not final_is_authorized and not final_is_known_person and distance_analysis['trigger_alert'] and tracker_info['should_process']:
             print(f"🚨 DEBUG: Unauthorized face detected - should trigger alert!")
             
             # ✅ UPDATED: Pass Twilio state to trigger_security_alert
@@ -344,8 +348,8 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
                 print(f"❌ Error logging detection: {e}")
         else:
             print(f"🔍 DEBUG: Face {i+1} - No alert triggered:")
-            print(f"  - is_authorized: {is_authorized}")
-            print(f"  - is_known_person: {is_known_person}") 
+            print(f"  - is_authorized: {final_is_authorized}")
+            print(f"  - is_known_person: {final_is_known_person}") 
             print(f"  - trigger_alert: {distance_analysis.get('trigger_alert', False)}")
             print(f"  - should_process: {tracker_info.get('should_process', False)}")
     
