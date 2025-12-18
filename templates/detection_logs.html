@@ -1,0 +1,598 @@
+{% extends "base.html" %}
+
+{% block title %}Detection Logs - Security System{% endblock %}
+
+{% block content %}
+<div class="bg-white rounded-lg shadow-lg p-6">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-2xl font-bold flex items-center">
+            <i class="fas fa-clipboard-list mr-3 text-blue-600"></i>
+            Detection Logs
+        </h2>
+        <div class="flex items-center space-x-2">
+            <button onclick="refreshLogs()"
+                class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded flex items-center">
+                <i class="fas fa-sync-alt mr-2"></i> Refresh
+            </button>
+            <button onclick="exportLogs()"
+                class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center">
+                <i class="fas fa-download mr-2"></i> Export
+            </button>
+        </div>
+    </div>
+
+    <!-- Filter Controls -->
+    <div class="mb-6 bg-gray-50 rounded-lg p-4">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Person Type</label>
+                <select id="filterPerson" onchange="filterLogs()" class="w-full border rounded px-3 py-2">
+                    <option value="all">All Persons</option>
+                    <option value="Authorized Person">Authorized Person</option>
+                    <option value="Known Person">Known Person</option>
+                    <option value="Unauthorized Face">Unauthorized Face</option>
+                </select>
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                <input type="date" id="filterDate" onchange="filterLogs()" class="w-full border rounded px-3 py-2">
+            </div>
+            <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Confidence</label>
+                <select id="filterConfidence" onchange="filterLogs()" class="w-full border rounded px-3 py-2">
+                    <option value="all">All Confidence</option>
+                    <option value="high">High (>80%)</option>
+                    <option value="medium">Medium (50-80%)</option>
+                    <option value="low">Low (<50%)< /option>
+                </select>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Summary -->
+    <div id="logsStats" class="mb-6 grid grid-cols-1 md:grid-cols-4 gap-4">
+        <!-- Stats will be loaded here -->
+    </div>
+
+    <!-- Detection Logs Table -->
+    <div class="overflow-x-auto">
+        <table class="min-w-full table-auto">
+            <thead>
+                <tr class="bg-gray-50">
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Person
+                        Type</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Person
+                        Name</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Confidence</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Alert
+                        Level</th>
+                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions
+                    </th>
+                </tr>
+            </thead>
+            <tbody id="detectionLogsTable">
+                <!-- Logs will be loaded here -->
+                <tr>
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-3xl mb-2 text-blue-400"></i>
+                        <p class="text-lg font-semibold">Loading detection logs...</p>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="mt-6 flex justify-between items-center">
+        <div class="text-sm text-gray-600">
+            Showing <span id="logsCount">0</span> logs
+        </div>
+        <div class="flex space-x-2">
+            <button id="prevPage" onclick="changePage(-1)" disabled
+                class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded disabled:opacity-50">
+                <i class="fas fa-chevron-left"></i> Previous
+            </button>
+            <span id="currentPage" class="px-4 py-2">Page 1</span>
+            <button id="nextPage" onclick="changePage(1)" disabled
+                class="bg-gray-300 hover:bg-gray-400 text-gray-800 px-4 py-2 rounded disabled:opacity-50">
+                Next <i class="fas fa-chevron-right"></i>
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Export Modal -->
+<div id="exportModal" class="hidden fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+    <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <h3 class="text-lg font-medium leading-6 text-gray-900 mb-4">Export Detection Logs</h3>
+            <div class="space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Format</label>
+                    <select id="exportFormat" class="w-full border rounded px-3 py-2">
+                        <option value="csv">CSV</option>
+                        <option value="json">JSON</option>
+                        <option value="pdf">PDF</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
+                    <div class="flex space-x-2">
+                        <input type="date" id="exportStartDate" class="w-full border rounded px-3 py-2">
+                        <input type="date" id="exportEndDate" class="w-full border rounded px-3 py-2">
+                    </div>
+                </div>
+                <div class="flex justify-end space-x-2 mt-6">
+                    <button onclick="closeExportModal()"
+                        class="px-4 py-2 bg-gray-300 text-gray-800 rounded hover:bg-gray-400">
+                        Cancel
+                    </button>
+                    <button onclick="performExport()"
+                        class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">
+                        <i class="fas fa-download mr-2"></i> Export
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let allLogs = [];
+    let filteredLogs = [];
+    let currentPage = 1;
+    const logsPerPage = 20;
+
+    // Load detection logs on page load
+    document.addEventListener('DOMContentLoaded', function () {
+        loadDetectionLogs();
+        // Auto-refresh every 30 seconds
+        setInterval(loadDetectionLogs, 30000);
+    });
+
+    function loadDetectionLogs() {
+        // Try the simple endpoint first
+        fetch('/api/get_detection_logs_simple')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    allLogs = data.logs;
+                    console.log('📊 Loaded logs from simple endpoint:', allLogs.length);
+                    updateStats(allLogs);
+                    filterLogs();
+                } else {
+                    // Fallback to the main endpoint
+                    console.log('Trying main endpoint...');
+                    fetch('/api/get_detection_logs')
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                allLogs = data.logs;
+                                updateStats(allLogs);
+                                filterLogs();
+                            } else {
+                                showError('Failed to load detection logs');
+                            }
+                        });
+                }
+            })
+            .catch(error => {
+                console.error('Error loading detection logs:', error);
+                showError('Network error loading detection logs');
+            });
+    }
+
+    function updateStats(logs) {
+        const statsElement = document.getElementById('logsStats');
+
+        // Calculate statistics
+        const totalLogs = logs.length;
+        const authorizedCount = logs.filter(log => log.person_type === 'Authorized Person').length;
+        const knownCount = logs.filter(log => log.person_type === 'Known Person').length;
+        const unauthorizedCount = logs.filter(log => log.person_type === 'Unauthorized Face').length;
+
+        statsElement.innerHTML = `
+            <div class="bg-blue-50 p-4 rounded-lg border border-blue-200">
+                <div class="text-blue-800 font-bold text-2xl">${totalLogs}</div>
+                <div class="text-blue-600 text-sm">Total Logs</div>
+            </div>
+            <div class="bg-green-50 p-4 rounded-lg border border-green-200">
+                <div class="text-green-800 font-bold text-2xl">${authorizedCount}</div>
+                <div class="text-green-600 text-sm">Authorized Persons</div>
+            </div>
+            <div class="bg-yellow-50 p-4 rounded-lg border border-yellow-200">
+                <div class="text-yellow-800 font-bold text-2xl">${knownCount}</div>
+                <div class="text-yellow-600 text-sm">Known Persons</div>
+            </div>
+            <div class="bg-red-50 p-4 rounded-lg border border-red-200">
+                <div class="text-red-800 font-bold text-2xl">${unauthorizedCount}</div>
+                <div class="text-red-600 text-sm">Unauthorized Faces</div>
+            </div>
+        `;
+    }
+
+    function filterLogs() {
+        const personFilter = document.getElementById('filterPerson').value;
+        const dateFilter = document.getElementById('filterDate').value;
+        const confidenceFilter = document.getElementById('filterConfidence').value;
+
+        filteredLogs = allLogs.filter(log => {
+            // Filter by person type
+            if (personFilter !== 'all' && log.person_type !== personFilter) {
+                return false;
+            }
+
+            // Filter by date
+            if (dateFilter) {
+                const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+                if (logDate !== dateFilter) {
+                    return false;
+                }
+            }
+
+            // Filter by confidence
+            if (confidenceFilter !== 'all') {
+                const confidence = log.confidence * 100;
+                if (confidenceFilter === 'high' && confidence <= 80) return false;
+                if (confidenceFilter === 'medium' && (confidence < 50 || confidence > 80)) return false;
+                if (confidenceFilter === 'low' && confidence >= 50) return false;
+            }
+
+            return true;
+        });
+
+        currentPage = 1;
+        displayLogs();
+        updatePagination();
+    }
+
+    function displayLogs() {
+        const tbody = document.getElementById('detectionLogsTable');
+
+        if (filteredLogs.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="6" class="px-4 py-8 text-center text-gray-500">
+                        <i class="fas fa-search text-3xl mb-2 text-gray-400"></i>
+                        <p class="text-lg font-semibold">No detection logs found</p>
+                        <p class="text-sm mt-1">Try adjusting your filters</p>
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+
+        // Calculate pagination
+        const startIndex = (currentPage - 1) * logsPerPage;
+        const endIndex = startIndex + logsPerPage;
+        const pageLogs = filteredLogs.slice(startIndex, endIndex);
+
+        tbody.innerHTML = '';
+
+        pageLogs.forEach(log => {
+            const row = tbody.insertRow();
+
+            // Format timestamp
+            const timestamp = new Date(log.timestamp);
+            const timeString = timestamp.toLocaleTimeString();
+            const dateString = timestamp.toLocaleDateString();
+
+            // Determine styling based on person type
+            let typeClass, typeIcon;
+            switch (log.person_type) {
+                case 'Authorized Person':
+                    typeClass = 'bg-green-100 text-black-800 border border-green-300';
+                    typeIcon = '<i class="fas fa-user-check text-green-600"></i>';
+                    break;
+                case 'Known Person':
+                    typeClass = 'bg-yellow-100 text-black-800 border border-yellow-300';
+                    typeIcon = '<i class="fas fa-user-tag text-yellow-600"></i>';
+                    break;
+                case 'Unauthorized Face':
+                    typeClass = 'bg-red-100 text-black-800 border border-red-300';
+                    typeIcon = '<i class="fas fa-user-times text-red-600"></i>';
+                    break;
+                default:
+                    typeClass = 'bg-gray-100 text-black-800 border border-gray-300';
+                    typeIcon = '<i class="fas fa-user text-gray-600"></i>';
+            }
+
+            // Determine alert level styling
+            let alertClass, alertText;
+            switch (log.alert_level) {
+                case 3:
+                    alertClass = 'bg-red-100 text-red-800';
+                    alertText = 'High';
+                    break;
+                case 2:
+                    alertClass = 'bg-yellow-100 text-yellow-800';
+                    alertText = 'Medium';
+                    break;
+                default:
+                    alertClass = 'bg-green-100 text-green-800';
+                    alertText = 'Low';
+            }
+
+            row.innerHTML = `
+                <td class="px-4 py-3">
+                    <div class="text-sm font-medium">${dateString}</div>
+                    <div class="text-xs text-gray-500">${timeString}</div>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center">
+                        <span class="mr-2">${typeIcon}</span>
+                        <span class="px-2 py-1 rounded text-xs ${typeClass}">
+                            ${log.person_type}
+                        </span>
+                    </div>
+                </td>
+                <td class="px-4 py-3 font-medium">
+                    ${log.person_name || 'Unknown'}
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex items-center">
+                        <div class="w-24 bg-gray-200 rounded-full h-2 mr-2">
+                            <div class="bg-blue-600 h-2 rounded-full" style="width: ${log.confidence * 100}%"></div>
+                        </div>
+                        <span class="text-sm font-mono">${(log.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                </td>
+                <td class="px-4 py-3">
+                    <span class="px-2 py-1 rounded text-xs ${alertClass}">
+                        ${alertText}
+                    </span>
+                </td>
+                <td class="px-4 py-3">
+                    <div class="flex space-x-2">
+                        ${log.screenshot_path ?
+                    `<a href="/${log.screenshot_path}" target="_blank" 
+                               class="bg-blue-100 hover:bg-blue-200 text-blue-800 p-2 rounded text-sm"
+                               title="View Screenshot">
+                                <i class="fas fa-image"></i>
+                            </a>` :
+                    `<button class="bg-gray-100 text-gray-400 p-2 rounded text-sm cursor-not-allowed"
+                               title="No Screenshot" disabled>
+                                <i class="fas fa-image"></i>
+                            </button>`
+                }
+                        <button onclick="viewLogDetails(${log.id})" 
+                                class="bg-gray-100 hover:bg-gray-200 text-gray-800 p-2 rounded text-sm"
+                                title="View Details">
+                            <i class="fas fa-info-circle"></i>
+                        </button>
+                    </div>
+                </td>
+            `;
+        });
+
+        // Update count
+        document.getElementById('logsCount').textContent = `${filteredLogs.length} (showing ${pageLogs.length})`;
+    }
+
+    function updatePagination() {
+        const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+        document.getElementById('currentPage').textContent = `Page ${currentPage} of ${totalPages}`;
+
+        document.getElementById('prevPage').disabled = currentPage <= 1;
+        document.getElementById('nextPage').disabled = currentPage >= totalPages;
+    }
+
+    function changePage(direction) {
+        const totalPages = Math.ceil(filteredLogs.length / logsPerPage);
+        const newPage = currentPage + direction;
+
+        if (newPage >= 1 && newPage <= totalPages) {
+            currentPage = newPage;
+            displayLogs();
+            updatePagination();
+        }
+    }
+
+    function refreshLogs() {
+        loadDetectionLogs();
+        showNotification('Detection logs refreshed', 'info');
+    }
+
+    function exportLogs() {
+        document.getElementById('exportModal').classList.remove('hidden');
+    }
+
+    function closeExportModal() {
+        document.getElementById('exportModal').classList.add('hidden');
+    }
+
+    function performExport() {
+        const format = document.getElementById('exportFormat').value;
+        const startDate = document.getElementById('exportStartDate').value;
+        const endDate = document.getElementById('exportEndDate').value;
+
+        // Filter logs by date range if specified
+        let exportLogs = filteredLogs;
+        if (startDate || endDate) {
+            exportLogs = filteredLogs.filter(log => {
+                const logDate = new Date(log.timestamp).toISOString().split('T')[0];
+                if (startDate && logDate < startDate) return false;
+                if (endDate && logDate > endDate) return false;
+                return true;
+            });
+        }
+
+        if (exportLogs.length === 0) {
+            showNotification('No logs to export with the selected filters', 'warning');
+            return;
+        }
+
+        let content, mimeType, filename;
+
+        switch (format) {
+            case 'csv':
+                content = convertToCSV(exportLogs);
+                mimeType = 'text/csv';
+                filename = `detection_logs_${new Date().toISOString().split('T')[0]}.csv`;
+                break;
+            case 'json':
+                content = JSON.stringify(exportLogs, null, 2);
+                mimeType = 'application/json';
+                filename = `detection_logs_${new Date().toISOString().split('T')[0]}.json`;
+                break;
+            case 'pdf':
+                // For PDF, we'd need a server-side endpoint
+                showNotification('PDF export requires server-side implementation', 'warning');
+                closeExportModal();
+                return;
+        }
+
+        // Create download link
+        const blob = new Blob([content], { type: mimeType });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.URL.revokeObjectURL(url);
+
+        closeExportModal();
+        showNotification(`Exported ${exportLogs.length} logs as ${format.toUpperCase()}`, 'success');
+    }
+
+    function convertToCSV(logs) {
+        const headers = ['Timestamp', 'Person Type', 'Person Name', 'Confidence', 'Alert Level'];
+        const rows = logs.map(log => [
+            new Date(log.timestamp).toLocaleString(),
+            log.person_type,
+            log.person_name || 'Unknown',
+            (log.confidence * 100).toFixed(2) + '%',
+            log.alert_level
+        ]);
+
+        return [
+            headers.join(','),
+            ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+        ].join('\n');
+    }
+
+    function viewLogDetails(logId) {
+        // Find the log
+        const log = allLogs.find(l => l.id === logId);
+        if (!log) return;
+
+        // Create a simple modal with log details
+        const details = `
+            <div class="p-4">
+                <h4 class="font-bold text-lg mb-4">Detection Log Details</h4>
+                <div class="space-y-3">
+                    <div class="grid grid-cols-2 gap-2">
+                        <span class="text-gray-600">ID:</span>
+                        <span class="font-mono">${log.id}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <span class="text-gray-600">Timestamp:</span>
+                        <span>${new Date(log.timestamp).toLocaleString()}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <span class="text-gray-600">Person Type:</span>
+                        <span>${log.person_type}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <span class="text-gray-600">Person Name:</span>
+                        <span>${log.person_name || 'Unknown'}</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <span class="text-gray-600">Confidence:</span>
+                        <span>${(log.confidence * 100).toFixed(1)}%</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <span class="text-gray-600">Alert Level:</span>
+                        <span>Level ${log.alert_level}</span>
+                    </div>
+                    ${log.screenshot_path ? `
+                        <div class="mt-4">
+                            <img src="/${log.screenshot_path}" alt="Screenshot" class="max-w-full h-auto rounded">
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+
+        showModal('Log Details', details);
+    }
+
+    function showModal(title, content) {
+        const modal = document.createElement('div');
+        modal.className = 'fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50';
+        modal.innerHTML = `
+            <div class="relative top-20 mx-auto p-5 border w-96 shadow-lg rounded-md bg-white">
+                <div class="mt-3">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-medium leading-6 text-gray-900">${title}</h3>
+                        <button onclick="this.parentElement.parentElement.parentElement.remove()" 
+                                class="text-gray-400 hover:text-gray-600">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    ${content}
+                    <div class="mt-4 flex justify-end">
+                        <button onclick="this.parentElement.parentElement.parentElement.parentElement.remove()" 
+                                class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+    }
+
+    function showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        notification.className = `fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white max-w-sm transform transition-all duration-300 ${type === 'success' ? 'bg-green-600' :
+                type === 'warning' ? 'bg-yellow-600' :
+                    type === 'error' ? 'bg-red-600' : 'bg-blue-600'
+            }`;
+
+        notification.innerHTML = `
+            <div class="flex items-center justify-between">
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'warning' ? 'exclamation-triangle' : type === 'error' ? 'times-circle' : 'info-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove()" class="ml-4 text-white hover:text-gray-200">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+
+        document.body.appendChild(notification);
+
+        setTimeout(() => {
+            if (notification.parentElement) {
+                notification.style.opacity = '0';
+                notification.style.transform = 'translateX(100%)';
+                setTimeout(() => {
+                    if (notification.parentElement) {
+                        document.body.removeChild(notification);
+                    }
+                }, 300);
+            }
+        }, 5000);
+    }
+
+    function showError(message) {
+        const tbody = document.getElementById('detectionLogsTable');
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="6" class="px-4 py-8 text-center text-red-500">
+                    <i class="fas fa-exclamation-triangle text-3xl mb-2"></i>
+                    <p class="text-lg font-semibold">Error Loading Logs</p>
+                    <p class="text-sm mt-1">${message}</p>
+                </td>
+            </tr>
+        `;
+    }
+</script>
+{% endblock %}

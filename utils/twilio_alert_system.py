@@ -356,7 +356,7 @@ class TwilioAlertSystem:
             }
             
             max_attempts_per_number = 3
-            attempt_interval = 60  # 1 minute
+            attempt_interval = 30  # 1 minute
             
             # For each number in sequence
             for number_index, phone_number in enumerate(active_numbers):

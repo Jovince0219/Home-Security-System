@@ -240,7 +240,115 @@ def update_authorized_cooldown():
         return jsonify({'success': True, 'message': f'Authorized cooldown updated to {cooldown}s'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
-    
+
+@app.route('/detection_logs')
+def detection_logs():
+    """Display all detection logs with specific filtering"""
+    return render_template('detection_logs.html')
+
+@app.route('/api/get_detection_logs_simple')
+def get_detection_logs_simple():
+    """Simple version - just filter by detection_type and person_name patterns"""
+    try:
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        
+        print("🔍 DEBUG: Simple version - fetching logs...")
+        
+        # Direct query for specific patterns
+        # EXCLUDE entries with "Unauthorized (distance)" pattern
+        query = '''
+            SELECT * FROM detections 
+            WHERE (detection_type IN ('face_detection', 'unauthorized_face'))
+            AND (
+                person_name LIKE '%Authorized%' OR
+                person_name LIKE '%Known%' OR
+                person_name LIKE '%Unauthorized%' OR
+                person_name = 'Authorized Person' OR
+                person_name = 'Known Person' OR
+                person_name = 'Unauthorized Person'
+            )
+            AND person_name NOT LIKE 'Unauthorized (%'  -- Exclude distance entries
+            ORDER BY timestamp DESC 
+            LIMIT 200
+        '''
+        
+        detections = conn.execute(query).fetchall()
+        print(f"📊 Found {len(detections)} matching detections (excluding distance entries)")
+        
+        logs_list = []
+        # Dictionary to track last seen timestamp for each person_name
+        last_seen = {}
+        
+        for detection in detections:
+            person_name = detection['person_name']
+            timestamp_str = detection['timestamp']
+            
+            # Parse timestamp
+            try:
+                timestamp_obj = datetime.datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
+            except:
+                try:
+                    timestamp_obj = datetime.datetime.strptime(timestamp_str, '%m/%d/%Y %I:%M:%S %p')
+                except:
+                    timestamp_obj = datetime.datetime.now()
+            
+            # Check if we've seen this person recently (within 5 seconds)
+            if person_name in last_seen:
+                last_time = last_seen[person_name]
+                time_diff = abs((timestamp_obj - last_time).total_seconds())
+                
+                # Skip if within 5 seconds of last detection
+                if time_diff <= 5:
+                    print(f"⏭️ Skipping duplicate '{person_name}' at {timestamp_str} (diff: {time_diff:.1f}s)")
+                    continue
+            
+            # Update last seen time
+            last_seen[person_name] = timestamp_obj
+            
+            # Determine person type
+            if 'Authorized' in person_name or person_name == 'Authorized Person':
+                person_type = 'Authorized Person'
+                detection_type = 'face_detection'
+            elif 'Known' in person_name or person_name == 'Known Person':
+                person_type = 'Known Person'
+                detection_type = 'face_detection'
+            elif 'Unauthorized' in person_name or detection['detection_type'] == 'unauthorized_face':
+                # Double-check for distance entries (should already be filtered by query)
+                if 'Unauthorized (' in person_name:
+                    print(f"⏭️ Skipping distance entry: '{person_name}'")
+                    continue
+                person_type = 'Unauthorized Face'
+                detection_type = 'face_detection'
+            else:
+                continue
+            
+            log_data = {
+                'id': detection['id'],
+                'timestamp': timestamp_str,
+                'detection_type': detection_type,
+                'person_type': person_type,
+                'person_name': person_name,
+                'confidence': float(detection['confidence']) if detection['confidence'] else 0,
+                'screenshot_path': detection['screenshot_path'],
+                'alert_level': detection['alert_level']
+            }
+            logs_list.append(log_data)
+            
+            print(f"✅ Added: {person_type} - '{person_name}' at {timestamp_str}")
+        
+        conn.close()
+        
+        print(f"📊 Returning {len(logs_list)} unique logs (distance entries filtered + time deduplication)")
+        
+        return jsonify({'success': True, 'logs': logs_list})
+        
+    except Exception as e:
+        print(f"❌ ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+
 @app.route('/api/debug_tracking')
 def debug_tracking():
     """Debug endpoint to see tracking details"""

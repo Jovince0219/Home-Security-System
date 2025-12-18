@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,6 +8,7 @@
     <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
 </head>
+
 <body class="bg-gray-100 min-h-screen">
     <nav class="bg-blue-900 text-white shadow-lg">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -15,25 +17,28 @@
                     <i class="fas fa-shield-alt text-xl sm:text-2xl"></i>
                     <h1 class="text-lg sm:text-xl font-bold">Home Security System</h1>
                 </div>
-                
+
                 <!-- Mobile menu button -->
                 <div class="md:hidden">
                     <button id="mobileMenuButton" class="text-white focus:outline-none">
                         <i class="fas fa-bars text-xl"></i>
                     </button>
                 </div>
-                
+
                 <!-- Desktop menu -->
                 <div class="hidden md:flex space-x-4 lg:space-x-6">
-                    <a href="{{ url_for('dashboard') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                    <a href="{{ url_for('dashboard') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-tachometer-alt mr-1 sm:mr-2 text-sm sm:text-base"></i>
                         <span class="text-sm sm:text-base">Dashboard</span>
                     </a>
-                    <a href="{{ url_for('face_registration') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                    <a href="{{ url_for('face_registration') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-user-plus mr-1 sm:mr-2 text-sm sm:text-base"></i>
                         <span class="text-sm sm:text-base">Faces</span>
                     </a>
-                    <a href="{{ url_for('motion_detection') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                    <a href="{{ url_for('motion_detection') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-running mr-1 sm:mr-2 text-sm sm:text-base"></i>
                         <span class="text-sm sm:text-base">Motion</span>
                     </a>
@@ -41,27 +46,40 @@
                         <i class="fas fa-bell mr-1 sm:mr-2 text-sm sm:text-base"></i>
                         <span class="text-sm sm:text-base">Alerts</span>
                     </a>
+                    <a href="{{ url_for('detection_logs') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-clipboard-list mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                        <span class="text-sm sm:text-base">Detection Logs</span>
+                    </a>
                 </div>
             </div>
-            
+
             <!-- Mobile menu -->
             <div id="mobileMenu" class="hidden md:hidden pb-4 border-t border-blue-700">
                 <div class="flex flex-col space-y-3 mt-3">
-                    <a href="{{ url_for('dashboard') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                    <a href="{{ url_for('dashboard') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-tachometer-alt mr-3"></i>
                         Dashboard
                     </a>
-                    <a href="{{ url_for('face_registration') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                    <a href="{{ url_for('face_registration') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-user-plus mr-3"></i>
                         Face Registration
                     </a>
-                    <a href="{{ url_for('motion_detection') }}" class="hover:text-blue-200 transition-colors flex items-center">
+                    <a href="{{ url_for('motion_detection') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-running mr-3"></i>
                         Motion Detection
                     </a>
                     <a href="{{ url_for('alerts') }}" class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-bell mr-3"></i>
                         Alerts
+                    </a>
+                    <a href="{{ url_for('detection_logs') }}"
+                        class="hover:text-blue-200 transition-colors flex items-center">
+                        <i class="fas fa-clipboard-list mr-3"></i>
+                        Detection Logs
                     </a>
                 </div>
             </div>
@@ -70,15 +88,16 @@
 
     <main class="max-w-7xl mx-auto py-4 sm:py-6 px-3 sm:px-4 lg:px-8">
         {% with messages = get_flashed_messages() %}
-            {% if messages %}
-                <div class="mb-4">
-                    {% for message in messages %}
-                        <div class="bg-blue-100 border border-blue-400 text-blue-700 px-3 sm:px-4 py-3 rounded mb-2 text-sm sm:text-base">
-                            {{ message }}
-                        </div>
-                    {% endfor %}
-                </div>
-            {% endif %}
+        {% if messages %}
+        <div class="mb-4">
+            {% for message in messages %}
+            <div
+                class="bg-blue-100 border border-blue-400 text-blue-700 px-3 sm:px-4 py-3 rounded mb-2 text-sm sm:text-base">
+                {{ message }}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
         {% endwith %}
 
         {% block content %}{% endblock %}
@@ -87,11 +106,12 @@
     <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
     <script>
         // Mobile menu toggle
-        document.getElementById('mobileMenuButton').addEventListener('click', function() {
+        document.getElementById('mobileMenuButton').addEventListener('click', function () {
             const menu = document.getElementById('mobileMenu');
             menu.classList.toggle('hidden');
         });
     </script>
     {% block scripts %}{% endblock %}
 </body>
+
 </html>
