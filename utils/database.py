@@ -24,12 +24,13 @@ def init_db():
     ''')
     
     # Create faces table (Authorized Persons)
-    conn.execute('''
+    conn.execute('''    
         CREATE TABLE IF NOT EXISTS faces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
             encoding TEXT NOT NULL,
             image_path TEXT NOT NULL,
+            relationship TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -182,23 +183,26 @@ def init_db():
     conn.commit()
     conn.close()
     
-def add_face(name, encoding, image_path):
+def add_face(name, encoding, image_path, relationship=""):
+    """Add a face with relationship field"""
     conn = get_db_connection()
     encoding_str = ','.join(map(str, encoding))
     conn.execute(
-        'INSERT INTO faces (name, encoding, image_path) VALUES (?, ?, ?)',
-        (name, encoding_str, image_path)
+        'INSERT INTO faces (name, encoding, image_path, relationship) VALUES (?, ?, ?, ?)',
+        (name, encoding_str, image_path, relationship)
     )
     conn.commit()
     conn.close()
 
 def get_all_faces():
+    """Get all registered faces"""
     conn = get_db_connection()
     faces = conn.execute('SELECT * FROM faces ORDER BY created_at DESC').fetchall()
     conn.close()
     return faces
 
 def delete_face(face_id):
+    
     conn = get_db_connection()
     face = conn.execute('SELECT * FROM faces WHERE id = ?', (face_id,)).fetchone()
     if face:
@@ -214,6 +218,31 @@ def update_face_name(face_id, new_name):
     """Update face name"""
     conn = get_db_connection()
     cursor = conn.execute('UPDATE faces SET name = ? WHERE id = ?', (new_name, face_id))
+    conn.commit()
+    rows_affected = cursor.rowcount
+    conn.close()
+    return rows_affected > 0
+
+def update_face_info(face_id, new_name=None, new_relationship=None):
+    """Update face name and/or relationship"""
+    conn = get_db_connection()
+    
+    if new_name and new_relationship:
+        cursor = conn.execute(
+            'UPDATE faces SET name = ?, relationship = ? WHERE id = ?', 
+            (new_name, new_relationship, face_id)
+        )
+    elif new_name:
+        cursor = conn.execute(
+            'UPDATE faces SET name = ? WHERE id = ?', 
+            (new_name, face_id)
+        )
+    elif new_relationship:
+        cursor = conn.execute(
+            'UPDATE faces SET relationship = ? WHERE id = ?', 
+            (new_relationship, face_id)
+        )
+    
     conn.commit()
     rows_affected = cursor.rowcount
     conn.close()

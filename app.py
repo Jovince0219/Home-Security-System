@@ -1990,6 +1990,8 @@ def register_face():
     """Register a new face from uploaded image or camera"""
     try:
         name = request.form.get('name')
+        relationship = request.form.get('relationship', '')  # Get relationship field
+        
         if not name:
             return jsonify({'success': False, 'error': 'Name is required'})
         
@@ -2009,8 +2011,9 @@ def register_face():
                 
                 face_encoding = face_recognition.face_encodings(image, face_locations)[0]
                 
+                # Updated to include relationship
                 from utils.database import add_face
-                add_face(name, face_encoding, filepath)
+                add_face(name, face_encoding, filepath, relationship)
                 
                 from utils.face_recognition_utils import load_known_faces
                 load_known_faces()
@@ -2027,6 +2030,7 @@ def capture_face():
     """Capture face from camera for registration"""
     try:
         name = request.form.get('name')
+        relationship = request.form.get('relationship', '')  # Get relationship field
         image_data = request.form.get('image_data')
         
         if not name or not image_data:
@@ -2050,8 +2054,9 @@ def capture_face():
         
         face_encoding = face_recognition.face_encodings(image, face_locations)[0]
         
+        # Updated to include relationship
         from utils.database import add_face
-        add_face(name, face_encoding, filepath)
+        add_face(name, face_encoding, filepath, relationship)
         
         from utils.face_recognition_utils import load_known_faces
         load_known_faces()
@@ -2070,16 +2075,29 @@ def get_faces():
         
         faces_list = []
         for face in faces:
+            # Convert sqlite3.Row to dictionary
+            face_dict = dict(face)
+            
+            # Handle relationship field (it might not exist in older databases)
+            relationship = ''
+            if 'relationship' in face_dict:
+                relationship = face_dict['relationship']
+            
             faces_list.append({
-                'id': face['id'],
-                'name': face['name'],
-                'image_path': face['image_path'],
-                'created_at': face['created_at']
+                'id': face_dict['id'],
+                'name': face_dict['name'],
+                'relationship': relationship,  
+                'image_path': face_dict['image_path'],
+                'created_at': face_dict['created_at']
             })
         
+        print(f"📊 DEBUG: Returning {len(faces_list)} faces from database")
         return jsonify({'success': True, 'faces': faces_list})
         
     except Exception as e:
+        print(f"❌ ERROR in get_faces: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_face/<int:face_id>', methods=['DELETE'])
@@ -2130,16 +2148,21 @@ def bulk_delete_faces():
 
 @app.route('/api/update_face', methods=['POST'])
 def update_face():
-    """Update face information"""
+    """Update face information including relationship"""
     try:
         face_id = request.form.get('face_id')
         new_name = request.form.get('new_name')
+        new_relationship = request.form.get('new_relationship', '')  # Get relationship
         
-        if not face_id or not new_name:
-            return jsonify({'success': False, 'error': 'Face ID and new name required'})
+        if not face_id:
+            return jsonify({'success': False, 'error': 'Face ID required'})
         
-        from utils.database import update_face_name
-        result = update_face_name(face_id, new_name)
+        # Check if at least one field is being updated
+        if not new_name and not new_relationship:
+            return jsonify({'success': False, 'error': 'At least one field to update is required'})
+        
+        from utils.database import update_face_info
+        result = update_face_info(face_id, new_name, new_relationship)
         
         if result:
             # Reload known faces

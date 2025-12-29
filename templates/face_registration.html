@@ -50,6 +50,13 @@
                     class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                     placeholder="Enter person's name" autocomplete="off">
             </div>
+            <div class="mb-4">
+                <label for="personRelationship" class="block text-sm font-medium text-gray-700 mb-2">Relationship to
+                    Owner (Optional)</label>
+                <input type="text" id="personRelationship"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="e.g., Family, Friend, Employee, etc." autocomplete="off">
+            </div>
             <div class="flex flex-wrap gap-2">
                 <button id="startCamera"
                     class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center">
@@ -65,10 +72,11 @@
                 </button>
             </div>
         </div>
+    </div>
 
-        <hr class="my-6">
+    <!-- File Upload Registration -->
+    <div class="bg-white rounded-lg shadow-lg p-6">
 
-        <!-- File Upload Registration -->
         <div>
             <h3 class="text-lg font-semibold mb-4">Upload Image Registration</h3>
             <form id="uploadForm" enctype="multipart/form-data">
@@ -77,6 +85,13 @@
                     <input type="text" id="uploadName" name="name"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                         placeholder="Enter person's name" autocomplete="off">
+                </div>
+                <div class="mb-4">
+                    <label for="uploadRelationship" class="block text-sm font-medium text-gray-700 mb-2">Relationship to
+                        Owner (Optional)</label>
+                    <input type="text" id="uploadRelationship" name="relationship"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        placeholder="e.g., Family, Friend, Employee, etc." autocomplete="off">
                 </div>
                 <div class="mb-4">
                     <label for="imageFile" class="block text-sm font-medium text-gray-700 mb-2">Select Image</label>
@@ -199,8 +214,6 @@
     </div>
 </div>
 
-<!-- Modals Section -->
-<div class="hidden">
     <!-- Edit Face Modal -->
     <div id="editFaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
         <div class="flex items-center justify-center min-h-screen p-4">
@@ -213,6 +226,12 @@
                         <input type="text" id="editFaceName"
                             class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                             autocomplete="off">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Relationship (Optional)</label>
+                        <input type="text" id="editFaceRelationship"
+                            class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="e.g., Family, Friend, Employee" autocomplete="off">
                     </div>
                     <div class="flex flex-wrap gap-2">
                         <button type="submit"
@@ -230,45 +249,47 @@
     </div>
 
     <!-- View Face Modal -->
-    <div id="viewFaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div id="viewFaceModal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50">
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-bold" id="viewFaceName">Face Image</h3>
-                    <button id="closeViewModal" class="text-gray-500 hover:text-gray-700">
-                        <i class="fas fa-times text-xl"></i>
+                    <h3 class="text-xl font-bold" id="viewFaceName">Face Image</h3>
+                    <button id="closeViewModal" class="text-gray-500 hover:text-gray-700 text-2xl">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="mb-4">
+                <div class="mb-4 flex justify-center">
                     <img id="viewFaceImage" src="" alt="Face Image"
-                        class="w-full h-64 object-cover rounded-lg bg-gray-100">
+                        class="max-w-full max-h-[70vh] object-contain rounded-lg bg-gray-100">
                 </div>
-                <div class="text-sm text-gray-600">
-                    <p>Registered: <span id="viewFaceDate"></span></p>
+                <div class="text-sm text-gray-600 mt-4">
+                    <p><strong>Registered:</strong> <span id="viewFaceDate"></span></p>
                 </div>
             </div>
         </div>
     </div>
 
+
     <!-- Known Person Face Modal -->
-    <div id="knownPersonFaceModal" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+    <div id="knownPersonFaceModal" class="fixed inset-0 bg-black bg-opacity-75 hidden z-50">
         <div class="flex items-center justify-center min-h-screen p-4">
-            <div class="bg-white rounded-lg p-6 w-full max-w-md">
+            <div class="bg-white rounded-lg p-6 w-full max-w-3xl max-h-[90vh] overflow-auto">
                 <div class="flex justify-between items-center mb-4">
-                    <h3 class="text-lg font-bold" id="knownPersonFaceName">Face Image</h3>
-                    <button id="closeKnownPersonFaceModal" class="text-gray-500 hover:text-gray-700">
-                        <i class="fas fa-times text-xl"></i>
+                    <h3 class="text-xl font-bold" id="knownPersonFaceName">Face Image</h3>
+                    <button id="closeKnownPersonFaceModal" class="text-gray-500 hover:text-gray-700 text-2xl">
+                        <i class="fas fa-times"></i>
                     </button>
                 </div>
-                <div class="mb-4">
+                <div class="mb-4 flex justify-center">
                     <img id="knownPersonFaceImage" src="" alt="Face Image"
-                        class="w-full h-64 object-cover rounded-lg bg-gray-100">
+                        class="max-w-full max-h-[70vh] object-contain rounded-lg bg-gray-100">
                 </div>
-                <div class="text-sm text-gray-600">
-                    <p>Registered: <span id="knownPersonFaceDate"></span></p>
-                    <p class="text-gray-600 mt-2 flex items-start">
-                        <i class="fas fa-shield-alt mr-2 mt-0.5"></i>
-                        <span>This person is registered as a Known Person and won't trigger security alerts</span>
+                <div class="text-sm text-gray-600 mt-4">
+                    <p><strong>Registered:</strong> <span id="knownPersonFaceDate"></span></p>
+                    <p class="text-gray-600 mt-2 flex items-start p-3 bg-blue-50 rounded-lg">
+                        <i class="fas fa-shield-alt mr-2 mt-0.5 text-blue-500"></i>
+                        <span class="text-blue-700">This person is registered as a Known Person and won't trigger
+                            security alerts</span>
                     </p>
                 </div>
             </div>
@@ -341,6 +362,8 @@
 
     function capturePhoto() {
         const name = document.getElementById('personName').value.trim();
+        const relationship = document.getElementById('personRelationship').value.trim();
+
         if (!name) {
             alert('Please enter a person name');
             return;
@@ -357,6 +380,7 @@
         // Send to server
         const formData = new FormData();
         formData.append('name', name);
+        formData.append('relationship', relationship);
         formData.append('image_data', imageData);
 
         fetch('/api/capture_face', {
@@ -368,6 +392,7 @@
                 if (data.success) {
                     alert(data.message);
                     document.getElementById('personName').value = '';
+                    document.getElementById('personRelationship').value = '';
                     loadFaces();
                     loadStatistics();
                 } else {
@@ -406,13 +431,22 @@
     }
 
     function loadFaces() {
+        console.log("Loading faces from API...");
         fetch('/api/get_faces')
-            .then(response => response.json())
+            .then(response => {
+                console.log("Response status:", response.status);
+                return response.json();
+            })
             .then(data => {
+                console.log("API Response data:", data);
                 if (data.success) {
+                    console.log(`Loaded ${data.faces.length} faces`);
+                    console.log("First face data:", data.faces[0]);
                     allFaces = data.faces;
                     displayFaces(allFaces);
                     updatePagination();
+                } else {
+                    console.error("API Error:", data.error);
                 }
             })
             .catch(error => {
@@ -438,11 +472,24 @@
             const faceCard = document.createElement('div');
             faceCard.className = 'bg-gray-50 rounded-lg p-4 border hover:shadow-md transition-shadow';
 
+            // Build relationship display if exists
+            let relationshipHTML = '';
+            if (face.relationship && face.relationship.trim() !== '') {
+                relationshipHTML = `
+                <div class="mt-1">
+                    <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                        <i class="fas fa-user-friends mr-1 text-xs"></i>
+                        ${face.relationship}
+                    </span>
+                </div>
+            `;
+            }
+
             faceCard.innerHTML = `
             <div class="flex items-start justify-between mb-3">
                 <input type="checkbox" class="face-checkbox" data-face-id="${face.id}" onchange="toggleFaceSelection(${face.id})">
                 <div class="flex space-x-2">
-                    <button onclick="event.stopPropagation(); editFace(${face.id}, '${face.name.replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800">
+                    <button onclick="event.stopPropagation(); editFace(${face.id}, '${face.name.replace(/'/g, "\\'")}', '${(face.relationship || '').replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800">
                         <i class="fas fa-edit"></i>
                     </button>
                     <button onclick="event.stopPropagation(); deleteFace(${face.id})" class="text-red-600 hover:text-red-800">
@@ -456,6 +503,7 @@
             </div>
             <div>
                 <h4 class="font-semibold text-gray-800">${face.name}</h4>
+                ${relationshipHTML}
                 <p class="text-sm text-gray-500">Registered: ${new Date(face.created_at).toLocaleDateString()}</p>
             </div>
         `;
@@ -468,7 +516,24 @@
         const face = allFaces.find(f => f.id === faceId);
         if (face) {
             document.getElementById('viewFaceName').textContent = face.name;
-            document.getElementById('viewFaceImage').src = `/${face.image_path}`;
+
+            // Set the image source - normalize path by replacing backslashes with forward slashes
+            let imagePath = face.image_path;
+
+            // Replace all backslashes with forward slashes
+            imagePath = imagePath.replace(/\\/g, '/');
+
+            // Ensure it starts with /
+            if (!imagePath.startsWith('/')) {
+                imagePath = '/' + imagePath;
+            }
+
+            console.log("Normalized image path:", imagePath);
+
+            document.getElementById('viewFaceImage').src = imagePath;
+            document.getElementById('viewFaceImage').alt = `Face image of ${face.name}`;
+            document.getElementById('viewFaceImage').className = 'max-w-full max-h-[70vh] object-contain rounded-lg bg-gray-100';
+
             document.getElementById('viewFaceDate').textContent = new Date(face.created_at).toLocaleDateString();
             document.getElementById('viewFaceModal').classList.remove('hidden');
         }
@@ -476,6 +541,8 @@
 
     function closeViewModal() {
         document.getElementById('viewFaceModal').classList.add('hidden');
+        // Clear the image to prevent caching issues
+        document.getElementById('viewFaceImage').src = '';
     }
 
     function updatePagination() {
@@ -601,9 +668,10 @@
         }
     }
 
-    function editFace(faceId, currentName) {
+    function editFace(faceId, currentName, currentRelationship) {
         document.getElementById('editFaceId').value = faceId;
         document.getElementById('editFaceName').value = currentName;
+        document.getElementById('editFaceRelationship').value = currentRelationship || '';
         document.getElementById('editFaceModal').classList.remove('hidden');
     }
 
@@ -615,6 +683,7 @@
         event.preventDefault();
         const faceId = document.getElementById('editFaceId').value;
         const newName = document.getElementById('editFaceName').value.trim();
+        const newRelationship = document.getElementById('editFaceRelationship').value.trim();
 
         if (!newName) {
             alert('Please enter a name');
@@ -624,6 +693,7 @@
         const formData = new FormData();
         formData.append('face_id', faceId);
         formData.append('new_name', newName);
+        formData.append('new_relationship', newRelationship);
 
         fetch('/api/update_face', {
             method: 'POST',
@@ -696,31 +766,7 @@
             .then(data => {
                 if (data.success) {
                     const stats = data.statistics;
-                    document.getElementById('totalFaces').textContent = stats.total_faces;
-                    document.getElementById('todayFaces').textContent = stats.today_faces;
-                    document.getElementById('weekFaces').textContent = stats.week_faces;
-                    document.getElementById('todayDetections').textContent = stats.today_detections;
-
-                    // Recent activity
-                    const recentActivity = document.getElementById('recentActivity');
-                    if (stats.recent_face) {
-                        recentActivity.innerHTML = `Latest: <strong>${stats.recent_face.name}</strong> registered ${new Date(stats.recent_face.created_at).toLocaleDateString()}`;
-                    } else {
-                        recentActivity.textContent = 'No faces registered yet';
-                    }
-
-                    // Top faces
-                    const topFaces = document.getElementById('topFaces');
-                    if (stats.top_faces.length > 0) {
-                        topFaces.innerHTML = stats.top_faces.map(face => `
-                        <div class="flex justify-between items-center py-1">
-                            <span>${face.person_name}</span>
-                            <span class="text-sm text-gray-500">${face.detection_count} detections</span>
-                        </div>
-                    `).join('');
-                    } else {
-                        topFaces.innerHTML = '<div class="text-gray-500">No detections this week</div>';
-                    }
+                    console.log("Statistics loaded:", stats);
                 }
             })
             .catch(error => {
@@ -823,7 +869,6 @@
             const personCard = document.createElement('div');
             personCard.className = 'bg-gray-50 rounded-lg p-4 border hover:shadow-md transition-shadow';
 
-            // Create the HTML structure with placeholder icon instead of blurred image
             const cardHTML = `
             <div class="flex items-start justify-between mb-3">
                 <div class="flex items-center space-x-2">
@@ -852,7 +897,6 @@
             personCard.innerHTML = cardHTML;
             grid.appendChild(personCard);
 
-            // Add event listeners after card is in DOM
             const deleteBtn = personCard.querySelector('.delete-known-person-btn');
             if (deleteBtn) {
                 deleteBtn.addEventListener('click', function (e) {
@@ -866,7 +910,6 @@
     }
 
     function viewKnownPersonFace(personId) {
-        // Fetch person details and show in modal
         fetch('/api/get_known_persons')
             .then(response => response.json())
             .then(data => {
@@ -874,7 +917,21 @@
                     const person = data.known_persons.find(p => p.id === personId);
                     if (person) {
                         document.getElementById('knownPersonFaceName').textContent = person.name;
-                        document.getElementById('knownPersonFaceImage').src = `/${person.image_path}`;
+
+                        // Normalize the image path
+                        let imagePath = person.image_path;
+                        imagePath = imagePath.replace(/\\/g, '/');
+
+                        if (!imagePath.startsWith('/')) {
+                            imagePath = '/' + imagePath;
+                        }
+
+                        console.log("Known person normalized image path:", imagePath);
+
+                        document.getElementById('knownPersonFaceImage').src = imagePath;
+                        document.getElementById('knownPersonFaceImage').alt = `Face image of ${person.name}`;
+                        document.getElementById('knownPersonFaceImage').className = 'max-w-full max-h-[70vh] object-contain rounded-lg bg-gray-100';
+
                         document.getElementById('knownPersonFaceDate').textContent = new Date(person.created_at).toLocaleDateString();
                         document.getElementById('knownPersonFaceModal').classList.remove('hidden');
                     }
@@ -887,6 +944,8 @@
 
     function closeKnownPersonFaceModal() {
         document.getElementById('knownPersonFaceModal').classList.add('hidden');
+        // Clear the image to prevent caching issues
+        document.getElementById('knownPersonFaceImage').src = '';
     }
 
     function deleteKnownPerson(personId, personName) {
