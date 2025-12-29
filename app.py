@@ -1,4 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
+from werkzeug.security import generate_password_hash, check_password_hash
+from utils.database import init_db, get_user_by_username, get_user_by_id, create_user
 import cv2
 import face_recognition
 import numpy as np
@@ -13,13 +16,43 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.image import MIMEImage
 import json
 from utils.distance_estimation import get_distance_estimator
-import threading
 import time
 from utils.recording_manager import recording_manager as global_recording_manager 
-from utils.face_recognition_utils import load_known_faces
+from utils.face_recognition_utils import load_known_faces, load_known_persons
+from utils.motion_detection_utils import MotionDetector
+from utils.recording_utils import RecordingManager
+from utils.audio_utils import AudioManager
+from utils.cctv_utils import CCTVController
+from utils.twilio_alert_system import twilio_alert_system
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'
+app.secret_key = 'change_this_to_a_random_secret_key'
+
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login' # Redirect here if not logged in
+
+# Define User Class for Flask-Login
+class User(UserMixin):
+    def __init__(self, id, username, password_hash):
+        self.id = id
+        self.username = username
+        self.password_hash = password_hash
+
+@login_manager.user_loader
+def load_user(user_id):
+    user_data = get_user_by_id(user_id)
+    if user_data:
+        return User(user_data['id'], user_data['username'], user_data['password'])
+    return None
+
+# Create a default admin user on startup if one doesn't exist
+def init_admin_user():
+    user = get_user_by_username('admin')
+    if not user:
+        hashed_pw = generate_password_hash('admin123', method='pbkdf2:sha256')
+        create_user('admin', hashed_pw)
+        print("Admin user created: admin / admin123")
 
 # Configuration
 UPLOAD_FOLDER = 'static/uploads'
@@ -27,10 +60,6 @@ FACES_FOLDER = 'static/faces'
 SCREENSHOTS_FOLDER = 'static/screenshots'
 RECORDINGS_FOLDER = 'static/recordings'
 THUMBNAILS_FOLDER = 'static/thumbnails'
-
-# Create directories if they don't exist
-for folder in [UPLOAD_FOLDER, FACES_FOLDER, SCREENSHOTS_FOLDER, RECORDINGS_FOLDER, THUMBNAILS_FOLDER]:
-    os.makedirs(folder, exist_ok=True)
 
 # Global variables
 camera = None
@@ -48,12 +77,20 @@ known_face_names = []
 known_persons_encodings = []
 known_persons_names = []
 
+
+# Create directories if they don't exist
+for folder in [UPLOAD_FOLDER, FACES_FOLDER, SCREENSHOTS_FOLDER, RECORDINGS_FOLDER, THUMBNAILS_FOLDER]:
+    os.makedirs(folder, exist_ok=True)
+
+# Global variables
+motion_detector = None
+recording_manager = None
+
 def start_background_cleanup():
     """Start background thread to clean up old face tracking data"""
     def cleanup_loop():
         while True:
             try:
-                from utils.twilio_alert_system import twilio_alert_system
                 cleaned_count = twilio_alert_system.cleanup_old_faces(hours=24)
                 if cleaned_count > 0:
                     print(f"🧹 Background cleanup: Removed {cleaned_count} old faces")
@@ -69,32 +106,45 @@ start_background_cleanup()
 
 
 @app.route('/')
+@login_required 
 def index():
-    return render_template('index.html')
+    return redirect(url_for('dashboard'))
 
 @app.route('/dashboard')
+@login_required
 def dashboard():
     return render_template('dashboard.html')
 
 @app.route('/face_registration')
+@login_required
 def face_registration():
     return render_template('face_registration.html')
 
 @app.route('/motion_detection')
+@login_required
 def motion_detection():
     return render_template('motion_detection.html')
 
 @app.route('/alerts')
+@login_required
 def alerts():
     return render_template('alerts.html')
 
 @app.route('/playback')
+@login_required
 def playback():
     return render_template('playback.html')
 
 @app.route('/controls')
+@login_required
 def controls():
     return render_template('controls.html')
+
+@app.route('/detection_logs')
+@login_required
+def detection_logs():
+    """Display all detection logs with specific filtering"""
+    return render_template('detection_logs.html')
 
 @app.route('/api/debug_verification')
 def debug_verification():
@@ -105,6 +155,34 @@ def debug_verification():
         return jsonify({'success': True, 'debug': debug_info})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/login', methods=['GET', 'POST'])
+def login():
+    if current_user.is_authenticated:
+        return redirect(url_for('dashboard'))
+        
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        
+        user_data = get_user_by_username(username)
+        
+        if user_data and check_password_hash(user_data['password'], password):
+            user = User(user_data['id'], user_data['username'], user_data['password'])
+            login_user(user)
+            flash('Logged in successfully.', 'success')
+            return redirect(url_for('dashboard'))
+        else:
+            flash('Invalid username or password.', 'error')
+            
+    return render_template('login.html')
+
+@app.route('/logout')
+@login_required
+def logout():
+    logout_user()
+    flash('You have been logged out.', 'info')
+    return redirect(url_for('login'))
 
 @app.route('/api/twilio_settings', methods=['GET', 'POST'])
 def twilio_settings():
@@ -241,10 +319,7 @@ def update_authorized_cooldown():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-@app.route('/detection_logs')
-def detection_logs():
-    """Display all detection logs with specific filtering"""
-    return render_template('detection_logs.html')
+
 
 @app.route('/api/get_detection_logs_simple')
 def get_detection_logs_simple():

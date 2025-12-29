@@ -18,15 +18,13 @@
                     <h1 class="text-lg sm:text-xl font-bold">Home Security System</h1>
                 </div>
 
-                <!-- Mobile menu button -->
                 <div class="md:hidden">
                     <button id="mobileMenuButton" class="text-white focus:outline-none">
                         <i class="fas fa-bars text-xl"></i>
                     </button>
                 </div>
 
-                <!-- Desktop menu -->
-                <div class="hidden md:flex space-x-4 lg:space-x-6">
+                <div class="hidden md:flex space-x-4 lg:space-x-6 items-center">
                     <a href="{{ url_for('dashboard') }}"
                         class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-tachometer-alt mr-1 sm:mr-2 text-sm sm:text-base"></i>
@@ -49,50 +47,88 @@
                     <a href="{{ url_for('detection_logs') }}"
                         class="hover:text-blue-200 transition-colors flex items-center">
                         <i class="fas fa-clipboard-list mr-1 sm:mr-2 text-sm sm:text-base"></i>
-                        <span class="text-sm sm:text-base">Detection Logs</span>
+                        <span class="text-sm sm:text-base">Logs</span>
                     </a>
+
+                    <div class="h-6 w-px bg-blue-700 mx-2"></div>
+
+                    {% if current_user.is_authenticated %}
+                        <a href="{{ url_for('logout') }}"
+                            class="hover:text-red-300 transition-colors flex items-center font-semibold">
+                            <i class="fas fa-sign-out-alt mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                            <span class="text-sm sm:text-base">Logout</span>
+                        </a>
+                    {% else %}
+                        <a href="{{ url_for('login') }}"
+                            class="hover:text-green-300 transition-colors flex items-center font-semibold">
+                            <i class="fas fa-sign-in-alt mr-1 sm:mr-2 text-sm sm:text-base"></i>
+                            <span class="text-sm sm:text-base">Login</span>
+                        </a>
+                    {% endif %}
                 </div>
             </div>
 
-            <!-- Mobile menu -->
             <div id="mobileMenu" class="hidden md:hidden pb-4 border-t border-blue-700">
                 <div class="flex flex-col space-y-3 mt-3">
                     <a href="{{ url_for('dashboard') }}"
                         class="hover:text-blue-200 transition-colors flex items-center">
-                        <i class="fas fa-tachometer-alt mr-3"></i>
+                        <i class="fas fa-tachometer-alt mr-3 w-5"></i>
                         Dashboard
                     </a>
                     <a href="{{ url_for('face_registration') }}"
                         class="hover:text-blue-200 transition-colors flex items-center">
-                        <i class="fas fa-user-plus mr-3"></i>
+                        <i class="fas fa-user-plus mr-3 w-5"></i>
                         Face Registration
                     </a>
                     <a href="{{ url_for('motion_detection') }}"
                         class="hover:text-blue-200 transition-colors flex items-center">
-                        <i class="fas fa-running mr-3"></i>
+                        <i class="fas fa-running mr-3 w-5"></i>
                         Motion Detection
                     </a>
                     <a href="{{ url_for('alerts') }}" class="hover:text-blue-200 transition-colors flex items-center">
-                        <i class="fas fa-bell mr-3"></i>
+                        <i class="fas fa-bell mr-3 w-5"></i>
                         Alerts
                     </a>
                     <a href="{{ url_for('detection_logs') }}"
                         class="hover:text-blue-200 transition-colors flex items-center">
-                        <i class="fas fa-clipboard-list mr-3"></i>
+                        <i class="fas fa-clipboard-list mr-3 w-5"></i>
                         Detection Logs
                     </a>
+
+                    <div class="border-t border-blue-800 pt-3 mt-2">
+                        {% if current_user.is_authenticated %}
+                            <a href="{{ url_for('logout') }}"
+                                class="hover:text-red-300 transition-colors flex items-center text-red-200">
+                                <i class="fas fa-sign-out-alt mr-3 w-5"></i>
+                                Logout
+                            </a>
+                        {% else %}
+                            <a href="{{ url_for('login') }}"
+                                class="hover:text-green-300 transition-colors flex items-center text-green-200">
+                                <i class="fas fa-sign-in-alt mr-3 w-5"></i>
+                                Login
+                            </a>
+                        {% endif %}
+                    </div>
                 </div>
             </div>
         </div>
     </nav>
 
     <main class="max-w-7xl mx-auto py-4 sm:py-6 px-3 sm:px-4 lg:px-8">
-        {% with messages = get_flashed_messages() %}
+        {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
         <div class="mb-4">
-            {% for message in messages %}
-            <div
-                class="bg-blue-100 border border-blue-400 text-blue-700 px-3 sm:px-4 py-3 rounded mb-2 text-sm sm:text-base">
+            {% for category, message in messages %}
+            <div class="px-3 sm:px-4 py-3 rounded mb-2 text-sm sm:text-base flex items-center
+                {% if category == 'error' %} bg-red-100 border border-red-400 text-red-700 
+                {% elif category == 'success' %} bg-green-100 border border-green-400 text-green-700 
+                {% else %} bg-blue-100 border border-blue-400 text-blue-700 {% endif %}">
+                
+                {% if category == 'error' %} <i class="fas fa-exclamation-circle mr-2"></i>
+                {% elif category == 'success' %} <i class="fas fa-check-circle mr-2"></i>
+                {% else %} <i class="fas fa-info-circle mr-2"></i> {% endif %}
+                
                 {{ message }}
             </div>
             {% endfor %}

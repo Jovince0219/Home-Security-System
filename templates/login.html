@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+
+{% block title %}Login - Security System{% endblock %}
+
+{% block content %}
+<div class="h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-100 p-4 overflow-hidden">
+    <div id="loginContainer" class="max-w-md w-full">
+        <div class="bg-white p-8 rounded-2xl shadow-xl border border-gray-100">
+            <!-- Logo & Header -->
+            <div class="text-center mb-8">
+                <div class="relative inline-block mb-5">
+                    <div class="absolute inset-0 bg-gradient-to-br from-blue-100 to-indigo-100 rounded-full blur-lg opacity-70"></div>
+                    <div class="relative bg-gradient-to-br from-blue-600 to-indigo-700 w-16 h-16 rounded-full flex items-center justify-center mx-auto shadow-lg">
+                        <i class="fas fa-shield-alt text-2xl text-white"></i>
+                    </div>
+                </div>
+                
+                <div class="mb-3">
+                    <h1 class="text-2xl font-bold bg-gradient-to-r from-gray-900 to-gray-700 bg-clip-text text-transparent">
+                        Security System
+                    </h1>
+                    <p class="text-sm text-gray-500 mt-1">Enterprise Security Portal</p>
+                </div>
+                
+                <h2 class="text-lg font-semibold text-gray-800 mt-4">
+                    Sign in to your account
+                </h2>
+                <p class="text-gray-500 text-xs mt-1">
+                    Enter your credentials to access the dashboard
+                </p>
+            </div>
+
+            <!-- Flash Messages (only shown if there are actual error messages) -->
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        {% if category != 'info' and message != 'Please log in to access this page.' %}
+                        <div class="mb-6">
+                            <div class="bg-gradient-to-r from-red-50 to-red-50 border border-red-200 rounded-xl p-4 shadow-sm">
+                                <div class="flex items-center">
+                                    <div class="flex-shrink-0">
+                                        <div class="bg-red-100 p-2 rounded-full">
+                                            <i class="fas fa-exclamation-circle text-red-600 text-sm"></i>
+                                        </div>
+                                    </div>
+                                    <div class="ml-3">
+                                        <p class="text-sm font-medium text-red-800">{{ message }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        {% endif %}
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            <!-- Login Form -->
+            <form class="space-y-4" action="{{ url_for('login') }}" method="POST">
+                <!-- Username Field -->
+                <div>
+                    <label for="username" class="block text-xs font-semibold text-gray-700 mb-1.5 uppercase tracking-wide">
+                        <i class="fas fa-user mr-1.5 text-gray-500"></i>USERNAME
+                    </label>
+                    <div class="relative group">
+                        <input id="username" name="username" type="text" required 
+                            class="pl-10 pr-4 py-2.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 outline-none placeholder-gray-400 text-gray-900 text-sm bg-gray-50"
+                            placeholder="Enter your username"
+                            autocomplete="username">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-user text-gray-400 group-focus-within:text-blue-500 transition-colors text-sm"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Password Field -->
+                <div>
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label for="password" class="block text-xs font-semibold text-gray-700 uppercase tracking-wide">
+                            <i class="fas fa-key mr-1.5 text-gray-500"></i>PASSWORD
+                        </label>
+                        <button type="button" id="togglePassword" class="text-xs text-blue-600 hover:text-blue-800 font-medium transition-colors flex items-center">
+                            <i class="fas fa-eye mr-1.5"></i><span>Show</span>
+                        </button>
+                    </div>
+                    <div class="relative group">
+                        <input id="password" name="password" type="password" required 
+                            class="pl-10 pr-12 py-2.5 w-full border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all duration-200 outline-none placeholder-gray-400 text-gray-900 text-sm bg-gray-50"
+                            placeholder="Enter your password"
+                            autocomplete="current-password">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                            <i class="fas fa-key text-gray-400 group-focus-within:text-blue-500 transition-colors text-sm"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sign In Button -->
+                <div class="pt-2">
+                    <button type="submit" 
+                        class="w-full py-3 px-4 border border-transparent text-sm font-semibold rounded-lg text-white bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 shadow-md hover:shadow-lg transition-all duration-200 transform hover:-translate-y-0.5 active:translate-y-0 flex items-center justify-center">
+                        <i class="fas fa-lock mr-2 text-sm"></i>
+                        <span>Sign In</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Password Toggle Script -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Prevent scrolling on the page
+    document.body.style.overflow = 'hidden';
+    document.documentElement.style.overflow = 'hidden';
+    
+    // Password toggle functionality
+    const toggleButton = document.getElementById('togglePassword');
+    const passwordInput = document.getElementById('password');
+    
+    if (toggleButton) {
+        toggleButton.addEventListener('click', function() {
+            const type = passwordInput.getAttribute('type') === 'password' ? 'text' : 'password';
+            passwordInput.setAttribute('type', type);
+            
+            const icon = toggleButton.querySelector('i');
+            const textSpan = toggleButton.querySelector('span');
+            
+            if (type === 'text') {
+                icon.className = 'fas fa-eye-slash mr-1.5';
+                textSpan.textContent = 'Hide';
+            } else {
+                icon.className = 'fas fa-eye mr-1.5';
+                textSpan.textContent = 'Show';
+            }
+        });
+    }
+    
+    // Add focus/blur effects to inputs
+    const inputs = document.querySelectorAll('input');
+    inputs.forEach(input => {
+        input.addEventListener('focus', function() {
+            this.parentElement.classList.add('ring-1', 'ring-blue-200');
+            this.classList.add('bg-white');
+        });
+        
+        input.addEventListener('blur', function() {
+            this.parentElement.classList.remove('ring-1', 'ring-blue-200');
+            this.classList.remove('bg-white');
+        });
+    });
+});
+</script>
+
+<style>
+/* Disable scrolling and ensure proper sizing */
+html, body {
+    overflow: hidden !important;
+    height: 100%;
+    position: fixed;
+    width: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Better text rendering */
+* {
+    transition: background-color 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+}
+
+/* Input focus effects */
+input:focus {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08);
+}
+
+/* Custom scrollbar hiding */
+::-webkit-scrollbar {
+    display: none;
+}
+
+/* Button styling */
+button[type="submit"] {
+    min-height: 44px; /* Better touch target */
+}
+
+/* Improved input placeholder */
+input::placeholder {
+    font-size: 0.875rem;
+    color: #9ca3af;
+}
+
+/* Ensure smooth animations */
+@media (prefers-reduced-motion: reduce) {
+    * {
+        transition: none !important;
+    }
+}
+
+/* Crisp edges for better 100% zoom clarity */
+* {
+    text-rendering: optimizeLegibility;
+}
+</style>
+{% endblock %}

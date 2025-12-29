@@ -14,6 +14,15 @@ def init_db():
     conn = sqlite3.connect('security_system.db')
     c = conn.cursor()
     
+    # Create users table
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            username TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL
+        )
+    ''')
+    
     # Create faces table (Authorized Persons)
     conn.execute('''
         CREATE TABLE IF NOT EXISTS faces (
@@ -957,3 +966,26 @@ def search_known_persons_by_name(query):
     except Exception as e:
         print(f"Error searching known persons: {e}")
         return []
+    
+def get_user_by_username(username):
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE username = ?', (username,)).fetchone()
+    conn.close()
+    return user
+
+def get_user_by_id(user_id):
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    conn.close()
+    return user
+
+def create_user(username, password_hash):
+    """Creates a user. Returns True if successful, False if username exists."""
+    try:
+        conn = get_db_connection()
+        conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password_hash))
+        conn.commit()
+        conn.close()
+        return True
+    except sqlite3.IntegrityError:
+        return False
