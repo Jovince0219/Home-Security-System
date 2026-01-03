@@ -24,6 +24,8 @@ from utils.recording_utils import RecordingManager
 from utils.audio_utils import AudioManager
 from utils.cctv_utils import CCTVController
 from utils.twilio_alert_system import twilio_alert_system
+from functools import wraps 
+from utils.database import get_faces_without_accounts 
 
 app = Flask(__name__)
 app.secret_key = 'change_this_to_a_random_secret_key'
@@ -34,16 +36,21 @@ login_manager.login_view = 'login' # Redirect here if not logged in
 
 # Define User Class for Flask-Login
 class User(UserMixin):
-    def __init__(self, id, username, password_hash):
+    def __init__(self, id, username, password_hash, role='viewer'):
         self.id = id
         self.username = username
         self.password_hash = password_hash
+        self.role = role # Add role property
+
+    def is_admin(self):
+        return self.role == 'admin'
 
 @login_manager.user_loader
 def load_user(user_id):
     user_data = get_user_by_id(user_id)
     if user_data:
-        return User(user_data['id'], user_data['username'], user_data['password'])
+        # Pass the role from the database
+        return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
     return None
 
 # Create a default admin user on startup if one doesn't exist
@@ -51,8 +58,20 @@ def init_admin_user():
     user = get_user_by_username('admin')
     if not user:
         hashed_pw = generate_password_hash('admin123', method='pbkdf2:sha256')
-        create_user('admin', hashed_pw)
-        print("Admin user created: admin / admin123")
+        # IMPORTANT: Pass role='admin' here
+        create_user('admin', hashed_pw, role='admin')
+        print("✅ Admin user created: admin / admin123")
+    else:
+        print("ℹ️ Admin user already exists")
+        
+def admin_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not current_user.is_authenticated or not current_user.is_admin():
+            flash('You do not have permission to access this page.', 'error')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Configuration
 UPLOAD_FOLDER = 'static/uploads'
@@ -117,31 +136,47 @@ def dashboard():
 
 @app.route('/face_registration')
 @login_required
+@admin_required
 def face_registration():
-    return render_template('face_registration.html')
+    from utils.database import get_faces_without_accounts, get_all_sub_accounts
+    
+    # Get faces for the dropdown
+    available_faces = get_faces_without_accounts()
+    
+    # Get existing accounts for the list
+    sub_accounts = get_all_sub_accounts()
+    
+    return render_template('face_registration.html', 
+                         available_faces=available_faces, 
+                         sub_accounts=sub_accounts)
 
 @app.route('/motion_detection')
 @login_required
+@admin_required
 def motion_detection():
     return render_template('motion_detection.html')
 
 @app.route('/alerts')
 @login_required
+@admin_required
 def alerts():
     return render_template('alerts.html')
 
 @app.route('/playback')
 @login_required
+@admin_required
 def playback():
     return render_template('playback.html')
 
 @app.route('/controls')
 @login_required
+@admin_required
 def controls():
     return render_template('controls.html')
 
 @app.route('/detection_logs')
 @login_required
+@admin_required
 def detection_logs():
     """Display all detection logs with specific filtering"""
     return render_template('detection_logs.html')
@@ -183,6 +218,59 @@ def logout():
     logout_user()
     flash('You have been logged out.', 'info')
     return redirect(url_for('login'))
+
+@app.route('/api/create_sub_account', methods=['POST'])
+@login_required
+@admin_required
+def create_sub_account():
+    username = request.form.get('username')
+    password = request.form.get('password')
+    face_id = request.form.get('face_id')
+
+    if not username or not password or not face_id:
+        return jsonify({'success': False, 'error': 'All fields are required'})
+
+    hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+    
+    # Create user with 'viewer' role linked to the face_id
+    if create_user(username, hashed_pw, role='viewer', face_id=face_id):
+        return jsonify({'success': True, 'message': f'Sub-account created for {username}'})
+    else:
+        return jsonify({'success': False, 'error': 'Username already exists'})
+    
+@app.route('/api/delete_sub_account/<int:user_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_sub_account(user_id):
+    from utils.database import delete_user
+    try:
+        delete_user(user_id)
+        return jsonify({'success': True, 'message': 'Account deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/update_sub_account', methods=['POST'])
+@login_required
+@admin_required
+def update_sub_account():
+    from utils.database import update_user_credentials
+    
+    user_id = request.form.get('user_id')
+    username = request.form.get('username')
+    password = request.form.get('password') # Optional
+    
+    if not user_id or not username:
+        return jsonify({'success': False, 'error': 'Username is required'})
+        
+    try:
+        hashed_pw = None
+        if password and password.strip():
+            hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+            
+        update_user_credentials(user_id, username, hashed_pw)
+        return jsonify({'success': True, 'message': 'Account updated successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/twilio_settings', methods=['GET', 'POST'])
 def twilio_settings():
@@ -3617,8 +3705,11 @@ if __name__ == '__main__':
     from utils.motion_detection_utils import MotionDetector
     from utils.recording_utils import RecordingManager
     
-    # Initialize database
+    # Initialize database tables
     init_db()
+    
+    # Initialize default Admin user (Creates admin/admin123 if missing)
+    init_admin_user()
     
     # Load known faces (Authorized Persons)
     print("📋 Loading authorized persons...")
@@ -3635,8 +3726,9 @@ if __name__ == '__main__':
     recording_manager = RecordingManager()
     
     print("✅ System initialized successfully!")
-    print(f"   - Authorized Persons: {len(known_face_names)}")
-    print(f"   - Known Persons: {len(known_persons_names)}")
+    # Note: Ensure known_face_names is accessible here or remove these print lines if they cause scope errors
+    # print(f"   - Authorized Persons: {len(known_face_names)}")
+    # print(f"   - Known Persons: {len(known_persons_names)}")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
 

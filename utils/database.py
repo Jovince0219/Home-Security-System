@@ -19,7 +19,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL
+            password TEXT NOT NULL,
+            role TEXT DEFAULT 'viewer',  -- 'admin' or 'viewer'
+            face_id INTEGER,             -- Link to faces table
+            FOREIGN KEY (face_id) REFERENCES faces (id)
         )
     ''')
     
@@ -1008,13 +1011,69 @@ def get_user_by_id(user_id):
     conn.close()
     return user
 
-def create_user(username, password_hash):
+def create_user(username, password_hash, role='admin', face_id=None):
     """Creates a user. Returns True if successful, False if username exists."""
     try:
         conn = get_db_connection()
-        conn.execute('INSERT INTO users (username, password) VALUES (?, ?)', (username, password_hash))
+        conn.execute(
+            'INSERT INTO users (username, password, role, face_id) VALUES (?, ?, ?, ?)', 
+            (username, password_hash, role, face_id)
+        )
         conn.commit()
         conn.close()
         return True
     except sqlite3.IntegrityError:
         return False
+
+def get_user_by_id(user_id):
+    conn = get_db_connection()
+    user = conn.execute('SELECT * FROM users WHERE id = ?', (user_id,)).fetchone()
+    conn.close()
+    return user
+
+def get_faces_without_accounts():
+    conn = get_db_connection()
+    # Select faces that are NOT linked in the users table
+    query = '''
+        SELECT f.id, f.name, f.image_path 
+        FROM faces f
+        LEFT JOIN users u ON f.id = u.face_id
+        WHERE u.id IS NULL
+        ORDER BY f.name ASC
+    '''
+    faces = conn.execute(query).fetchall()
+    conn.close()
+    return faces
+
+def get_all_sub_accounts():
+    """Get all users with role='viewer' and their linked face details"""
+    conn = get_db_connection()
+    query = '''
+        SELECT u.id, u.username, u.face_id, f.name as face_name, f.image_path
+        FROM users u
+        LEFT JOIN faces f ON u.face_id = f.id
+        WHERE u.role = 'viewer'
+        ORDER BY u.username ASC
+    '''
+    accounts = conn.execute(query).fetchall()
+    conn.close()
+    return accounts
+
+def delete_user(user_id):
+    """Delete a user account"""
+    conn = get_db_connection()
+    conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+    conn.commit()
+    conn.close()
+
+def update_user_credentials(user_id, username, password_hash=None):
+    """Update username and optionally password"""
+    conn = get_db_connection()
+    if password_hash:
+        conn.execute('UPDATE users SET username = ?, password = ? WHERE id = ?', 
+                     (username, password_hash, user_id))
+    else:
+        conn.execute('UPDATE users SET username = ? WHERE id = ?', 
+                     (username, user_id))
+    conn.commit()
+    conn.close()

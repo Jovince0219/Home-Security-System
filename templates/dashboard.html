@@ -4,7 +4,6 @@
 
 {% block content %}
 <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-    <!-- Live Camera Feed with Face Recognition -->
     <div class="lg:col-span-2">
         <div class="bg-white rounded-lg shadow-lg p-6">
             <h2 class="text-2xl font-bold mb-4 flex items-center">
@@ -17,11 +16,9 @@
                 <div class="absolute top-2 right-2 bg-red-600 text-white px-2 py-1 rounded text-sm">
                     <i class="fas fa-circle mr-1"></i>LIVE
                 </div>
-                <!-- Enhanced face detection overlay with better fitting boxes -->
                 <div id="faceOverlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
             </div>
 
-            <!-- Camera Controls -->
             <div class="mt-4 bg-gray-50 rounded-lg p-4">
                 <h4 class="font-semibold mb-3">Camera Controls</h4>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -43,7 +40,6 @@
                 </div>
             </div>
 
-            <!-- Enhanced controls with quick actions -->
             <div class="mt-4 grid grid-cols-2 md:grid-cols-4 gap-2">
                 <button id="toggleRecording" class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
                     <i class="fas fa-stop mr-1"></i>Stop Recording
@@ -61,12 +57,10 @@
                     <i class="fas fa-volume-up mr-1"></i>Warning
                 </button>
             </div>
-            <!-- Motion Detection Overlay -->
             <div id="motionOverlay" class="absolute top-0 left-0 w-full h-full pointer-events-none"></div>
         </div>
     </div>
 
-    <!-- System Status -->
     <div class="bg-white rounded-lg shadow-lg p-6">
         <h3 class="text-lg font-bold mb-4 flex items-center">
             <i class="fas fa-heartbeat mr-2 text-green-600"></i>
@@ -93,14 +87,14 @@
                     class="bg-green-100 text-green-800 px-2 py-1 rounded text-sm">Recording</span>
             </div>
         </div>
-        <!-- Twilio Alert Control (Replaces Today's Stats) -->
-        <div class="bg-white rounded-lg shadow-lg p-6">
+
+        {% if current_user.role == 'admin' %}
+        <div class="mt-6 bg-white rounded-lg shadow-lg p-6 border-t border-gray-200">
             <h3 class="text-lg font-bold mb-4 flex items-center">
                 <i class="fas fa-phone-alt mr-2 text-blue-600"></i>
                 Alert Controls
             </h3>
             <div class="space-y-4">
-                <!-- Twilio Toggle -->
                 <div class="flex justify-between items-center">
                     <div>
                         <span class="font-semibold">Twilio Phone Alerts</span>
@@ -117,7 +111,6 @@
                     </div>
                 </div>
 
-                <!-- Status Indicator -->
                 <div class="bg-gray-50 rounded-lg p-3">
                     <div class="flex items-center text-sm">
                         <i class="fas fa-info-circle mr-2 text-blue-500"></i>
@@ -127,7 +120,6 @@
                     </div>
                 </div>
 
-                <!-- Quick Actions -->
                 <div class="grid grid-cols-2 gap-2 mt-2">
                     <button onclick="viewAlertSettings()"
                         class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">
@@ -136,10 +128,10 @@
                 </div>
             </div>
         </div>
+        {% endif %}
     </div>
 </div>
 
-<!-- Recent Unauthorized Detections -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <h3 class="text-lg font-bold mb-4 flex items-center">
         <i class="fas fa-list-alt mr-2 text-blue-600"></i>
@@ -160,7 +152,6 @@
                 </tr>
             </thead>
             <tbody id="detectionsTable">
-                <!-- Detections will be loaded here -->
                 <tr>
                     <td colspan="6" class="px-4 py-8 text-center text-gray-500">
                         <i class="fas fa-shield-check text-3xl mb-2 text-green-400"></i>
@@ -172,7 +163,6 @@
     </div>
 </div>
 
-<!-- Motion-Gated Tracking Panel -->
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-bold flex items-center">
@@ -184,6 +174,8 @@
                 class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm">
                 <i class="fas fa-sync-alt mr-1"></i>Refresh
             </button>
+            
+            {% if current_user.role == 'admin' %}
             <button onclick="resetTracking()" class="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm">
                 <i class="fas fa-redo mr-1"></i>Reset
             </button>
@@ -191,10 +183,10 @@
                 class="bg-yellow-600 hover:bg-yellow-700 text-white px-3 py-1 rounded text-sm">
                 <i class="fas fa-broom mr-1"></i>Cleanup
             </button>
+            {% endif %}
         </div>
     </div>
 
-    <!-- Tracking Status -->
     <div id="trackingStatus" class="bg-gray-50 rounded-lg p-4">
         <div class="grid grid-cols-2 gap-4 mb-4">
             <div>
@@ -216,20 +208,17 @@
             </div>
         </div>
 
-        <!-- Current Tracking Info -->
         <div class="text-sm text-gray-700 mb-3">
             <i class="fas fa-info-circle mr-2 text-blue-500"></i>
             <span id="trackingInfo">System initializing...</span>
         </div>
 
-        <!-- Tracked Faces List -->
         <div id="trackedFacesList" class="mt-4 max-h-60 overflow-y-auto">
-            <!-- Will be populated by JavaScript -->
-        </div>
+            </div>
     </div>
 </div>
 
-<!-- Distance Settings Panel -->
+{% if current_user.role == 'admin' %}
 <div class="mt-6 bg-white rounded-lg shadow-lg p-6">
     <div class="flex justify-between items-center mb-4">
         <h3 class="text-lg font-bold flex items-center">
@@ -242,10 +231,8 @@
         </button>
     </div>
 
-    <!-- Collapsible Settings Panel -->
     <div id="distanceSettingsPanel" class="hidden">
         <div class="bg-gray-50 rounded-lg p-4 space-y-4">
-            <!-- Distance Thresholds -->
             <div>
                 <label class="block text-sm font-semibold mb-2">
                     <i class="fas fa-expand-arrows-alt mr-1"></i>
@@ -258,7 +245,6 @@
                 </p>
             </div>
 
-            <!-- Save Button -->
             <button onclick="saveDistanceSettings()"
                 class="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded font-semibold">
                 <i class="fas fa-save mr-2"></i>Save Settings
@@ -266,6 +252,7 @@
         </div>
     </div>
 </div>
+{% endif %}
 
 <script>
     // Motion-gated tracking functions
@@ -512,14 +499,21 @@
 
         // Load other components
         loadRecentDetections();
-        loadDistanceSettings();
+        
+        // Only load distance settings if element exists (Admin Only)
+        if(document.getElementById('maxDistance')) {
+            loadDistanceSettings();
+        }
+        
         refreshFaceTracking();
 
         // Load saved Twilio state from localStorage
         loadTwilioState();
 
-        // Initialize Twilio toggle
-        initializeTwilioToggle();
+        // Initialize Twilio toggle only if element exists (Admin Only)
+        if(document.getElementById('twilioToggle')) {
+            initializeTwilioToggle();
+        }
 
         // Update UI to show everything is active
         updateRecordingStatus('Recording');
@@ -607,6 +601,8 @@
         const toggle = document.getElementById('twilioToggle');
         const statusText = document.getElementById('twilioStatusText');
         const currentStatus = document.getElementById('twilioCurrentStatus');
+        
+        if (!toggle) return; // Exit if toggle doesn't exist (non-admin)
 
         // Initialize the toggle based on saved state
         updateToggleAppearance();
@@ -1522,68 +1518,6 @@
         fetch('/api/dashboard_action', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `action=${action}`
-        })
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    motionDetectionActive = !motionDetectionActive;
-                    updateMotionDetectionStatus(motionDetectionActive ? 'Active' : 'Inactive');
-
-                    if (motionDetectionActive) {
-                        startMotionDetection();
-                    } else {
-                        stopMotionDetection();
-                    }
-                }
-            });
-    }
-
-    function startMotionDetection() {
-        if (motionDetectionInterval) return;
-
-        console.log('Starting motion detection');
-        motionDetectionInterval = setInterval(() => {
-            detectMotion();
-        }, 1000); // Detect every second
-    }
-
-    function stopMotionDetection() {
-        if (motionDetectionInterval) {
-            clearInterval(motionDetectionInterval);
-            motionDetectionInterval = null;
-        }
-    }
-
-    // Make sure this function exists
-    function getAlertLevelClass(level) {
-        switch (level) {
-            case 1: return 'bg-green-100 text-green-800 border border-green-200';
-            case 2: return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-            case 3: return 'bg-red-100 text-red-800 border border-red-200';
-            default: return 'bg-gray-100 text-gray-800 border border-gray-200';
-        }
-    }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        loadRecentDetections();
-        setInterval(loadRecentDetections, 10000); // Refresh every 10 seconds
-    });
-
-    setInterval(loadRecentDetections, 10000);
-
-
-    function toggleMotionDetection() {
-        if (!cameraStream) {
-            alert('Please start camera first');
-            return;
-        }
-
-        const action = motionDetectionActive ? 'stop_motion_detection' : 'start_motion_detection';
-
-        fetch('/api/dashboard_action', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
             body: `action = ${action} `
         })
             .then(response => response.json())
@@ -1614,8 +1548,6 @@
         if (motionDetectionInterval) {
             clearInterval(motionDetectionInterval);
             motionDetectionInterval = null;
-            document.getElementById('motionOverlay').innerHTML = '';
-            console.log('Motion detection stopped');
         }
     }
 
@@ -1768,156 +1700,5 @@
                 }
             });
     }
-
-    // Face tracking management functions
-
-    function refreshFaceTracking() {
-        fetch('/api/face_tracking_stats')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const stats = data.stats;
-
-                    // ✅ SAFE ELEMENT UPDATES:
-                    const trackedFacesElement = document.getElementById('trackedFacesCount');
-                    const answeredCallsElement = document.getElementById('answeredCallsCount');
-                    const cooldownElement = document.getElementById('cooldownTime');
-                    const maxCallsElement = document.getElementById('maxCallsPerFace');
-
-                    if (trackedFacesElement) trackedFacesElement.textContent = stats.total_tracked_faces || 0;
-                    if (answeredCallsElement) answeredCallsElement.textContent = stats.total_answered_faces || 0;
-                    if (cooldownElement) cooldownElement.textContent = formatTime(stats.alert_cooldown_seconds);
-                    if (maxCallsElement) maxCallsElement.textContent = stats.max_alerts_per_face;
-
-                    displayTrackedFaces(stats.tracked_faces || []);
-                }
-            })
-            .catch(error => console.error('Error loading face tracking stats:', error));
-    }
-
-    function displayTrackedFaces(faces) {
-        const tbody = document.getElementById('trackedFacesTable');
-
-        if (!tbody) {
-            console.error('Tracked faces table not found');
-            return;
-        }
-
-        if (!faces || faces.length === 0) {
-            tbody.innerHTML = `
-            <tr>
-                <td colspan="6" class="px-4 py-4 text-center text-gray-500">
-                    <i class="fas fa-check-circle text-green-400 mr-2"></i>
-                    No faces currently tracked - all clear!
-                </td>
-            </tr>
-        `;
-            return;
-        }
-
-        tbody.innerHTML = '';
-
-        faces.forEach(face => {
-            const row = tbody.insertRow();
-
-            let statusHTML, statusClass, callStatus;
-
-            if (face.answered) {
-                statusHTML = '<i class="fas fa-phone-slash mr-1"></i>Answered';
-                statusClass = 'bg-green-100 text-green-800';
-                callStatus = 'No more calls';
-            } else if (face.alert_count >= 3) {
-                statusHTML = '<i class="fas fa-ban mr-1"></i>Max Reached';
-                statusClass = 'bg-red-100 text-red-800';
-                callStatus = 'No more calls';
-            } else if (face.time_until_reset > 0) {
-                statusHTML = '<i class="fas fa-clock mr-1"></i>Cooldown';
-                statusClass = 'bg-yellow-100 text-yellow-800';
-                callStatus = `${face.time_until_reset}s until next call`;
-            } else {
-                statusHTML = '<i class="fas fa-phone mr-1"></i>Can Call';
-                statusClass = 'bg-blue-100 text-blue-800';
-                callStatus = `Next call ready (${face.alert_count || 0}/3)`;
-            }
-
-            row.innerHTML = `
-            <td class="px-4 py-2 font-mono text-sm">${face.face_id}</td>
-            <td class="px-4 py-2">
-                <span class="px-2 py-1 bg-gray-100 rounded">
-                    ${face.alert_count || 0} / 3
-                </span>
-            </td>
-            <td class="px-4 py-2 text-sm">${face.last_alert_seconds_ago ? formatTime(face.last_alert_seconds_ago) + ' ago' : 'Never'}</td>
-            <td class="px-4 py-2 text-sm">${callStatus}</td>
-            <td class="px-4 py-2">
-                <span class="px-2 py-1 rounded text-xs ${statusClass}">
-                    ${statusHTML}
-                </span>
-            </td>
-            <td class="px-4 py-2">
-                ${face.answered ?
-                    '<button onclick="resetFaceCall(\'' + face.face_id + '\')" class="text-xs bg-gray-500 hover:bg-gray-600 text-white px-2 py-1 rounded">Reset</button>' :
-                    ''
-                }
-            </td>
-        `;
-        });
-    }
-
-    function formatTime(seconds) {
-        if (seconds < 60) {
-            return `${seconds}s`;
-        } else if (seconds < 3600) {
-            const minutes = Math.floor(seconds / 60);
-            const secs = seconds % 60;
-            return `${minutes}:${secs.toString().padStart(2, '0')}`;
-        } else {
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            return `${hours}h ${minutes}m`;
-        }
-    }
-
-    function cleanupOldFaces() {
-        if (confirm('Remove face tracking for faces older than 24 hours?')) {
-            fetch('/api/cleanup_face_tracking', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                body: 'hours=24'
-            })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert(`✅ Cleaned up ${data.cleaned_count} old faces`);
-                        refreshFaceTracking();
-                    } else {
-                        alert('❌ Cleanup failed: ' + data.error);
-                    }
-                });
-        }
-    }
-
-    function resetFaceTracking() {
-        if (confirm('⚠️ Reset ALL face tracking? This will allow all faces to trigger alerts again.')) {
-            fetch('/api/reset_face_tracking', { method: 'POST' })
-                .then(response => response.json())
-                .then(data => {
-                    if (data.success) {
-                        alert('✅ ' + data.message);
-                        refreshFaceTracking();
-                    } else {
-                        alert('❌ Reset failed: ' + data.error);
-                    }
-                });
-        }
-    }
-
-    // Auto-refresh every 30 seconds
-    setInterval(refreshFaceTracking, 30000);
-
-    // Initial load
-    document.addEventListener('DOMContentLoaded', function () {
-        refreshFaceTracking();
-    });
 </script>
 {% endblock %}
