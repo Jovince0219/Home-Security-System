@@ -1,7 +1,7 @@
 from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, Response
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
-from utils.database import init_db, get_user_by_username, get_user_by_id, create_user
+from utils.database import init_db, get_user_by_username, get_user_by_id, create_user, get_all_users, delete_user as db_delete_user
 import cv2
 import face_recognition
 import numpy as np
@@ -35,12 +35,14 @@ login_manager.init_app(app)
 login_manager.login_view = 'login' # Redirect here if not logged in
 
 # Define User Class for Flask-Login
+# Define User Class for Flask-Login
 class User(UserMixin):
-    def __init__(self, id, username, password_hash, role='viewer'):
+    def __init__(self, id, username, password_hash, role='viewer', face_id=None):
         self.id = id
         self.username = username
         self.password_hash = password_hash
-        self.role = role # Add role property
+        self.role = role
+        self.face_id = face_id
 
     def is_admin(self):
         return self.role == 'admin'
@@ -49,8 +51,18 @@ class User(UserMixin):
 def load_user(user_id):
     user_data = get_user_by_id(user_id)
     if user_data:
-        # Pass the role from the database
-        return User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
+        # Convert sqlite3.Row to dictionary or access values directly
+        # Option 1: Convert to dict
+        user_dict = dict(user_data)
+        
+        # Option 2: Access values directly (more efficient)
+        return User(
+            user_data['id'], 
+            user_data['username'], 
+            user_data['password'], 
+            user_data['role'],
+            user_data.get('face_id', None) if hasattr(user_data, 'get') else user_data['face_id'] if 'face_id' in user_data.keys() else None
+        )
     return None
 
 # Create a default admin user on startup if one doesn't exist
@@ -140,11 +152,11 @@ def dashboard():
 def face_registration():
     from utils.database import get_faces_without_accounts, get_all_sub_accounts
     
-    # Get faces for the dropdown
-    available_faces = get_faces_without_accounts()
+    # Get faces for the dropdown - ONLY FACES FOR CURRENT USER
+    available_faces = get_faces_without_accounts(current_user.id)
     
-    # Get existing accounts for the list
-    sub_accounts = get_all_sub_accounts()
+    # Get existing accounts for the list - ONLY SUB-ACCOUNTS FOR CURRENT USER
+    sub_accounts = get_all_sub_accounts(current_user.id)
     
     return render_template('face_registration.html', 
                          available_faces=available_faces, 
@@ -203,7 +215,7 @@ def login():
         user_data = get_user_by_username(username)
         
         if user_data and check_password_hash(user_data['password'], password):
-            user = User(user_data['id'], user_data['username'], user_data['password'])
+            user = User(user_data['id'], user_data['username'], user_data['password'], user_data['role'])
             login_user(user)
             flash('Logged in successfully.', 'success')
             return redirect(url_for('dashboard'))
@@ -211,6 +223,67 @@ def login():
             flash('Invalid username or password.', 'error')
             
     return render_template('login.html')
+
+@app.route('/register', methods=['GET', 'POST'])
+def register():
+    """User registration page - only accessible to admins for creating other admin accounts"""
+    if request.method == 'POST':
+        username = request.form.get('username')
+        password = request.form.get('password')
+        confirm_password = request.form.get('confirm_password')
+        role = request.form.get('role', 'admin')
+        
+        # Validation
+        if not username or not password:
+            flash('Username and password are required.', 'error')
+            return render_template('register.html')
+        
+        if password != confirm_password:
+            flash('Passwords do not match.', 'error')
+            return render_template('register.html')
+        
+        if len(password) < 8:
+            flash('Password must be at least 8 characters long.', 'error')
+            return render_template('register.html')
+        
+        # Check if username already exists
+        existing_user = get_user_by_username(username)
+        if existing_user:
+            flash('Username already exists.', 'error')
+            return render_template('register.html')
+        
+        # Create user
+        hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
+        if create_user(username, hashed_pw, role=role):
+            flash(f'Account created successfully for {username}! You can now log in.', 'success')
+            return redirect(url_for('login'))
+        else:
+            flash('Error creating account. Please try again.', 'error')
+    
+    return render_template('register.html')
+
+@app.route('/admin/users')
+@login_required
+@admin_required
+def admin_users():
+    """Admin page to manage users"""
+    users = get_all_users()
+    return render_template('admin_users.html', users=users)
+
+@app.route('/api/delete_user/<int:user_id>', methods=['DELETE'])
+@login_required
+@admin_required
+def delete_user(user_id):
+    """Delete a user account"""
+    try:
+        # Prevent deleting yourself
+        if user_id == current_user.id:
+            return jsonify({'success': False, 'error': 'You cannot delete your own account'})
+        
+        db_delete_user(user_id)
+        return jsonify({'success': True, 'message': 'User deleted successfully'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/logout')
 @login_required
@@ -232,19 +305,59 @@ def create_sub_account():
 
     hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
     
-    # Create user with 'viewer' role linked to the face_id
-    if create_user(username, hashed_pw, role='viewer', face_id=face_id):
-        return jsonify({'success': True, 'message': f'Sub-account created for {username}'})
-    else:
+    # Create user with 'viewer' role linked to the face_id AND CURRENT USER as owner
+    from utils.database import get_db_connection
+    conn = get_db_connection()
+    face = conn.execute('SELECT * FROM faces WHERE id = ? AND user_id = ?', (face_id, current_user.id)).fetchone()
+    
+    if not face:
+        conn.close()
+        return jsonify({'success': False, 'error': 'Face not found or does not belong to you'})
+    
+    # Check if username already exists
+    existing_user = get_user_by_username(username)
+    if existing_user:
+        conn.close()
         return jsonify({'success': False, 'error': 'Username already exists'})
+    
+    # Create the sub-account with owner_id set to current user
+    conn.execute(
+        'INSERT INTO users (username, password, role, face_id, owner_id) VALUES (?, ?, ?, ?, ?)', 
+        (username, hashed_pw, 'viewer', face_id, current_user.id)
+    )
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'message': f'Sub-account created for {username}'})
     
 @app.route('/api/delete_sub_account/<int:user_id>', methods=['DELETE'])
 @login_required
 @admin_required
 def delete_sub_account(user_id):
-    from utils.database import delete_user
+    from utils.database import get_db_connection
     try:
-        delete_user(user_id)
+        conn = get_db_connection()
+        # Verify the sub-account belongs to the current user
+        sub_account = conn.execute('''
+            SELECT u.*, f.user_id as face_owner_id 
+            FROM users u 
+            LEFT JOIN faces f ON u.face_id = f.id 
+            WHERE u.id = ? AND (f.user_id = ? OR u.face_id IS NULL)
+        ''', (user_id, current_user.id)).fetchone()
+        
+        if not sub_account:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Sub-account not found or does not belong to you'})
+        
+        # Prevent deleting yourself
+        if user_id == current_user.id:
+            conn.close()
+            return jsonify({'success': False, 'error': 'You cannot delete your own account'})
+        
+        conn.execute('DELETE FROM users WHERE id = ?', (user_id,))
+        conn.commit()
+        conn.close()
+        
         return jsonify({'success': True, 'message': 'Account deleted successfully'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
@@ -253,7 +366,7 @@ def delete_sub_account(user_id):
 @login_required
 @admin_required
 def update_sub_account():
-    from utils.database import update_user_credentials
+    from utils.database import get_db_connection
     
     user_id = request.form.get('user_id')
     username = request.form.get('username')
@@ -263,23 +376,62 @@ def update_sub_account():
         return jsonify({'success': False, 'error': 'Username is required'})
         
     try:
+        conn = get_db_connection()
+        
+        # Verify the sub-account belongs to the current user
+        sub_account = conn.execute('''
+            SELECT u.*, f.user_id as face_owner_id 
+            FROM users u 
+            LEFT JOIN faces f ON u.face_id = f.id 
+            WHERE u.id = ? AND (f.user_id = ? OR u.face_id IS NULL)
+        ''', (user_id, current_user.id)).fetchone()
+        
+        if not sub_account:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Sub-account not found or does not belong to you'})
+        
+        # Check if new username already exists (excluding current user)
+        existing_user = conn.execute(
+            'SELECT id FROM users WHERE username = ? AND id != ?',
+            (username, user_id)
+        ).fetchone()
+        
+        if existing_user:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Username already exists'})
+        
         hashed_pw = None
         if password and password.strip():
             hashed_pw = generate_password_hash(password, method='pbkdf2:sha256')
-            
-        update_user_credentials(user_id, username, hashed_pw)
+        
+        if hashed_pw:
+            conn.execute(
+                'UPDATE users SET username = ?, password = ? WHERE id = ?',
+                (username, hashed_pw, user_id)
+            )
+        else:
+            conn.execute(
+                'UPDATE users SET username = ? WHERE id = ?',
+                (username, user_id)
+            )
+        
+        conn.commit()
+        conn.close()
+        
         return jsonify({'success': True, 'message': 'Account updated successfully'})
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/twilio_settings', methods=['GET', 'POST'])
+@login_required
+@admin_required
 def twilio_settings():
-    """Get or update Twilio settings with proper auth token handling"""
+    """Get or update Twilio settings for current user"""
     try:
         from utils.twilio_alert_system import twilio_alert_system
         
         if request.method == 'GET':
-            settings = twilio_alert_system.get_settings()
+            settings = twilio_alert_system.get_settings(current_user.id)
             return jsonify({'success': True, 'settings': settings})
         
         elif request.method == 'POST':
@@ -294,7 +446,7 @@ def twilio_settings():
             if not settings['account_sid'] or not settings['twilio_number']:
                 return jsonify({'success': False, 'error': 'Account SID and Twilio Number are required'})
             
-            success = twilio_alert_system.save_settings(settings)
+            success = twilio_alert_system.save_settings(current_user.id, settings)
             if success:
                 return jsonify({'success': True, 'message': 'Settings updated successfully'})
             else:
@@ -304,6 +456,7 @@ def twilio_settings():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/motion_tracking_status')
+@login_required
 def get_motion_tracking_status():
     """Get motion-gated tracking status"""
     try:
@@ -314,6 +467,7 @@ def get_motion_tracking_status():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/reset_motion_tracking', methods=['POST'])
+@login_required
 def reset_motion_tracking():
     """Reset motion-gated tracking - safe version that handles both old and new code"""
     try:
@@ -346,6 +500,7 @@ def reset_motion_tracking():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update_motion_timeout', methods=['POST'])
+@login_required
 def update_motion_timeout():
     """Update motion timeout setting"""
     try:
@@ -357,6 +512,7 @@ def update_motion_timeout():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/cleanup_old_trackers', methods=['POST'])
+@login_required
 def cleanup_old_trackers():
     """Clean up old trackers manually - safe version"""
     try:
@@ -397,6 +553,7 @@ def cleanup_old_trackers():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/update_authorized_cooldown', methods=['POST'])
+@login_required
 def update_authorized_cooldown():
     """Update authorized cooldown setting"""
     try:
@@ -407,22 +564,21 @@ def update_authorized_cooldown():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
-
-
 @app.route('/api/get_detection_logs_simple')
+@login_required  # ADD THIS DECORATOR
 def get_detection_logs_simple():
-    """Simple version - just filter by detection_type and person_name patterns"""
+    """Simple version - just filter by detection_type and person_name patterns - NOW USER-SPECIFIC"""
     try:
         from utils.database import get_db_connection
         conn = get_db_connection()
         
-        print("🔍 DEBUG: Simple version - fetching logs...")
+        print(f"🔍 DEBUG: Fetching logs for user_id: {current_user.id}")
         
-        # Direct query for specific patterns
-        # EXCLUDE entries with "Unauthorized (distance)" pattern
+        # UPDATED QUERY: Added WHERE user_id = ? clause
         query = '''
             SELECT * FROM detections 
-            WHERE (detection_type IN ('face_detection', 'unauthorized_face'))
+            WHERE user_id = ?  -- ADD THIS FILTER
+            AND (detection_type IN ('face_detection', 'unauthorized_face'))
             AND (
                 person_name LIKE '%Authorized%' OR
                 person_name LIKE '%Known%' OR
@@ -436,8 +592,8 @@ def get_detection_logs_simple():
             LIMIT 200
         '''
         
-        detections = conn.execute(query).fetchall()
-        print(f"📊 Found {len(detections)} matching detections (excluding distance entries)")
+        detections = conn.execute(query, (current_user.id,)).fetchall()  # ADD PARAMETER
+        print(f"📊 Found {len(detections)} matching detections for user {current_user.id}")
         
         logs_list = []
         # Dictionary to track last seen timestamp for each person_name
@@ -502,7 +658,7 @@ def get_detection_logs_simple():
         
         conn.close()
         
-        print(f"📊 Returning {len(logs_list)} unique logs (distance entries filtered + time deduplication)")
+        print(f"📊 Returning {len(logs_list)} unique logs for user {current_user.id}")
         
         return jsonify({'success': True, 'logs': logs_list})
         
@@ -513,6 +669,7 @@ def get_detection_logs_simple():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/debug_tracking')
+@login_required
 def debug_tracking():
     """Debug endpoint to see tracking details"""
     try:
@@ -546,6 +703,7 @@ def debug_tracking():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/start_event_recording', methods=['POST'])
+@login_required
 def start_event_recording():
     """Start recording for specific event types with cooldown"""
     try:
@@ -574,6 +732,7 @@ def start_event_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_filtered_alerts')
+@login_required
 def get_filtered_alerts():
     """Get alerts filtered by type using efficient database joins - INCLUDES AUTHORIZED AND KNOWN FACES"""
     try:
@@ -587,16 +746,17 @@ def get_filtered_alerts():
             SELECT 
                 d.*,
                 CASE 
-                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM faces) THEN 'authorized'
-                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM known_persons) THEN 'known'
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM faces WHERE user_id = ?) THEN 'authorized'
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM known_persons WHERE user_id = ?) THEN 'known'
                     WHEN d.detection_type = 'face_detection' AND (d.person_name = 'Unauthorized' OR d.person_name LIKE 'Unauthorized (%') THEN 'unauthorized'
                     WHEN d.detection_type = 'motion_detection' AND d.person_name LIKE 'Motion Detected%' THEN 'motion'
                     ELSE 'other'
                 END as category
             FROM detections d 
-            WHERE d.detection_type IN ('face_detection', 'motion_detection')
+            WHERE d.user_id = ?
+            AND d.detection_type IN ('face_detection', 'motion_detection')
         '''
-        params = []
+        params = [current_user.id, current_user.id, current_user.id]
         
         # Apply filters - FIXED: Properly filter each category
         if filter_type == 'authorized':
@@ -720,6 +880,7 @@ def find_recording_by_detection(detection):
         return None
     
 @app.route('/api/get_authorized_events')
+@login_required
 def get_authorized_events():
     """Get only authorized face detection events with recordings"""
     try:
@@ -732,11 +893,12 @@ def get_authorized_events():
         authorized_detections = conn.execute('''
             SELECT d.* 
             FROM detections d 
-            WHERE d.detection_type = 'face_detection' 
-            AND d.person_name IN (SELECT name FROM faces)
+            WHERE d.user_id = ?
+            AND d.detection_type = 'face_detection' 
+            AND d.person_name IN (SELECT name FROM faces WHERE user_id = ?)
             ORDER BY d.timestamp DESC 
             LIMIT 50
-        ''').fetchall()
+        ''', (current_user.id, current_user.id)).fetchall()
         
         print(f"🔍 DEBUG: Found {len(authorized_detections)} authorized detections")
         
@@ -828,6 +990,7 @@ def find_recording_for_known_event(detection):
         return None
     
 @app.route('/api/get_all_alert_events')
+@login_required
 def get_all_alert_events():
     """Get ALL alert events including authorized and known"""
     try:
@@ -837,9 +1000,10 @@ def get_all_alert_events():
         # Get all events from alert_events table
         events = conn.execute('''
             SELECT * FROM alert_events 
+            WHERE user_id = ?
             ORDER BY timestamp DESC 
             LIMIT 100
-        ''').fetchall()
+        ''', (current_user.id,)).fetchall()
         
         events_list = []
         for event in events:
@@ -860,8 +1024,9 @@ def get_all_alert_events():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_alert_events_by_type')
+@login_required
 def get_alert_events_by_type():
-    """Get alert events filtered by type - INCLUDES ALL FACE TYPES"""
+    """Get alert events filtered by type - PER USER"""
     try:
         event_type = request.args.get('type', 'all')
         from utils.database import get_db_connection
@@ -870,9 +1035,10 @@ def get_alert_events_by_type():
         if event_type == 'all':
             events = conn.execute('''
                 SELECT * FROM alert_events 
+                WHERE user_id = ?
                 ORDER BY timestamp DESC 
                 LIMIT 100
-            ''').fetchall()
+            ''', (current_user.id,)).fetchall()
         else:
             # Map filter types to event types in database
             event_type_map = {
@@ -885,18 +1051,21 @@ def get_alert_events_by_type():
             db_event_type = event_type_map.get(event_type, event_type)
             events = conn.execute('''
                 SELECT * FROM alert_events 
-                WHERE trigger_type = ?
+                WHERE user_id = ? AND trigger_type = ?
                 ORDER BY timestamp DESC 
                 LIMIT 100
-            ''', (db_event_type,)).fetchall()
+            ''', (current_user.id, db_event_type)).fetchall()
         
         events_list = []
         for event in events:
+            # NORMALIZE the recording filepath
+            recording_filepath = normalize_path(event['recording_filepath'])
+            
             event_data = {
                 'event_id': event['event_id'],
                 'trigger_type': event['trigger_type'],
                 'timestamp': event['timestamp'],
-                'recording_filepath': event['recording_filepath'],
+                'recording_filepath': recording_filepath,  # Use normalized path
                 'review_status': event['review_status'],
                 'call_status': event['call_status'],
                 'person_name': event.get('person_name', 'Unknown'),
@@ -914,6 +1083,7 @@ def get_alert_events_by_type():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_known_events')
+@login_required
 def get_known_events():
     """Get only known person detection events with recordings"""
     try:
@@ -926,11 +1096,12 @@ def get_known_events():
         known_detections = conn.execute('''
             SELECT d.* 
             FROM detections d 
-            WHERE d.detection_type = 'face_detection' 
-            AND d.person_name IN (SELECT name FROM known_persons)
+            WHERE d.user_id = ?
+            AND d.detection_type = 'face_detection' 
+            AND d.person_name IN (SELECT name FROM known_persons WHERE user_id = ?)
             ORDER BY d.timestamp DESC 
             LIMIT 50
-        ''').fetchall()
+        ''', (current_user.id, current_user.id)).fetchall()
         
         print(f"🔍 DEBUG: Found {len(known_detections)} known detections")
         
@@ -962,8 +1133,9 @@ def get_known_events():
         return jsonify({'success': False, 'error': str(e)})  
     
 @app.route('/api/phone_numbers', methods=['GET', 'POST', 'PUT', 'DELETE'])
+@login_required
 def manage_phone_numbers():
-    """Manage phone numbers for alerts"""
+    """Manage phone numbers for current user's alerts"""
     try:
         from utils.database import (
             get_all_phone_numbers, add_phone_number, update_phone_number_order,
@@ -972,7 +1144,7 @@ def manage_phone_numbers():
         from utils.twilio_alert_system import twilio_alert_system
         
         if request.method == 'GET':
-            numbers = get_all_phone_numbers()
+            numbers = get_all_phone_numbers(current_user.id)
             numbers_list = []
             for number in numbers:
                 numbers_list.append({
@@ -992,20 +1164,20 @@ def manage_phone_numbers():
             if not phone_number:
                 return jsonify({'success': False, 'error': 'Phone number required'})
             
-            add_phone_number(phone_number, display_name)
+            add_phone_number(current_user.id, phone_number, display_name)
             
             # Reload numbers in alert system
-            twilio_alert_system.load_phone_numbers()
+            twilio_alert_system.load_phone_numbers(current_user.id)
             
             return jsonify({'success': True, 'message': 'Phone number added'})
         
         elif request.method == 'PUT':
             if request.form.get('action') == 'reorder':
                 phone_numbers = request.json.get('phone_numbers', [])
-                update_phone_number_order(phone_numbers)
+                update_phone_number_order(current_user.id, phone_numbers)
                 
                 # Reload numbers in alert system
-                twilio_alert_system.load_phone_numbers()
+                twilio_alert_system.load_phone_numbers(current_user.id)
                 
                 return jsonify({'success': True, 'message': 'Phone numbers reordered'})
             
@@ -1013,10 +1185,10 @@ def manage_phone_numbers():
                 phone_id = request.form.get('phone_id')
                 is_active = request.form.get('is_active') == 'true'
                 
-                toggle_phone_number_active(phone_id, is_active)
+                toggle_phone_number_active(current_user.id, phone_id, is_active)
                 
                 # Reload numbers in alert system
-                twilio_alert_system.load_phone_numbers()
+                twilio_alert_system.load_phone_numbers(current_user.id)
                 
                 return jsonify({'success': True, 'message': 'Phone number status updated'})
             
@@ -1025,10 +1197,10 @@ def manage_phone_numbers():
                 phone_number = request.form.get('phone_number')
                 display_name = request.form.get('display_name')
                 
-                update_phone_number(phone_id, phone_number, display_name)
+                update_phone_number(current_user.id, phone_id, phone_number, display_name)
                 
                 # Reload numbers in alert system
-                twilio_alert_system.load_phone_numbers()
+                twilio_alert_system.load_phone_numbers(current_user.id)
                 
                 return jsonify({'success': True, 'message': 'Phone number updated'})
         
@@ -1038,17 +1210,18 @@ def manage_phone_numbers():
             if not phone_id:
                 return jsonify({'success': False, 'error': 'Phone ID required'})
             
-            delete_phone_number(phone_id)
+            delete_phone_number(current_user.id, phone_id)
             
             # Reload numbers in alert system
-            twilio_alert_system.load_phone_numbers()
+            twilio_alert_system.load_phone_numbers(current_user.id)
             
             return jsonify({'success': True, 'message': 'Phone number deleted'})
     
     except Exception as e:
-        return jsonify({'success': False, 'error': str(e)})  
+        return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_recording_for_alert/<int:alert_id>')
+@login_required
 def get_recording_for_alert(alert_id):
     """Get recording file for a specific alert"""
     try:
@@ -1058,8 +1231,8 @@ def get_recording_for_alert(alert_id):
         recording = conn.execute('''
             SELECT r.file_path FROM recordings r 
             JOIN detections d ON r.detection_id = d.id 
-            WHERE d.id = ?
-        ''', (alert_id,)).fetchone()
+            WHERE d.id = ? AND d.user_id = ?
+        ''', (alert_id, current_user.id)).fetchone()
         
         conn.close()
         
@@ -1076,6 +1249,7 @@ def get_recording_for_alert(alert_id):
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/debug_recordings')
+@login_required
 def debug_recordings():
     """Debug endpoint to check recording files"""
     try:
@@ -1105,20 +1279,28 @@ def debug_recordings():
         return jsonify({'success': False, 'error': str(e)})
 
 
-@app.route('/api/alert_events')
+@app.route('/api/get_alert_events')
+@login_required
 def get_alert_events():
-    """Get alert event history"""
+    """Get alert event history for current user"""
     try:
         from utils.twilio_alert_system import twilio_alert_system
         
         limit = int(request.args.get('limit', 50))
-        events = twilio_alert_system.get_event_history(limit)
+        events = twilio_alert_system.get_event_history(current_user.id, limit)
         return jsonify({'success': True, 'events': events})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
+
+@app.route('/api/alert_events')
+@login_required
+def alert_events():
+    """Alias for /api/get_alert_events to fix 404 error"""
+    return get_alert_events()
     
 @app.route('/api/debug_face_tracking_detailed')
+@login_required
 def debug_face_tracking_detailed():
     """Detailed debug endpoint for face tracking"""
     try:
@@ -1154,6 +1336,7 @@ def debug_face_tracking_detailed():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/reset_answered_calls', methods=['POST'])
+@login_required
 def reset_answered_calls():
     """Reset answered calls tracking"""
     try:
@@ -1170,6 +1353,7 @@ def reset_answered_calls():
     
     
 @app.route('/api/face_tracking_stats')
+@login_required
 def get_face_tracking_stats():
     """Get face tracking statistics"""
     try:
@@ -1185,6 +1369,7 @@ def get_face_tracking_stats():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/cleanup_face_tracking', methods=['POST'])
+@login_required
 def cleanup_face_tracking():
     """Clean up old face tracking entries"""
     try:
@@ -1196,6 +1381,7 @@ def cleanup_face_tracking():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/convert_recording', methods=['POST'])
+@login_required
 def convert_recording():
     """Convert a recording to compatible format"""
     try:
@@ -1217,6 +1403,7 @@ def convert_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/recording_info/<filename>')
+@login_required
 def get_recording_info(filename):
     """Get detailed information about a recording"""
     try:
@@ -1231,6 +1418,7 @@ def get_recording_info(filename):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/reset_face_tracking', methods=['POST'])
+@login_required
 def reset_face_tracking():
     """Reset all face tracking (clear memory)"""
     try:
@@ -1246,6 +1434,7 @@ def reset_face_tracking():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/debug_face_tracking')
+@login_required
 def debug_face_tracking():
     """Debug endpoint to see current face tracking state"""
     try:
@@ -1279,7 +1468,34 @@ def debug_face_tracking():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
     
+def normalize_path(path):
+    """Normalize file path for web access (convert Windows to Unix)"""
+    if not path:
+        return None
+    
+    # Convert to string if it's not already
+    path_str = str(path)
+    
+    # Replace Windows backslashes with forward slashes
+    path_str = path_str.replace('\\', '/')
+    
+    # Ensure it starts with 'static/recordings/'
+    if not path_str.startswith('static/recordings/'):
+        # Extract filename
+        if '/' in path_str:
+            filename = path_str.split('/')[-1]
+        elif '\\' in path_str:
+            filename = path_str.split('\\')[-1]
+        else:
+            filename = path_str
+        
+        # Rebuild with proper prefix
+        path_str = f"static/recordings/{filename}"
+    
+    return path_str
+    
 @app.route('/api/fix_recording_url/<filename>')
+@login_required
 def fix_recording_url(filename):
     """Fix recording URL encoding issues"""
     try:
@@ -1302,6 +1518,7 @@ def fix_recording_url(filename):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/list_recordings')
+@login_required
 def list_recordings():
     """List all recordings with proper URLs"""
     try:
@@ -1325,6 +1542,7 @@ def list_recordings():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/diagnose_codecs')
+@login_required
 def diagnose_codecs():
     """Diagnose available codecs on the system"""
     try:
@@ -1396,6 +1614,7 @@ def diagnose_codecs():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/test_recording')
+@login_required
 def test_recording():
     """Create a test recording to verify functionality"""
     try:
@@ -1437,11 +1656,12 @@ def test_recording():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/start_image_recording', methods=['POST'])
+@login_required
 def start_image_recording():
     """Record as image sequence instead of video"""
     try:
         event_id = f"images_{int(time.time())}"
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
         folder_name = f"recording_{event_id}_{timestamp}"
         folder_path = os.path.join('static', 'recordings', folder_name)
         
@@ -1458,6 +1678,7 @@ def start_image_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/save_recording_frame', methods=['POST'])
+@login_required
 def save_recording_frame():
     """Save a frame for image sequence recording"""
     try:
@@ -1477,7 +1698,7 @@ def save_recording_frame():
         frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         
         # Save frame
-        timestamp = datetime.now().strftime('%H%M%S_%f')[:-3]
+        timestamp = datetime.datetime.now().strftime('%H%M%S_%f')[:-3]
         filename = f"frame_{timestamp}.jpg"
         filepath = os.path.join(folder_path, filename)
         
@@ -1493,6 +1714,7 @@ def save_recording_frame():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/unauthorized_detections_unique')
+@login_required
 def unauthorized_detections_unique():
     """
     ✅ NEW ENDPOINT: Get unique unauthorized detections (no duplicates)
@@ -1504,10 +1726,11 @@ def unauthorized_detections_unique():
         # Get all recent detections
         all_detections = conn.execute('''
             SELECT * FROM detections 
-            WHERE detection_type IN ('face_detection', 'motion_detection')
+            WHERE user_id = ?
+            AND detection_type IN ('face_detection', 'motion_detection')
             ORDER BY timestamp DESC 
             LIMIT 100
-        ''').fetchall()
+        ''', (current_user.id,)).fetchall()
         
         # Deduplicate by person_name + detection_type
         unique_detections = {}
@@ -1550,23 +1773,25 @@ def unauthorized_detections_unique():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update_review_status', methods=['POST'])
+@login_required
 def update_review_status():
-    """Update event review status"""
+    """Update event review status for current user"""
     try:
         from utils.twilio_alert_system import twilio_alert_system
         
         event_id = request.form.get('event_id')
         status = request.form.get('status')
         
-        success = twilio_alert_system.update_review_status(event_id, status)
+        success = twilio_alert_system.update_review_status(current_user.id, event_id, status)
         return jsonify({'success': success})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/test_twilio_call', methods=['POST'])
+@login_required
 def test_twilio_call():
-    """Test Twilio call functionality"""
+    """Test Twilio call functionality for current user"""
     try:
         from utils.twilio_alert_system import twilio_alert_system
         
@@ -1575,6 +1800,7 @@ def test_twilio_call():
             return jsonify({'success': False, 'error': 'Test number required'})
         
         result = twilio_alert_system.make_voice_call(
+            current_user.id,
             test_number, 
             "This is a test call from your security system. Everything is working correctly."
         )
@@ -1585,6 +1811,7 @@ def test_twilio_call():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/recording_stats')
+@login_required
 def get_recording_stats():
     """Get recording statistics"""
     try:
@@ -1597,6 +1824,7 @@ def get_recording_stats():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/cleanup_recordings', methods=['POST'])
+@login_required
 def cleanup_recordings():
     """Clean up old recordings"""
     try:
@@ -1610,25 +1838,239 @@ def cleanup_recordings():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/twilio_alerts')
+@login_required
 def twilio_alerts():
     """Twilio alerts configuration page"""
     return render_template('alerts.html')
 
 @app.route('/api/verify_recording/<filename>')
+@login_required
 def verify_recording(filename):
-    """Verify if a recording file is playable"""
+    """Verify if a recording file is playable - IMPROVED VERSION"""
     try:
-        from utils.recording_manager import recording_manager
+        # Clean filename
+        clean_filename = filename.strip()
+        print(f"🔍 Verifying recording: {clean_filename}")
         
-        filepath = os.path.join('static', 'recordings', filename)
-        verification = recording_manager.verify_recording_playback(filepath)
+        # Define possible locations
+        recordings_dir = 'static/recordings'
         
-        return jsonify({'success': True, 'verification': verification})
+        # Check if recordings directory exists
+        if not os.path.exists(recordings_dir):
+            return jsonify({'success': False, 'error': f'Recordings directory not found: {recordings_dir}'})
+        
+        # Build candidate paths
+        candidate_paths = [
+            os.path.join(recordings_dir, clean_filename),
+            os.path.join(recordings_dir, clean_filename).replace('/', '\\'),
+            clean_filename,
+            f"static/recordings/{clean_filename}",
+            f"static\\recordings\\{clean_filename}"
+        ]
+        
+        # Also check if filename contains the actual file in recordings directory
+        all_files = []
+        if os.path.exists(recordings_dir):
+            all_files = os.listdir(recordings_dir)
+            print(f"📁 Files in recordings directory: {len(all_files)}")
+        
+        found_path = None
+        for test_path in candidate_paths:
+            if os.path.exists(test_path):
+                found_path = test_path
+                break
+        
+        # If not found by exact path, try partial match
+        if not found_path and all_files:
+            for file in all_files:
+                if clean_filename in file:
+                    found_path = os.path.join(recordings_dir, file)
+                    print(f"✅ Found by partial match: {file}")
+                    break
+        
+        if not found_path:
+            return jsonify({
+                'success': False, 
+                'error': f'File not found: {clean_filename}',
+                'searched_in': recordings_dir,
+                'available_files': all_files[:10]  # Show first 10 files
+            })
+        
+        # Normalize path for web
+        web_path = found_path.replace('\\', '/')
+        if not web_path.startswith('static/'):
+            web_path = f"static/recordings/{os.path.basename(found_path)}"
+        
+        print(f"✅ File found: {found_path}")
+        print(f"🌐 Web path: {web_path}")
+        
+        # Try to open the video file
+        cap = cv2.VideoCapture(found_path)
+        if not cap.isOpened():
+            cap.release()
+            return jsonify({
+                'success': False, 
+                'error': 'Cannot open file (possibly corrupted or wrong format)',
+                'filepath': web_path,
+                'exists': True,
+                'web_url': f"/{web_path}"
+            })
+        
+        # Get video properties
+        fps = cap.get(cv2.CAP_PROP_FPS)
+        frame_count = cap.get(cv2.CAP_PROP_FRAME_COUNT)
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        duration = frame_count / fps if fps > 0 else 0
+        
+        # Read first frame to verify
+        ret, frame = cap.read()
+        can_read = ret
+        
+        cap.release()
+        
+        file_size = os.path.getsize(found_path)
+        
+        result = {
+            'playable': can_read,
+            'file_size_mb': round(file_size / (1024*1024), 2),
+            'duration_seconds': round(duration, 2),
+            'frame_count': int(frame_count),
+            'fps': round(fps, 1),
+            'resolution': f"{width}x{height}",
+            'filepath': web_path,
+            'filename': os.path.basename(found_path),
+            'exists': True,
+            'web_url': f"/{web_path}"
+        }
+        
+        if not can_read:
+            result['error'] = 'File exists but cannot be read as video'
+        
+        return jsonify({'success': True, 'verification': result})
+        
+    except Exception as e:
+        print(f"❌ Error verifying recording: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)})
+    
+@app.route('/api/fix_recording_paths', methods=['POST'])
+@login_required
+def fix_recording_paths():
+    """Fix mismatched recording paths in the database"""
+    try:
+        from utils.database import get_db_connection
+        import os
+        
+        conn = get_db_connection()
+        
+        # Get all events with recording paths
+        events = conn.execute('''
+            SELECT event_id, recording_filepath FROM alert_events 
+            WHERE user_id = ? AND recording_filepath IS NOT NULL
+        ''', (current_user.id,)).fetchall()
+        
+        fixed_count = 0
+        for event in events:
+            event_id = event['event_id']
+            recording_path = event['recording_filepath']
+            
+            if recording_path:
+                # Convert to web path
+                recording_path = recording_path.replace('\\', '/')
+                
+                # Extract filename
+                filename = recording_path.split('/')[-1]
+                
+                # Build correct path
+                correct_path = f"static/recordings/{filename}"
+                
+                # Check if file exists
+                if os.path.exists(correct_path):
+                    # Update database with correct path
+                    conn.execute('''
+                        UPDATE alert_events 
+                        SET recording_filepath = ?
+                        WHERE event_id = ? AND user_id = ?
+                    ''', (correct_path, event_id, current_user.id))
+                    fixed_count += 1
+                    print(f"✅ Fixed path for event {event_id}: {correct_path}")
+                else:
+                    print(f"⚠️ File not found: {correct_path}")
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True, 
+            'message': f'Fixed {fixed_count} recording paths',
+            'fixed_count': fixed_count
+        })
+        
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}) 
+            
+@app.route('/api/debug_all_files')
+@login_required
+def debug_all_files():
+    """Debug endpoint to list all files in recordings directory"""
+    try:
+        recordings_dir = 'static/recordings'
+        
+        if not os.path.exists(recordings_dir):
+            return jsonify({'success': False, 'error': 'Recordings directory not found'})
+        
+        files = []
+        for filename in os.listdir(recordings_dir):
+            if filename.endswith(('.mp4', '.avi')):
+                filepath = os.path.join(recordings_dir, filename)
+                web_path = normalize_path(filepath)
+                
+                files.append({
+                    'filename': filename,
+                    'filepath': filepath,
+                    'web_path': web_path,
+                    'exists': os.path.exists(filepath),
+                    'size': os.path.getsize(filepath),
+                    'size_mb': round(os.path.getsize(filepath) / (1024*1024), 2)
+                })
+        
+        # Get all alert events from database
+        from utils.database import get_db_connection
+        conn = get_db_connection()
+        events = conn.execute('''
+            SELECT event_id, trigger_type, recording_filepath, timestamp 
+            FROM alert_events 
+            WHERE user_id = ?
+            ORDER BY timestamp DESC 
+            LIMIT 50
+        ''', (current_user.id,)).fetchall()
+        
+        event_files = []
+        for event in events:
+            event_files.append({
+                'event_id': event['event_id'],
+                'trigger_type': event['trigger_type'],
+                'recording_filepath': event['recording_filepath'],
+                'normalized_path': normalize_path(event['recording_filepath']),
+                'timestamp': event['timestamp']
+            })
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'files_on_disk': files,
+            'files_in_db': event_files,
+            'recordings_dir': recordings_dir
+        })
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/recognize_faces_with_motion', methods=['POST'])
+@login_required
 def recognize_faces_with_motion():
     """
     Enhanced motion-gated face recognition with Twilio control
@@ -1667,10 +2109,15 @@ def recognize_faces_with_motion():
         face_results = []
         motion_only_result = None
         
-        # Always run face detection
+        # Always run face detection - PASS USER_ID
         from utils.face_recognition_utils import detect_faces_with_motion_gate
         try:
-            face_results = detect_faces_with_motion_gate(frame, motion_detector)
+            # Pass user_id from current_user
+            face_results = detect_faces_with_motion_gate(
+                frame, 
+                motion_detector, 
+                user_id=current_user.id  # ADD THIS
+            )
         except Exception as e:
             print(f"❌ Error in face detection: {e}")
             # Fallback to basic face detection
@@ -1694,12 +2141,15 @@ def recognize_faces_with_motion():
                     
                     # Log detection (Twilio calls handled based on frontend setting)
                     from utils.database import add_detection
+                    
+                    # FIX: Add user_id parameter
                     add_detection(
-                        "motion_detection", 
-                        motion_only_result['person_name'],
-                        float(motion_only_result['confidence']), 
-                        screenshot_path, 
-                        motion_only_result['alert_level']
+                        user_id=current_user.id,  # ADD THIS
+                        detection_type="motion_detection", 
+                        person_name=motion_only_result['person_name'],
+                        confidence=float(motion_only_result['confidence']), 
+                        screenshot_path=screenshot_path, 
+                        alert_level=motion_only_result['alert_level']
                     )
                     
                     status_text = "WITH CALL" if twilio_enabled else "NO CALL (Blocked)"
@@ -1755,6 +2205,7 @@ def recognize_faces_with_motion():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/log_motion_detection', methods=['POST'])
+@login_required
 def log_motion_detection():
     """Direct endpoint to log motion detection for testing"""
     try:
@@ -1787,6 +2238,7 @@ def log_motion_detection():
     
     
 @app.route('/api/get_detection_screenshots/<int:detection_id>')
+@login_required
 def get_detection_screenshots(detection_id):
     """Get all screenshots from a detection event"""
     try:
@@ -1795,8 +2247,8 @@ def get_detection_screenshots(detection_id):
         
         # Get the detection
         detection = conn.execute(
-            'SELECT screenshot_path FROM detections WHERE id = ?', 
-            (detection_id,)
+            'SELECT screenshot_path FROM detections WHERE id = ? AND user_id = ?', 
+            (detection_id, current_user.id)
         ).fetchone()
         
         conn.close()
@@ -1818,6 +2270,7 @@ def get_detection_screenshots(detection_id):
 
 
 @app.route('/api/register_known_person', methods=['POST'])
+@login_required
 def register_known_person():
     """Register a face as a Known Person (from false alarm)"""
     try:
@@ -1848,7 +2301,7 @@ def register_known_person():
                         face_encoding = face_recognition.face_encodings(image, face_locations)[0]
                         
                         # Save to known_persons database
-                        add_known_person(name, face_encoding, clean_path, detection_id)
+                        add_known_person(current_user.id, name, face_encoding, clean_path, detection_id)
                         registered_count += 1
                         print(f"✅ Registered image: {clean_path}")
                     else:
@@ -1886,11 +2339,12 @@ def register_known_person():
 
 
 @app.route('/api/get_known_persons')
+@login_required
 def get_known_persons():
     """Get all registered known persons"""
     try:
         from utils.database import get_all_known_persons
-        known_persons = get_all_known_persons()
+        known_persons = get_all_known_persons(current_user.id)
         
         persons_list = []
         for person in known_persons:
@@ -1914,6 +2368,7 @@ def get_known_persons():
 
 
 @app.route('/api/delete_known_person/<int:person_id>', methods=['DELETE'])
+@login_required
 def delete_known_person(person_id):
     """Delete a known person"""
     try:
@@ -1922,8 +2377,8 @@ def delete_known_person(person_id):
         
         # Get person details first
         person = conn.execute(
-            'SELECT * FROM known_persons WHERE id = ?', 
-            (person_id,)
+            'SELECT * FROM known_persons WHERE id = ? AND user_id = ?', 
+            (person_id, current_user.id)
         ).fetchone()
         
         if person:
@@ -1932,7 +2387,7 @@ def delete_known_person(person_id):
                 os.remove(person['image_path'])
             
             # Delete from database
-            conn.execute('DELETE FROM known_persons WHERE id = ?', (person_id,))
+            conn.execute('DELETE FROM known_persons WHERE id = ? AND user_id = ?', (person_id, current_user.id))
             conn.commit()
             
             # Reload known persons
@@ -1950,6 +2405,7 @@ def delete_known_person(person_id):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/debug_detections')
+@login_required
 def debug_detections():
     """Debug endpoint to see all detections in database"""
     try:
@@ -1958,8 +2414,8 @@ def debug_detections():
         
         # Get ALL detections
         all_detections = conn.execute('''
-            SELECT * FROM detections ORDER BY timestamp DESC LIMIT 10
-        ''').fetchall()
+            SELECT * FROM detections WHERE user_id = ? ORDER BY timestamp DESC LIMIT 10
+        ''', (current_user.id,)).fetchall()
         
         detections_list = []
         for detection in all_detections:
@@ -2003,6 +2459,7 @@ def send_motion_alert_async(motion_info, screenshot_path):
         print(f"Error sending motion-only alert: {e}")
     
 @app.route('/api/motion_detection_status_detailed')
+@login_required
 def motion_detection_status_detailed():
     """Get detailed motion detection status including human motion flag"""
     try:
@@ -2025,6 +2482,7 @@ def motion_detection_status_detailed():
 
 
 @app.route('/api/clear_unauthorized_cache', methods=['POST'])
+@login_required
 def clear_unauthorized_cache():
     """Manually clear the cache of recent unauthorized detections"""
     try:
@@ -2045,6 +2503,7 @@ def clear_unauthorized_cache():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/debug_unauthorized_cache')
+@login_required
 def debug_unauthorized_cache():
     """Debug endpoint to see current unauthorized face cache"""
     try:
@@ -2074,6 +2533,7 @@ def debug_unauthorized_cache():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/register_face', methods=['POST'])
+@login_required
 def register_face():
     """Register a new face from uploaded image or camera"""
     try:
@@ -2101,7 +2561,7 @@ def register_face():
                 
                 # Updated to include relationship
                 from utils.database import add_face
-                add_face(name, face_encoding, filepath, relationship)
+                add_face(current_user.id, name, face_encoding, filepath, relationship)
                 
                 from utils.face_recognition_utils import load_known_faces
                 load_known_faces()
@@ -2114,6 +2574,7 @@ def register_face():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/capture_face', methods=['POST'])
+@login_required
 def capture_face():
     """Capture face from camera for registration"""
     try:
@@ -2144,7 +2605,7 @@ def capture_face():
         
         # Updated to include relationship
         from utils.database import add_face
-        add_face(name, face_encoding, filepath, relationship)
+        add_face(current_user.id, name, face_encoding, filepath, relationship)
         
         from utils.face_recognition_utils import load_known_faces
         load_known_faces()
@@ -2155,11 +2616,12 @@ def capture_face():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_faces')
+@login_required
 def get_faces():
     """Get all registered faces"""
     try:
         from utils.database import get_all_faces
-        faces = get_all_faces()
+        faces = get_all_faces(current_user.id)
         
         faces_list = []
         for face in faces:
@@ -2189,11 +2651,12 @@ def get_faces():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_face/<int:face_id>', methods=['DELETE'])
+@login_required
 def delete_face(face_id):
     """Delete a registered face"""
     try:
         from utils.database import delete_face
-        delete_face(face_id)
+        delete_face(current_user.id, face_id)
         
         # Reload known faces
         from utils.face_recognition_utils import load_known_faces
@@ -2205,6 +2668,7 @@ def delete_face(face_id):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/bulk_delete_faces', methods=['POST'])
+@login_required
 def bulk_delete_faces():
     """Delete multiple faces at once"""
     try:
@@ -2217,7 +2681,7 @@ def bulk_delete_faces():
         
         for face_id in face_ids:
             try:
-                delete_face(face_id)
+                delete_face(current_user.id, face_id)
                 deleted_count += 1
             except Exception as e:
         
@@ -2235,6 +2699,7 @@ def bulk_delete_faces():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update_face', methods=['POST'])
+@login_required
 def update_face():
     """Update face information including relationship"""
     try:
@@ -2250,7 +2715,7 @@ def update_face():
             return jsonify({'success': False, 'error': 'At least one field to update is required'})
         
         from utils.database import update_face_info
-        result = update_face_info(face_id, new_name, new_relationship)
+        result = update_face_info(current_user.id, face_id, new_name, new_relationship)
         
         if result:
             # Reload known faces
@@ -2264,13 +2729,14 @@ def update_face():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/search_faces')
+@login_required
 def search_faces():
     """Search faces by name"""
     try:
         query = request.args.get('query', '').strip()
         
         from utils.database import search_faces_by_name
-        faces = search_faces_by_name(query)
+        faces = search_faces_by_name(current_user.id, query)
         
         faces_list = []
         for face in faces:
@@ -2287,11 +2753,12 @@ def search_faces():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/export_faces')
+@login_required
 def export_faces():
     """Export face data"""
     try:
         from utils.database import get_all_faces
-        faces = get_all_faces()
+        faces = get_all_faces(current_user.id)
         
         export_data = []
         for face in faces:
@@ -2307,11 +2774,12 @@ def export_faces():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/face_statistics')
+@login_required
 def face_statistics():
     """Get face recognition statistics"""
     try:
         from utils.database import get_face_statistics
-        stats = get_face_statistics()
+        stats = get_face_statistics(current_user.id)
         
         return jsonify({'success': True, 'statistics': stats})
         
@@ -2319,6 +2787,7 @@ def face_statistics():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/recognize_faces', methods=['POST'])
+@login_required
 def recognize_faces():
     """Recognize faces in uploaded image"""
     try:
@@ -2351,11 +2820,12 @@ def recognize_faces():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/recent_detections')
+@login_required
 def recent_detections():
     """Get recent face and motion detections"""
     try:
         from utils.database import get_recent_detections
-        detections = get_recent_detections()
+        detections = get_recent_detections(current_user.id)
         
         detections_list = []
         for detection in detections:
@@ -2375,6 +2845,7 @@ def recent_detections():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/save_screenshot', methods=['POST'])
+@login_required
 def save_screenshot():
     """Save screenshot from camera"""
     try:
@@ -2392,6 +2863,7 @@ def save_screenshot():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/start_motion_detection', methods=['POST'])
+@login_required
 def start_motion_detection():
     """Start motion detection on camera feed"""
     try:
@@ -2408,6 +2880,7 @@ def start_motion_detection():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/stop_motion_detection', methods=['POST'])
+@login_required
 def stop_motion_detection():
     """Stop motion detection"""
     try:
@@ -2420,6 +2893,7 @@ def stop_motion_detection():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/detect_motion', methods=['POST'])
+@login_required
 def detect_motion():
     """Detect motion in uploaded frame"""
     try:
@@ -2455,6 +2929,7 @@ def detect_motion():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/train_motion_model', methods=['POST'])
+@login_required
 def train_motion_model():
     """Train motion detection model with collected data"""
     try:
@@ -2470,6 +2945,7 @@ def train_motion_model():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/collect_motion_data', methods=['POST'])
+@login_required
 def collect_motion_data():
     """Collect training data for motion detection"""
     try:
@@ -2500,6 +2976,7 @@ def collect_motion_data():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/motion_stats')
+@login_required
 def motion_stats():
     """Get motion detection statistics"""
     try:
@@ -2515,6 +2992,7 @@ def motion_stats():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/send_alert', methods=['POST'])
+@login_required
 def send_alert():
     """Send alert with specified level"""
     try:
@@ -2533,6 +3011,7 @@ def send_alert():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/test_email_settings', methods=['POST'])
+@login_required
 def test_email_settings():
     """Test email configuration"""
     try:
@@ -2554,8 +3033,9 @@ def test_email_settings():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/update_alert_settings', methods=['POST'])
+@login_required
 def update_alert_settings():
-    """Update alert system settings with enhanced persistence"""
+    """Update alert system settings for current user"""
     try:
         settings = {
             'owner_email': request.form.get('owner_email'),
@@ -2572,10 +3052,10 @@ def update_alert_settings():
         alert_system = AlertSystem()
         
         # Save settings and force reload
-        result = alert_system.update_settings(settings)
+        result = alert_system.update_settings(current_user.id, settings)
         
         # Verify settings were saved by reloading
-        updated_settings = alert_system.get_settings()
+        updated_settings = alert_system.get_settings(current_user.id)
         
         return jsonify({
             'success': True, 
@@ -2587,14 +3067,16 @@ def update_alert_settings():
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
+
 @app.route('/api/get_alert_history')
+@login_required
 def get_alert_history():
-    """Get alert history"""
+    """Get alert history for current user"""
     try:
         limit = int(request.args.get('limit', 50))
         
         from utils.database import get_alert_history
-        alerts = get_alert_history(limit)
+        alerts = get_alert_history(current_user.id, limit)
         
         alerts_list = []
         for alert in alerts:
@@ -2612,34 +3094,37 @@ def get_alert_history():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_alert_settings')
+@login_required
 def get_alert_settings():
-    """Get current alert settings"""
+    """Get current alert settings for current user"""
     try:
         from utils.alert_system import AlertSystem
         alert_system = AlertSystem()
         
-        settings = alert_system.get_settings()
+        settings = alert_system.get_settings(current_user.id)
         return jsonify({'success': True, 'settings': settings})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/trigger_emergency', methods=['POST'])
+@login_required
 def trigger_emergency():
-    """Trigger emergency protocol (Level 3 alert)"""
+    """Trigger emergency protocol (Level 3 alert) for current user"""
     try:
         reason = request.form.get('reason', 'Emergency protocol activated manually')
         
         from utils.alert_system import AlertSystem
         alert_system = AlertSystem()
         
-        result = alert_system.trigger_emergency_protocol(reason)
+        result = alert_system.trigger_emergency_protocol(current_user.id, reason)
         return jsonify({'success': True, 'result': result})
         
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/start_recording', methods=['POST'])
+@login_required
 def start_recording():
     """Start video recording"""
     try:
@@ -2655,6 +3140,7 @@ def start_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/stop_recording', methods=['POST'])
+@login_required
 def stop_recording():
     """Stop video recording"""
     try:
@@ -2670,11 +3156,12 @@ def stop_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_recordings')
+@login_required
 def get_recordings():
     """Get list of all recordings with enhanced metadata"""
     try:
         from utils.database import get_all_recordings
-        recordings = get_all_recordings()
+        recordings = get_all_recordings(current_user.id)
         
         recordings_list = []
         for recording in recordings:
@@ -2701,11 +3188,12 @@ def get_recordings():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_recording/<int:recording_id>', methods=['DELETE'])
+@login_required
 def delete_recording(recording_id):
     """Delete a recording"""
     try:
         from utils.database import delete_recording
-        result = delete_recording(recording_id)
+        result = delete_recording(current_user.id, recording_id)
         
         if result:
             return jsonify({'success': True, 'message': 'Recording deleted successfully'})
@@ -2716,11 +3204,12 @@ def delete_recording(recording_id):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_screenshots')
+@login_required
 def get_screenshots():
     """Get list of all screenshots with enhanced metadata for gallery view"""
     try:
         from utils.database import get_all_screenshots
-        screenshots = get_all_screenshots()
+        screenshots = get_all_screenshots(current_user.id)
         
         screenshots_list = []
         for screenshot in screenshots:
@@ -2746,11 +3235,12 @@ def get_screenshots():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_screenshot/<int:screenshot_id>', methods=['DELETE'])
+@login_required
 def delete_screenshot(screenshot_id):
     """Delete a screenshot"""
     try:
         from utils.database import delete_screenshot
-        result = delete_screenshot(screenshot_id)
+        result = delete_screenshot(current_user.id, screenshot_id)
         
         if result:
             return jsonify({'success': True, 'message': 'Screenshot deleted successfully'})
@@ -2761,6 +3251,7 @@ def delete_screenshot(screenshot_id):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/capture_screenshot', methods=['POST'])
+@login_required
 def capture_screenshot():
     """Capture screenshot from live camera"""
     try:
@@ -2778,6 +3269,7 @@ def capture_screenshot():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/recording_status')
+@login_required
 def recording_status():
     """Get current recording status"""
     try:
@@ -2793,6 +3285,7 @@ def recording_status():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/storage_stats')
+@login_required
 def storage_stats():
     """Get storage statistics"""
     try:
@@ -2808,6 +3301,7 @@ def storage_stats():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/cleanup_old_files', methods=['POST'])
+@login_required
 def cleanup_old_files():
     """Clean up old recordings and screenshots"""
     try:
@@ -2825,6 +3319,7 @@ def cleanup_old_files():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/camera_control', methods=['POST'])
+@login_required
 def camera_control():
     """Control camera pan/tilt movements"""
     try:
@@ -2841,6 +3336,7 @@ def camera_control():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/camera_preset', methods=['POST'])
+@login_required
 def camera_preset():
     """Save or load camera position preset"""
     try:
@@ -2866,6 +3362,7 @@ def camera_preset():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_presets')
+@login_required
 def get_presets():
     """Get all saved camera presets"""
     try:
@@ -2879,6 +3376,7 @@ def get_presets():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_preset/<preset_name>', methods=['DELETE'])
+@login_required
 def delete_preset(preset_name):
     """Delete a camera preset"""
     try:
@@ -2892,6 +3390,7 @@ def delete_preset(preset_name):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/camera_settings', methods=['GET', 'POST'])
+@login_required
 def camera_settings():
     """Get or update camera settings"""
     try:
@@ -2919,6 +3418,7 @@ def camera_settings():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/start_audio_recording', methods=['POST'])
+@login_required
 def start_audio_recording():
     """Start audio recording"""
     try:
@@ -2932,6 +3432,7 @@ def start_audio_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/stop_audio_recording', methods=['POST'])
+@login_required
 def stop_audio_recording():
     """Stop audio recording"""
     try:
@@ -2945,6 +3446,7 @@ def stop_audio_recording():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/play_audio_message', methods=['POST'])
+@login_required
 def play_audio_message():
     """Play pre-recorded audio message through speakers"""
     try:
@@ -2961,6 +3463,7 @@ def play_audio_message():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/start_two_way_audio', methods=['POST'])
+@login_required
 def start_two_way_audio():
     """Start two-way audio communication"""
     try:
@@ -2974,6 +3477,7 @@ def start_two_way_audio():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/stop_two_way_audio', methods=['POST'])
+@login_required
 def stop_two_way_audio():
     """Stop two-way audio communication"""
     try:
@@ -2987,11 +3491,12 @@ def stop_two_way_audio():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_audio_recordings')
+@login_required
 def get_audio_recordings():
     """Get list of audio recordings"""
     try:
         from utils.database import get_audio_recordings
-        recordings = get_audio_recordings()
+        recordings = get_audio_recordings(current_user.id)
         
         recordings_list = []
         for recording in recordings:
@@ -3009,11 +3514,12 @@ def get_audio_recordings():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_audio_recording/<int:recording_id>', methods=['DELETE'])
+@login_required
 def delete_audio_recording(recording_id):
     """Delete an audio recording"""
     try:
         from utils.database import delete_audio_recording
-        result = delete_audio_recording(recording_id)
+        result = delete_audio_recording(current_user.id, recording_id)
         
         if result:
             return jsonify({'success': True, 'message': 'Audio recording deleted successfully'})
@@ -3024,6 +3530,7 @@ def delete_audio_recording(recording_id):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/audio_status')
+@login_required
 def audio_status():
     """Get current audio system status"""
     try:
@@ -3037,6 +3544,7 @@ def audio_status():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/capture_multiple_faces', methods=['POST'])
+@login_required
 def capture_multiple_faces():
     """Capture multiple faces for better training"""
     try:
@@ -3072,7 +3580,7 @@ def capture_multiple_faces():
         
         # Save to database
         from utils.database import add_face
-        add_face(name, face_encoding, filepath)
+        add_face(current_user.id, name, face_encoding, filepath)
         
         # Reload known faces
         from utils.face_recognition_utils import load_known_faces
@@ -3089,6 +3597,7 @@ def capture_multiple_faces():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/finalize_face_registration', methods=['POST'])
+@login_required
 def finalize_face_registration():
     """Finalize face registration and retrain model"""
     try:
@@ -3102,13 +3611,14 @@ def finalize_face_registration():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/dashboard_feed')
+@login_required
 def dashboard_feed():
     """Get unified dashboard feed with face and motion detection"""
     try:
         from utils.database import get_recent_detections
         
         # Get more detections to filter through
-        detections = get_recent_detections(50)
+        detections = get_recent_detections(current_user.id, 50)
         
         # DEBUG: Print all detections to see what we're working with
         for i, detection in enumerate(detections):
@@ -3159,6 +3669,7 @@ def dashboard_feed():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/dashboard_action', methods=['POST'])
+@login_required
 def dashboard_action():
     """Handle dashboard quick actions"""
     try:
@@ -3205,6 +3716,7 @@ def dashboard_action():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/unauthorized_detections')
+@login_required
 def unauthorized_detections():
     """Get all security-related detections - INCLUDES AUTHORIZED AND KNOWN FACES"""
     try:
@@ -3216,17 +3728,18 @@ def unauthorized_detections():
             SELECT 
                 d.*,
                 CASE 
-                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM faces) THEN 'authorized'
-                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM known_persons) THEN 'known'
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM faces WHERE user_id = ?) THEN 'authorized'
+                    WHEN d.detection_type = 'face_detection' AND d.person_name IN (SELECT name FROM known_persons WHERE user_id = ?) THEN 'known'
                     WHEN d.detection_type = 'face_detection' AND (d.person_name = 'Unauthorized' OR d.person_name LIKE 'Unauthorized (%') THEN 'unauthorized'
                     WHEN d.detection_type = 'motion_detection' THEN 'motion'
                     ELSE 'other'
                 END as category
             FROM detections d 
-            WHERE d.detection_type IN ('face_detection', 'motion_detection')
+            WHERE d.user_id = ?
+            AND d.detection_type IN ('face_detection', 'motion_detection')
             ORDER BY d.timestamp DESC 
             LIMIT 50
-        ''').fetchall()
+        ''', (current_user.id, current_user.id, current_user.id)).fetchall()
         
         detections_list = []
         for detection in all_detections:
@@ -3274,6 +3787,7 @@ def save_screenshot(frame, filename_prefix):
         return None
 
 @app.route('/api/register_face_multiple', methods=['POST'])
+@login_required
 def register_face_multiple():
     """Register multiple face images for better recognition"""
     try:
@@ -3304,6 +3818,7 @@ def register_face_multiple():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_face_image/<int:face_id>/<int:image_index>', methods=['DELETE'])
+@login_required
 def delete_face_image_api(face_id, image_index):
     """Delete a specific image from face registration"""
     try:
@@ -3319,13 +3834,14 @@ def delete_face_image_api(face_id, image_index):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_face_album')
+@login_required
 def get_face_album():
     """Get face album with privacy protection"""
     try:
         from utils.database import get_faces_grouped_by_name
         from utils.face_recognition_utils import create_privacy_thumbnail
         
-        faces = get_faces_grouped_by_name()
+        faces = get_faces_grouped_by_name(current_user.id)
         
         # Create privacy thumbnails for album view
         for face in faces:
@@ -3339,13 +3855,14 @@ def get_face_album():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_face_images/<name>')
+@login_required
 def get_face_images_api(name):
     """Get all images for a specific person (for modal view)"""
     try:
         from utils.database import get_all_faces
         
         # Get all faces for this person
-        all_faces = get_all_faces()
+        all_faces = get_all_faces(current_user.id)
         person_faces = [face for face in all_faces if face['name'] == name]
         
         face_images = []
@@ -3362,6 +3879,7 @@ def get_face_images_api(name):
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/playback_search')
+@login_required
 def playback_search():
     """Search recordings and screenshots by date range and type"""
     try:
@@ -3371,7 +3889,7 @@ def playback_search():
         detection_type = request.args.get('detection_type')  # 'face_detection', 'motion_detection', etc.
         
         from utils.database import search_media_by_criteria
-        results = search_media_by_criteria(start_date, end_date, media_type, detection_type)
+        results = search_media_by_criteria(current_user.id, start_date, end_date, media_type, detection_type)
         
         return jsonify({'success': True, 'results': results})
         
@@ -3379,13 +3897,14 @@ def playback_search():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/playback_timeline')
+@login_required
 def playback_timeline():
     """Get timeline data for recordings and events"""
     try:
         date = request.args.get('date', datetime.datetime.now().strftime('%Y-%m-%d'))
         
         from utils.database import get_timeline_data
-        timeline_data = get_timeline_data(date)
+        timeline_data = get_timeline_data(current_user.id, date)
         
         return jsonify({'success': True, 'timeline': timeline_data})
         
@@ -3393,6 +3912,7 @@ def playback_timeline():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/create_video_clip', methods=['POST'])
+@login_required
 def create_video_clip():
     """Create a video clip from a recording with start and end times"""
     try:
@@ -3411,6 +3931,7 @@ def create_video_clip():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/export_media', methods=['POST'])
+@login_required
 def export_media():
     """Export selected recordings and screenshots"""
     try:
@@ -3428,11 +3949,12 @@ def export_media():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/playback_stats')
+@login_required
 def playback_stats():
     """Get comprehensive playback and storage statistics"""
     try:
         from utils.database import get_playback_statistics
-        stats = get_playback_statistics()
+        stats = get_playback_statistics(current_user.id)
         
         return jsonify({'success': True, 'stats': stats})
         
@@ -3440,6 +3962,7 @@ def playback_stats():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/motion_detection_status')
+@login_required
 def motion_detection_status():
     """Get current motion detection status"""
     try:
@@ -3455,6 +3978,7 @@ def motion_detection_status():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/clear_training_data', methods=['POST'])
+@login_required
 def clear_training_data():
     """Clear motion detection training data"""
     try:
@@ -3472,6 +3996,7 @@ def clear_training_data():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/upload_training_images', methods=['POST'])
+@login_required
 def upload_training_images():
     """Upload training images for motion detection"""
     try:
@@ -3507,6 +4032,7 @@ def upload_training_images():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_training_images')
+@login_required
 def get_training_images():
     """Get all training images"""
     try:
@@ -3524,6 +4050,7 @@ def get_training_images():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/delete_training_image', methods=['DELETE'])
+@login_required
 def delete_training_image():
     """Delete a training image"""
     try:
@@ -3545,6 +4072,7 @@ def delete_training_image():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/bulk_upload_training', methods=['POST'])
+@login_required
 def bulk_upload_training():
     """Bulk upload training images from a folder or multiple files"""
     try:
@@ -3587,6 +4115,7 @@ def bulk_upload_training():
         return jsonify({'success': False, 'error': str(e)})
     
 @app.route('/api/calibrate_distance', methods=['POST'])
+@login_required
 def calibrate_distance():
     """Calibrate distance estimation for your camera"""
     try:
@@ -3611,6 +4140,7 @@ def calibrate_distance():
 
 
 @app.route('/api/update_distance_settings', methods=['POST'])
+@login_required
 def update_distance_settings():
     """Update distance detection settings"""
     try:
@@ -3642,6 +4172,7 @@ def update_distance_settings():
 
 
 @app.route('/api/get_distance_settings')
+@login_required
 def get_distance_settings():
     """Get current distance estimation settings"""
     try:
@@ -3663,6 +4194,7 @@ def get_distance_settings():
 
 
 @app.route('/api/estimate_distance', methods=['POST'])
+@login_required
 def estimate_distance():
     """Estimate distance for a test image"""
     try:
@@ -3810,4 +4342,3 @@ def generate_video_thumbnail(video_path):
         return None
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-    

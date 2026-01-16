@@ -52,7 +52,7 @@ class RecordingManager:
                 self.stop_recording()
                 time.sleep(1.0)  # Brief pause between recordings
             
-            # Generate proper filename matching unauthorized pattern
+            # Generate filename using the EXACT event_id to ensure consistency
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M%S')
             
             # Use consistent naming pattern for all event types
@@ -65,13 +65,11 @@ class RecordingManager:
             else:
                 clean_type = event_type.replace(' ', '_').title()
             
-            # Use UUID for uniqueness like unauthorized faces do
-            import uuid
-            unique_id = str(uuid.uuid4())
-            filename = f"recording_{clean_type}_{timestamp}_{unique_id}.mp4"
+            # CRITICAL FIX: Use the event_id for filename to match database
+            filename = f"recording_{clean_type}_{event_id.replace('-', '_')}.mp4"
             filepath = os.path.join('static', 'recordings', filename)
             
-            # Try different codecs (your existing codec selection logic)
+            # Try different codecs
             fourcc = None
             codecs_to_try = [
                 ('avc1', '.mp4'),  # H.264
@@ -91,6 +89,7 @@ class RecordingManager:
                     filepath = test_path
                     fourcc = codec
                     print(f"✅ Using codec: {codec}")
+                    print(f"📁 Recording filepath: {filepath}")
                     break
                 else:
                     test_writer.release()
@@ -125,6 +124,7 @@ class RecordingManager:
             self.frame_processing_thread.start()
             
             print(f"🎥 Started recording for {event_type}: {filename}")
+            print(f"🎯 Event ID: {event_id}")
             
             # Start background thread to stop recording after duration
             self.recording_thread = threading.Thread(
@@ -136,11 +136,13 @@ class RecordingManager:
             
             # Return the web-accessible path (consistent format)
             web_path = f"static/recordings/{os.path.basename(filepath)}"
-            print(f"📁 Recording path: {web_path}")
+            print(f"📁 Final web path: {web_path}")
             return web_path
             
         except Exception as e:
             print(f"❌ Error starting recording: {e}")
+            import traceback
+            traceback.print_exc()
             return None
 
     def add_frame(self, frame):

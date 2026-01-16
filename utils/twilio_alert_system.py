@@ -25,16 +25,15 @@ class TwilioAlertSystem:
         self.account_sid = None
         self.auth_token = None
         
-        self.phone_numbers = []
-        self.load_phone_numbers()
-
-        # ✅ FACE TRACKING: Track faces that triggered alerts
-        self.alerted_faces = {}  # {face_hash: {'last_alert_time': timestamp, 'alert_count': count, 'encoding': face_encoding}}
+        # Phone numbers loaded per user
+        self.user_phone_numbers = {}
+        
+        # ✅ FACE TRACKING: Track faces that triggered alerts - PER USER
+        self.user_alerted_faces = {}  # {user_id: {face_hash: data}}
+        self.user_answered_calls = {}  # {user_id: set(face_hashes)}
+        
         self.alert_cooldown = 300  # 5 minutes (300 seconds)
         self.max_alerts_per_face = 3  # Maximum 3 calls per face
-        
-        # ✅ ANSWERED CALLS TRACKING
-        self.answered_calls = set()  # Track which faces have been answered
         
         # ✅ FACE GROUPING: For better face recognition
         self.face_grouping_threshold = 0.7  # 70% similarity to group faces
@@ -43,7 +42,8 @@ class TwilioAlertSystem:
         # ✅ THREAD SAFETY: Lock for concurrent access
         self.lock = Lock()
         
-        self.load_settings()
+        # Don't load settings globally - load per user as needed
+        self.user_settings = {}
         
     def setup_logging(self):
         logging.basicConfig(
@@ -56,8 +56,8 @@ class TwilioAlertSystem:
         )
         self.logger = logging.getLogger(__name__)
         
-    def load_settings(self):
-        """Load Twilio settings from database with proper auth token handling"""
+    def load_settings(self, user_id):
+        """Load Twilio settings for a specific user"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
@@ -65,47 +65,114 @@ class TwilioAlertSystem:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS twilio_settings (
                     id INTEGER PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
                     account_sid TEXT,
                     auth_token TEXT,
                     twilio_number TEXT,
                     test_mode BOOLEAN DEFAULT 1,
-                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(user_id)
                 )
             ''')
             
-            settings = cursor.execute('SELECT * FROM twilio_settings WHERE id = 1').fetchone()
+            settings = cursor.execute('SELECT * FROM twilio_settings WHERE user_id = ?', (user_id,)).fetchone()
             
             if settings:
-                self.account_sid = settings[1]
-                self.auth_token = settings[2]  # Store the full auth token
-                self.twilio_number = settings[3]
-                self.test_mode = bool(settings[4])
+                user_settings = {
+                    'account_sid': settings[2],
+                    'auth_token': settings[3],
+                    'twilio_number': settings[4],
+                    'test_mode': bool(settings[5]),
+                    'user_id': user_id
+                }
+                
+                self.user_settings[user_id] = user_settings
                 
                 # Only initialize Twilio client if we have valid credentials
-                if self.account_sid and self.auth_token and self.twilio_number:
+                if user_settings['account_sid'] and user_settings['auth_token'] and user_settings['twilio_number']:
                     try:
-                        self.client = Client(self.account_sid, self.auth_token)
+                        client = Client(user_settings['account_sid'], user_settings['auth_token'])
                         # Test the client by making a simple API call
-                        self.client.api.accounts(self.account_sid).fetch()
-                        self.logger.info("✅ Twilio client initialized and authenticated")
+                        client.api.accounts(user_settings['account_sid']).fetch()
+                        user_settings['client'] = client
+                        self.logger.info(f"✅ Twilio client initialized for user {user_id}")
                     except Exception as e:
-                        self.logger.error(f"❌ Twilio authentication failed: {e}")
-                        self.client = None
-                        self.test_mode = True  # Fallback to test mode
+                        self.logger.error(f"❌ Twilio authentication failed for user {user_id}: {e}")
+                        user_settings['client'] = None
+                        user_settings['test_mode'] = True
                 else:
-                    self.client = None
-                    self.logger.info("Twilio credentials incomplete - using test mode")
+                    user_settings['client'] = None
+                    user_settings['test_mode'] = True
+                    self.logger.info(f"Twilio credentials incomplete for user {user_id} - using test mode")
             else:
-                self.test_mode = True
-                self.logger.info("No settings found - using test mode")
+                # Create default settings for this user
+                user_settings = {
+                    'account_sid': None,
+                    'auth_token': None,
+                    'twilio_number': None,
+                    'test_mode': True,
+                    'client': None,
+                    'user_id': user_id
+                }
+                self.user_settings[user_id] = user_settings
+                self.logger.info(f"No settings found for user {user_id} - using test mode")
             
             conn.close()
+            return user_settings
             
         except Exception as e:
-            self.logger.error(f"Error loading settings: {e}")
-            self.test_mode = True
-            self.client = None
+            self.logger.error(f"Error loading settings for user {user_id}: {e}")
+            user_settings = {
+                'account_sid': None,
+                'auth_token': None,
+                'twilio_number': None,
+                'test_mode': True,
+                'client': None,
+                'user_id': user_id
+            }
+            self.user_settings[user_id] = user_settings
+            return user_settings
     
+    def _get_user_settings(self, user_id):
+        """Get user settings, loading if necessary"""
+        if user_id not in self.user_settings:
+            return self.load_settings(user_id)
+        return self.user_settings[user_id]
+    
+    def load_phone_numbers(self, user_id):
+        """Load phone numbers for a specific user"""
+        try:
+            from utils.database import get_all_phone_numbers
+            numbers = get_all_phone_numbers(user_id)
+            
+            user_numbers = []
+            for number in numbers:
+                if number['is_active']:
+                    user_numbers.append({
+                        'id': number['id'],
+                        'phone_number': number['phone_number'],
+                        'display_name': number['display_name'],
+                        'sort_order': number['sort_order']
+                    })
+            
+            # Sort by sort_order
+            user_numbers.sort(key=lambda x: x['sort_order'])
+            
+            self.user_phone_numbers[user_id] = user_numbers
+            
+            self.logger.info(f"✅ Loaded {len(user_numbers)} active phone numbers for user {user_id}")
+            
+        except Exception as e:
+            self.logger.error(f"Error loading phone numbers for user {user_id}: {e}")
+            self.user_phone_numbers[user_id] = []
+    
+    def get_active_phone_numbers(self, user_id):
+        """Get list of active phone numbers for a user"""
+        if user_id not in self.user_phone_numbers:
+            self.load_phone_numbers(user_id)
+        
+        return [num['phone_number'] for num in self.user_phone_numbers.get(user_id, [])]
+
     def _get_face_hash(self, face_encoding):
         """Create unique hash from face encoding"""
         if face_encoding is None:
@@ -115,41 +182,16 @@ class TwilioAlertSystem:
         encoding_str = ','.join([f"{x:.6f}" for x in face_encoding[:30]])
         return hashlib.md5(encoding_str.encode()).hexdigest()
     
-    def load_phone_numbers(self):
-        """Load all active phone numbers from database"""
-        try:
-            from utils.database import get_all_phone_numbers
-            numbers = get_all_phone_numbers()
-            
-            self.phone_numbers = []
-            for number in numbers:
-                if number['is_active']:
-                    self.phone_numbers.append({
-                        'id': number['id'],
-                        'phone_number': number['phone_number'],
-                        'display_name': number['display_name'],
-                        'sort_order': number['sort_order']
-                    })
-            
-            # Sort by sort_order
-            self.phone_numbers.sort(key=lambda x: x['sort_order'])
-            
-            self.logger.info(f"✅ Loaded {len(self.phone_numbers)} active phone numbers")
-            
-        except Exception as e:
-            self.logger.error(f"Error loading phone numbers: {e}")
-            self.phone_numbers = []
-    
-    def get_active_phone_numbers(self):
-        """Get list of active phone numbers in order"""
-        return [num['phone_number'] for num in self.phone_numbers]
-
-    def _find_similar_face(self, new_encoding):
-        """Find if a similar face already exists in tracking"""
-        if not self.alerted_faces:
+    def _find_similar_face(self, user_id, new_encoding):
+        """Find if a similar face already exists in tracking for a user"""
+        if user_id not in self.user_alerted_faces:
             return None
             
-        for face_hash, face_data in self.alerted_faces.items():
+        user_faces = self.user_alerted_faces[user_id]
+        if not user_faces:
+            return None
+            
+        for face_hash, face_data in user_faces.items():
             stored_encoding = face_data.get('encoding')
             if stored_encoding is None:
                 continue
@@ -158,7 +200,7 @@ class TwilioAlertSystem:
             similarity = self._calculate_similarity(stored_encoding, new_encoding)
             
             if similarity >= self.similarity_threshold:
-                print(f"✅ FACE MATCH: {face_hash[:8]} - Similarity: {similarity:.3f}")
+                print(f"✅ FACE MATCH for user {user_id}: {face_hash[:8]} - Similarity: {similarity:.3f}")
                 return face_hash
                 
         return None
@@ -177,61 +219,71 @@ class TwilioAlertSystem:
             print(f"❌ Similarity calculation error: {e}")
             return 0.0
     
-    def should_trigger_alert_for_face(self, face_encoding):
+    def should_trigger_alert_for_face(self, user_id, face_encoding):
         """
-        ✅ MAIN LOGIC: Check if we should trigger alert for this face
+        ✅ MAIN LOGIC: Check if we should trigger alert for this face for a specific user
         Returns: True if alert should be triggered, False if duplicate/cooldown
         """
-        if self.test_mode:
-            self.logger.info("TEST MODE: Allowing alert")
+        user_settings = self._get_user_settings(user_id)
+        if user_settings.get('test_mode', True):
+            self.logger.info(f"TEST MODE for user {user_id}: Allowing alert")
             return True
         
         if face_encoding is None:
-            self.logger.warning("No face encoding provided - denying alert")
+            self.logger.warning(f"No face encoding provided for user {user_id} - denying alert")
             return False
         
         current_time = time.time()
         
         with self.lock:  # Thread-safe access
+            # Initialize user tracking if not exists
+            if user_id not in self.user_alerted_faces:
+                self.user_alerted_faces[user_id] = {}
+            if user_id not in self.user_answered_calls:
+                self.user_answered_calls[user_id] = set()
+            
+            user_faces = self.user_alerted_faces[user_id]
+            user_answered = self.user_answered_calls[user_id]
+            
             # ✅ STEP 1: Check if similar face already exists
-            similar_face_hash = self._find_similar_face(face_encoding)
+            similar_face_hash = self._find_similar_face(user_id, face_encoding)
             
             if similar_face_hash:
                 # Use the existing face ID
-                face_data = self.alerted_faces[similar_face_hash]
+                face_data = user_faces[similar_face_hash]
                 face_hash = similar_face_hash
-                print(f"🔄 USING EXISTING FACE: {face_hash[:8]}")
+                print(f"🔄 USING EXISTING FACE for user {user_id}: {face_hash[:8]}")
             else:
                 # Create new face ID
                 face_hash = self._get_face_hash(face_encoding)
-                print(f"🆕 NEW FACE DETECTED: {face_hash[:8]}")
+                print(f"🆕 NEW FACE DETECTED for user {user_id}: {face_hash[:8]}")
             
             # ✅ CHECK 1: Has this face been answered already?
-            if face_hash in self.answered_calls:
-                self.logger.info(f"✅ ANSWERED: Face {face_hash[:8]} - Call was answered, no more alerts")
+            if face_hash in user_answered:
+                self.logger.info(f"✅ ANSWERED: Face {face_hash[:8]} for user {user_id} - Call was answered, no more alerts")
                 return False
             
             # ✅ CHECK 2: Face tracking logic
-            if face_hash in self.alerted_faces:
-                face_data = self.alerted_faces[face_hash]
+            if face_hash in user_faces:
+                face_data = user_faces[face_hash]
                 
                 # Cooldown period
                 time_since_last_alert = current_time - face_data['last_alert_time']
                 if time_since_last_alert < self.alert_cooldown:
                     remaining = self.alert_cooldown - time_since_last_alert
-                    self.logger.info(f"🔄 COOLDOWN: Face {face_hash[:8]} - {int(remaining)}s remaining of {self.alert_cooldown}s")
+                    self.logger.info(f"🔄 COOLDOWN: Face {face_hash[:8]} for user {user_id} - {int(remaining)}s remaining of {self.alert_cooldown}s")
                     return False
                 
                 # Maximum alerts per face
                 if face_data['alert_count'] >= self.max_alerts_per_face:
                     # Reset after extended period (e.g., 1 hour)
                     if time_since_last_alert > 3600:  # 1 hour
-                        self.logger.info(f"🔄 RESET: Face {face_hash[:8]} - Resetting after 1 hour")
+                        self.logger.info(f"🔄 RESET: Face {face_hash[:8]} for user {user_id} - Resetting after 1 hour")
                         face_data['alert_count'] = 1
                         face_data['last_alert_time'] = current_time
                         return True
                     else:
-                        self.logger.info(f"🚫 MAX REACHED: Face {face_hash[:8]} - {face_data['alert_count']}/{self.max_alerts_per_face} calls made")
+                        self.logger.info(f"🚫 MAX REACHED: Face {face_hash[:8]} for user {user_id} - {face_data['alert_count']}/{self.max_alerts_per_face} calls made")
                         return False
                 
                 # ✅ UPDATE: Increment count and time
@@ -239,67 +291,74 @@ class TwilioAlertSystem:
                 face_data['last_alert_time'] = current_time
                 # Update encoding to latest version
                 face_data['encoding'] = face_encoding
-                self.logger.info(f"✅ ALERT #{face_data['alert_count']}: Face {face_hash[:8]}")
+                self.logger.info(f"✅ ALERT #{face_data['alert_count']}: Face {face_hash[:8]} for user {user_id}")
                 return True
             
             else:
                 # ✅ NEW FACE: Add to tracking
-                self.alerted_faces[face_hash] = {
+                user_faces[face_hash] = {
                     'encoding': face_encoding,
                     'last_alert_time': current_time,
                     'alert_count': 1,
                     'first_seen': current_time
                 }
-                self.logger.info(f"✅ NEW FACE: {face_hash[:8]} - First alert")
+                self.logger.info(f"✅ NEW FACE: {face_hash[:8]} for user {user_id} - First alert")
                 return True
     
-    def mark_call_answered(self, face_encoding):
+    def mark_call_answered(self, user_id, face_encoding):
         """Mark that a call for this face was answered - stop future alerts"""
         if face_encoding is None:
             return
             
         face_hash = self._get_face_hash(face_encoding)
         with self.lock:
-            self.answered_calls.add(face_hash)
-            self.logger.info(f"📞 CALL ANSWERED: Face {face_hash[:8]} - No more alerts")
+            if user_id not in self.user_answered_calls:
+                self.user_answered_calls[user_id] = set()
+            self.user_answered_calls[user_id].add(face_hash)
+            self.logger.info(f"📞 CALL ANSWERED: Face {face_hash[:8]} for user {user_id} - No more alerts")
             
             # Also remove from tracking to free memory
-            if face_hash in self.alerted_faces:
-                del self.alerted_faces[face_hash]
+            if user_id in self.user_alerted_faces and face_hash in self.user_alerted_faces[user_id]:
+                del self.user_alerted_faces[user_id][face_hash]
     
-    def mark_call_not_answered(self, face_encoding):
+    def mark_call_not_answered(self, user_id, face_encoding):
         """Mark that a call for this face was NOT answered - continue escalation"""
         if face_encoding is None:
             return
             
         face_hash = self._get_face_hash(face_encoding)
-        self.logger.info(f"📞 CALL NOT ANSWERED: Face {face_hash[:8]} - Will retry if under limit")
+        self.logger.info(f"📞 CALL NOT ANSWERED: Face {face_hash[:8]} for user {user_id} - Will retry if under limit")
     
-    def make_voice_call(self, to_number, message="There is an unauthorized person detected."):
-        """Make Twilio voice call"""
-        if self.test_mode:
-            self.logger.info(f"TEST MODE: Would call {to_number}")
+    def make_voice_call(self, user_id, to_number, message="There is an unauthorized person detected."):
+        """Make Twilio voice call for specific user"""
+        user_settings = self._get_user_settings(user_id)
+        
+        if user_settings.get('test_mode', True):
+            self.logger.info(f"TEST MODE for user {user_id}: Would call {to_number}")
             return {'status': 'test_mode', 'call_sid': 'test_' + str(uuid.uuid4())}
         
         formatted_number = self._validate_and_format_phone_number(to_number)
         if not formatted_number:
             return {'status': 'error', 'error': f'Invalid phone number: {to_number}'}
             
-        if not self.client or not self.twilio_number:
-            return {'status': 'error', 'error': 'Twilio not configured'}
+        client = user_settings.get('client')
+        twilio_number = user_settings.get('twilio_number')
+        
+        if not client or not twilio_number:
+            return {'status': 'error', 'error': 'Twilio not configured for this user'}
             
         try:
-            call = self.client.calls.create(
+            call = client.calls.create(
                 twiml=f'<Response><Say>{message}</Say></Response>',
                 to=formatted_number,
-                from_=self.twilio_number
+                from_=twilio_number
             )
             
-            self.logger.info(f"📞 CALL INITIATED: {formatted_number} - {call.sid}")
+            self.logger.info(f"📞 CALL INITIATED for user {user_id}: {formatted_number} - {call.sid}")
             return {'status': 'initiated', 'call_sid': call.sid}
             
         except TwilioRestException as e:
-            self.logger.error(f"Twilio error: {e}")
+            self.logger.error(f"Twilio error for user {user_id}: {e}")
             return {'status': 'error', 'error': str(e)}
                 
     def _validate_and_format_phone_number(self, phone_number):
@@ -322,29 +381,29 @@ class TwilioAlertSystem:
         
         return cleaned
             
-    def trigger_alert_escalation(self, event_id, trigger_type, recording_filepath=None, face_encoding=None):
-        """Trigger voice call escalation with face tracking"""
-        # ✅ FIX: Check if we have any active phone numbers
-        active_numbers = self.get_active_phone_numbers()
+    def trigger_alert_escalation(self, user_id, event_id, trigger_type, recording_filepath=None, face_encoding=None):
+        """Trigger voice call escalation with face tracking for specific user"""
+        # ✅ FIX: Check if we have any active phone numbers for this user
+        active_numbers = self.get_active_phone_numbers(user_id)
         if not active_numbers:
-            return {'status': 'error', 'error': 'No phone numbers configured'}
+            return {'status': 'error', 'error': 'No phone numbers configured for this user'}
             
-        self.log_event(event_id, trigger_type, recording_filepath)
+        self.log_event(user_id, event_id, trigger_type, recording_filepath)
         
         # Start in background
-        thread = Thread(target=self._execute_escalation, args=(event_id, face_encoding))
+        thread = Thread(target=self._execute_escalation, args=(user_id, event_id, face_encoding))
         thread.daemon = True
         thread.start()
         
         return {'status': 'escalation_started', 'event_id': event_id}
         
-    def _execute_escalation(self, event_id, face_encoding=None):
-        """Execute escalation logic with multiple numbers"""
+    def _execute_escalation(self, user_id, event_id, face_encoding=None):
+        """Execute escalation logic with multiple numbers for specific user"""
         try:
-            # ✅ FIX: Get active phone numbers
-            active_numbers = self.get_active_phone_numbers()
+            # ✅ FIX: Get active phone numbers for this user
+            active_numbers = self.get_active_phone_numbers(user_id)
             if not active_numbers:
-                self.logger.error("No active phone numbers available for escalation")
+                self.logger.error(f"No active phone numbers available for user {user_id}")
                 return
                 
             escalation_result = {
@@ -365,8 +424,8 @@ class TwilioAlertSystem:
                     
                 # Attempt 1-3 for current number
                 for attempt in range(1, max_attempts_per_number + 1):
-                    # ✅ FIX: Call with correct number of arguments
-                    result = self._make_call_attempt(event_id, attempt, phone_number, number_index + 1)
+                    # ✅ FIX: Call with correct user_id
+                    result = self._make_call_attempt(user_id, event_id, attempt, phone_number, number_index + 1)
                     escalation_result['attempts'].append(result)
                     
                     # ✅ CHECK IF CALL WAS ANSWERED
@@ -376,34 +435,34 @@ class TwilioAlertSystem:
                         
                         # Mark this face as answered - stop future alerts
                         if face_encoding is not None:
-                            self.mark_call_answered(face_encoding)
+                            self.mark_call_answered(user_id, face_encoding)
                             
-                        self.update_event_status(event_id, 'answered', escalation_result)
+                        self.update_event_status(user_id, event_id, 'answered', escalation_result)
                         return
                         
                     # If not answered and we have more attempts, wait
                     if attempt < max_attempts_per_number:
-                        self.logger.info(f"🔄 Waiting {attempt_interval}s before next attempt...")
+                        self.logger.info(f"🔄 Waiting {attempt_interval}s before next attempt for user {user_id}...")
                         time.sleep(attempt_interval)
                 
                 # If we have more numbers to try, log the transition
                 if number_index < len(active_numbers) - 1 and not escalation_result['answered']:
                     next_number = active_numbers[number_index + 1]
-                    self.logger.info(f"🔄 Escalating to next number: {next_number}")
+                    self.logger.info(f"🔄 Escalating to next number for user {user_id}: {next_number}")
             
             # Mark as not answered if all attempts failed
             if not escalation_result['answered'] and face_encoding is not None:
-                self.mark_call_not_answered(face_encoding)
+                self.mark_call_not_answered(user_id, face_encoding)
                 
-            self.update_event_status(event_id, escalation_result['final_status'], escalation_result)
+            self.update_event_status(user_id, event_id, escalation_result['final_status'], escalation_result)
             
         except Exception as e:
-            self.logger.error(f"Error in escalation: {e}")
+            self.logger.error(f"Error in escalation for user {user_id}: {e}")
             import traceback
             traceback.print_exc()
         
-    def _make_call_attempt(self, event_id, attempt_number, phone_number, number_sequence=None):
-        """Make single call attempt with enhanced logging"""
+    def _make_call_attempt(self, user_id, event_id, attempt_number, phone_number, number_sequence=None):
+        """Make single call attempt with enhanced logging for specific user"""
         attempt_result = {
             'attempt_number': attempt_number,
             'phone_number': phone_number,
@@ -413,10 +472,10 @@ class TwilioAlertSystem:
         }
         
         for retry in range(2):
-            call_result = self.make_voice_call(phone_number)
+            call_result = self.make_voice_call(user_id, phone_number)
             
             if call_result['status'] == 'initiated':
-                call_status = self._wait_for_call_completion(call_result['call_sid'])
+                call_status = self._wait_for_call_completion(user_id, call_result['call_sid'])
                 attempt_result['status'] = call_status
                 attempt_result['call_sid'] = call_result['call_sid']
                 break
@@ -426,15 +485,21 @@ class TwilioAlertSystem:
             else:
                 time.sleep(5)
                 
-        self.log_call_attempt(event_id, attempt_result)
+        self.log_call_attempt(user_id, event_id, attempt_result)
         return attempt_result
         
-    def _wait_for_call_completion(self, call_sid, timeout=30):
-        """Wait for call completion"""
+    def _wait_for_call_completion(self, user_id, call_sid, timeout=30):
+        """Wait for call completion for specific user"""
+        user_settings = self._get_user_settings(user_id)
+        client = user_settings.get('client')
+        
+        if not client:
+            return 'failed'
+            
         start_time = time.time()
         while time.time() - start_time < timeout:
             try:
-                call = self.client.calls(call_sid).fetch()
+                call = client.calls(call_sid).fetch()
                 if call.status in ['completed', 'busy', 'no-answer', 'failed', 'canceled']:
                     return 'answered' if call.status == 'completed' else 'failed'
             except:
@@ -442,35 +507,63 @@ class TwilioAlertSystem:
             time.sleep(2)
         return 'timeout'
         
-    def cleanup_old_faces(self, hours=24):
-        """Clean up old face tracking entries"""
+    def cleanup_old_faces(self, user_id=None, hours=24):
+        """Clean up old face tracking entries for user(s)"""
         current_time = time.time()
         cutoff_time = current_time - (hours * 3600)
         
         with self.lock:
-            faces_to_remove = []
-            for face_hash, face_data in self.alerted_faces.items():
-                if face_data['first_seen'] < cutoff_time:
-                    faces_to_remove.append(face_hash)
-            
-            for face_hash in faces_to_remove:
-                del self.alerted_faces[face_hash]
-            
-            if faces_to_remove:
-                self.logger.info(f"🧹 CLEANUP: Removed {len(faces_to_remove)} old faces")
-            
-            return len(faces_to_remove)
+            if user_id:
+                # Cleanup for specific user
+                if user_id in self.user_alerted_faces:
+                    user_faces = self.user_alerted_faces[user_id]
+                    faces_to_remove = []
+                    for face_hash, face_data in user_faces.items():
+                        if face_data['first_seen'] < cutoff_time:
+                            faces_to_remove.append(face_hash)
+                    
+                    for face_hash in faces_to_remove:
+                        del user_faces[face_hash]
+                    
+                    if faces_to_remove:
+                        self.logger.info(f"🧹 CLEANUP for user {user_id}: Removed {len(faces_to_remove)} old faces")
+                    
+                    return len(faces_to_remove)
+                return 0
+            else:
+                # Cleanup for all users
+                total_removed = 0
+                for uid in list(self.user_alerted_faces.keys()):
+                    user_faces = self.user_alerted_faces[uid]
+                    faces_to_remove = []
+                    for face_hash, face_data in user_faces.items():
+                        if face_data['first_seen'] < cutoff_time:
+                            faces_to_remove.append(face_hash)
+                    
+                    for face_hash in faces_to_remove:
+                        del user_faces[face_hash]
+                    
+                    total_removed += len(faces_to_remove)
+                    if faces_to_remove:
+                        self.logger.info(f"🧹 CLEANUP for user {uid}: Removed {len(faces_to_remove)} old faces")
+                
+                return total_removed
     
-    def get_face_tracking_stats(self):
-        """Get face tracking statistics"""
+    def get_face_tracking_stats(self, user_id):
+        """Get face tracking statistics for a user"""
         with self.lock:
-            # ✅ FIX: Ensure answered_calls exists
-            if not hasattr(self, 'answered_calls'):
-                self.answered_calls = set()
+            # ✅ FIX: Ensure user tracking exists
+            if user_id not in self.user_alerted_faces:
+                self.user_alerted_faces[user_id] = {}
+            if user_id not in self.user_answered_calls:
+                self.user_answered_calls[user_id] = set()
+                
+            user_faces = self.user_alerted_faces.get(user_id, {})
+            user_answered = self.user_answered_calls.get(user_id, set())
                 
             return {
-                'total_tracked_faces': len(self.alerted_faces),
-                'total_answered_faces': len(self.answered_calls),
+                'total_tracked_faces': len(user_faces),
+                'total_answered_faces': len(user_answered),
                 'alert_cooldown_seconds': self.alert_cooldown,
                 'max_alerts_per_face': self.max_alerts_per_face,
                 'face_grouping_threshold': self.face_grouping_threshold,
@@ -481,14 +574,14 @@ class TwilioAlertSystem:
                         'alert_count': data['alert_count'],
                         'last_alert_seconds_ago': int(time.time() - data['last_alert_time']),
                         'time_until_reset': max(0, int(self.alert_cooldown - (time.time() - data['last_alert_time']))),
-                        'answered': face_hash in self.answered_calls
+                        'answered': face_hash in user_answered
                     }
-                    for face_hash, data in list(self.alerted_faces.items())[:10]
+                    for face_hash, data in list(user_faces.items())[:10]
                 ]
             }
     
-    def log_event(self, event_id, trigger_type, recording_filepath):
-        """Log alert event with correct timestamp"""
+    def log_event(self, user_id, event_id, trigger_type, recording_filepath):
+        """Log alert event with correct timestamp for specific user"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
@@ -496,12 +589,14 @@ class TwilioAlertSystem:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS alert_events (
                     event_id TEXT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
                     timestamp DATETIME,
                     trigger_type TEXT,
                     recording_filepath TEXT,
                     review_status TEXT DEFAULT 'pending',
                     call_status TEXT DEFAULT 'pending',
-                    completed_at DATETIME
+                    completed_at DATETIME,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
                 )
             ''')
             
@@ -509,18 +604,18 @@ class TwilioAlertSystem:
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
             cursor.execute(
-                'INSERT INTO alert_events (event_id, timestamp, trigger_type, recording_filepath) VALUES (?, ?, ?, ?)',
-                (event_id, current_time, trigger_type, recording_filepath)
+                'INSERT INTO alert_events (event_id, user_id, timestamp, trigger_type, recording_filepath) VALUES (?, ?, ?, ?, ?)',
+                (event_id, user_id, current_time, trigger_type, recording_filepath)
             )
             
             conn.commit()
             conn.close()
             
         except Exception as e:
-            self.logger.error(f"Error logging event: {e}")
+            self.logger.error(f"Error logging event for user {user_id}: {e}")
             
-    def log_call_attempt(self, event_id, attempt_result):
-        """Log call attempt"""
+    def log_call_attempt(self, user_id, event_id, attempt_result):
+        """Log call attempt for specific user"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
@@ -528,21 +623,24 @@ class TwilioAlertSystem:
             cursor.execute('''
                 CREATE TABLE IF NOT EXISTS call_attempts (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
                     event_id TEXT,
                     attempt_number INTEGER,
                     timestamp DATETIME,
                     phone_number TEXT,
                     call_sid TEXT,
                     status TEXT,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
                     FOREIGN KEY (event_id) REFERENCES alert_events (event_id)
                 )
             ''')
             
             cursor.execute(
                 '''INSERT INTO call_attempts 
-                (event_id, attempt_number, timestamp, phone_number, call_sid, status) 
-                VALUES (?, ?, ?, ?, ?, ?)''',
+                (user_id, event_id, attempt_number, timestamp, phone_number, call_sid, status) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)''',
                 (
+                    user_id,
                     event_id,
                     attempt_result['attempt_number'],
                     attempt_result['timestamp'].isoformat(),
@@ -556,33 +654,33 @@ class TwilioAlertSystem:
             conn.close()
             
         except Exception as e:
-            self.logger.error(f"Error logging call attempt: {e}")
+            self.logger.error(f"Error logging call attempt for user {user_id}: {e}")
             
-    def update_event_status(self, event_id, call_status, escalation_result=None):
-        """Update event status"""
+    def update_event_status(self, user_id, event_id, call_status, escalation_result=None):
+        """Update event status for specific user"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
             
             cursor.execute(
-                'UPDATE alert_events SET call_status = ?, completed_at = CURRENT_TIMESTAMP WHERE event_id = ?',
-                (call_status, event_id)
+                'UPDATE alert_events SET call_status = ?, completed_at = CURRENT_TIMESTAMP WHERE event_id = ? AND user_id = ?',
+                (call_status, event_id, user_id)
             )
             
             conn.commit()
             conn.close()
             
         except Exception as e:
-            self.logger.error(f"Error updating event: {e}")
+            self.logger.error(f"Error updating event for user {user_id}: {e}")
     
-    def save_settings(self, settings):
-        """Save Twilio settings with proper auth token handling"""
+    def save_settings(self, user_id, settings):
+        """Save Twilio settings for a specific user"""
         try:
             conn = sqlite3.connect('security_system.db')
             cursor = conn.cursor()
             
             # Get current settings to preserve auth token if not changed
-            current_settings = cursor.execute('SELECT * FROM twilio_settings WHERE id = 1').fetchone()
+            current_settings = cursor.execute('SELECT * FROM twilio_settings WHERE user_id = ?', (user_id,)).fetchone()
             
             account_sid = settings.get('account_sid', '').strip()
             auth_token = settings.get('auth_token', '').strip()
@@ -591,38 +689,48 @@ class TwilioAlertSystem:
             
             # If auth token is "***" or empty, use the existing one
             if auth_token in ['***', ''] and current_settings:
-                auth_token = current_settings[2]  # Use existing auth token
+                auth_token = current_settings[3]  # Use existing auth token (index 3)
             
-            cursor.execute('''
-                INSERT OR REPLACE INTO twilio_settings 
-                (id, account_sid, auth_token, twilio_number, test_mode)
-                VALUES (1, ?, ?, ?, ?)
-            ''', (account_sid, auth_token, twilio_number, test_mode))
+            if current_settings:
+                # UPDATE existing settings
+                cursor.execute('''
+                    UPDATE twilio_settings 
+                    SET account_sid = ?, auth_token = ?, twilio_number = ?, test_mode = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                ''', (account_sid, auth_token, twilio_number, test_mode, user_id))
+            else:
+                # INSERT new settings - let SQLite auto-generate the ID
+                cursor.execute('''
+                    INSERT INTO twilio_settings 
+                    (user_id, account_sid, auth_token, twilio_number, test_mode)
+                    VALUES (?, ?, ?, ?, ?)
+                ''', (user_id, account_sid, auth_token, twilio_number, test_mode))
             
             conn.commit()
             conn.close()
             
             # Reload settings to update the client
-            self.load_settings()
+            self.load_settings(user_id)
             return True
             
         except Exception as e:
-            self.logger.error(f"Error saving settings: {e}")
+            self.logger.error(f"Error saving settings for user {user_id}: {e}")
             return False
     
-    def get_settings(self):
-        """Get current settings - mask auth token for display"""
+    def get_settings(self, user_id):
+        """Get current settings for a user - mask auth token for display"""
+        user_settings = self._get_user_settings(user_id)
         return {
-            'account_sid': self.account_sid or '',
-            'auth_token': '***' if self.auth_token else '',  # Always mask for display
-            'twilio_number': self.twilio_number or '',
-            'test_mode': self.test_mode,
-            'configured': bool(self.account_sid and self.auth_token and self.twilio_number),
-            'authenticated': self.client is not None
+            'account_sid': user_settings.get('account_sid', ''),
+            'auth_token': '***' if user_settings.get('auth_token') else '',  # Always mask for display
+            'twilio_number': user_settings.get('twilio_number', ''),
+            'test_mode': user_settings.get('test_mode', True),
+            'configured': bool(user_settings.get('account_sid') and user_settings.get('auth_token') and user_settings.get('twilio_number')),
+            'authenticated': user_settings.get('client') is not None
         }
     
-    def get_event_history(self, limit=50):
-        """Get event history"""
+    def get_event_history(self, user_id, limit=50):
+        """Get event history for a specific user"""
         try:
             conn = sqlite3.connect('security_system.db')
             conn.row_factory = sqlite3.Row
@@ -630,18 +738,19 @@ class TwilioAlertSystem:
             
             events = cursor.execute('''
                 SELECT * FROM alert_events 
+                WHERE user_id = ?
                 ORDER BY timestamp DESC 
                 LIMIT ?
-            ''', (limit,)).fetchall()
+            ''', (user_id, limit)).fetchall()
             
             events_with_attempts = []
             for event in events:
                 event_dict = dict(event)
                 attempts = cursor.execute('''
                     SELECT * FROM call_attempts 
-                    WHERE event_id = ? 
+                    WHERE event_id = ? AND user_id = ?
                     ORDER BY attempt_number
-                ''', (event_dict['event_id'],)).fetchall()
+                ''', (event_dict['event_id'], user_id)).fetchall()
                 
                 event_dict['call_attempts'] = [dict(a) for a in attempts]
                 events_with_attempts.append(event_dict)
@@ -650,11 +759,11 @@ class TwilioAlertSystem:
             return events_with_attempts
             
         except Exception as e:
-            self.logger.error(f"Error getting history: {e}")
+            self.logger.error(f"Error getting history for user {user_id}: {e}")
             return []
     
-    def update_review_status(self, event_id, status):
-        """Update review status"""
+    def update_review_status(self, user_id, event_id, status):
+        """Update review status for specific user"""
         try:
             valid_statuses = ['pending', 'false_alarm', 'confirmed']
             if status not in valid_statuses:
@@ -664,8 +773,8 @@ class TwilioAlertSystem:
             cursor = conn.cursor()
             
             cursor.execute(
-                'UPDATE alert_events SET review_status = ? WHERE event_id = ?',
-                (status, event_id)
+                'UPDATE alert_events SET review_status = ? WHERE event_id = ? AND user_id = ?',
+                (status, event_id, user_id)
             )
             
             conn.commit()
@@ -673,7 +782,7 @@ class TwilioAlertSystem:
             return True
             
         except Exception as e:
-            self.logger.error(f"Error updating review: {e}")
+            self.logger.error(f"Error updating review for user {user_id}: {e}")
             return False
 
 # Global instance

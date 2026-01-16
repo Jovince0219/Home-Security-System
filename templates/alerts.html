@@ -150,6 +150,10 @@
                 <button id="refreshEvents" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded">
                     <i class="fas fa-sync-alt mr-2"></i>Refresh Events
                 </button>
+                <button onclick="fixRecordingPaths()"
+                    class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded">
+                    <i class="fas fa-wrench mr-2"></i>Fix Recording Paths
+                </button>
                 <button id="cleanupRecordings" class="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded">
                     <i class="fas fa-trash-alt mr-2"></i>Cleanup Old Recordings
                 </button>
@@ -726,24 +730,88 @@
     }
 
     function verifyRecording(recordingPath) {
+        console.log('Verifying recording:', recordingPath);
+
+        // Extract filename from path
         const filename = recordingPath.split('/').pop();
+        console.log('Filename:', filename);
 
         fetch(`/api/verify_recording/${filename}`)
             .then(response => response.json())
             .then(data => {
+                console.log('Verification response:', data);
+
                 if (data.success) {
                     const verification = data.verification;
                     if (verification.playable) {
                         showNotification(`✅ Video is playable: ${verification.duration_seconds}s, ${verification.file_size_mb}MB`, 'success');
+                        console.log('Video URL:', verification.web_url);
+
+                        // Test if we can actually access the file
+                        testFileAccess(verification.web_url);
                     } else {
                         showNotification(`❌ Video playback issue: ${verification.error}`, 'error');
+                        console.log('File exists but not playable:', verification);
                     }
                 } else {
                     showNotification('❌ Verification failed: ' + data.error, 'error');
+                    console.log('Verification error details:', data);
                 }
             })
             .catch(error => {
+                console.error('Error verifying recording:', error);
                 showNotification('❌ Network error during verification', 'error');
+            });
+    }
+
+    function testFileAccess(fileUrl) {
+        console.log('Testing file access:', fileUrl);
+
+        // Create a test image to check if file is accessible
+        const testImg = new Image();
+        testImg.onload = function () {
+            console.log('✅ File is accessible via web server:', fileUrl);
+        };
+        testImg.onerror = function () {
+            console.error('❌ File NOT accessible via web server:', fileUrl);
+
+            // Try alternative URL
+            const altUrl = fileUrl.replace('/static/recordings/', '/static\\recordings\\');
+            console.log('Trying alternative URL:', altUrl);
+        };
+        testImg.src = fileUrl;
+    }
+
+    function debugAllFiles() {
+        console.log('Debugging all files...');
+
+        fetch('/api/debug_all_files')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    console.log('Files on disk:', data.files_on_disk);
+                    console.log('Files in database:', data.files_in_db);
+
+                    // Find mismatches
+                    const diskFilenames = data.files_on_disk.map(f => f.filename);
+                    const dbFilenames = data.files_in_db.map(e => {
+                        const path = e.recording_filepath;
+                        return path ? path.split(/[/\\]/).pop() : null;
+                    }).filter(f => f);
+
+                    console.log('Files on disk:', diskFilenames);
+                    console.log('Files in database:', dbFilenames);
+
+                    const missingInDb = diskFilenames.filter(f => !dbFilenames.includes(f));
+                    const missingOnDisk = dbFilenames.filter(f => !diskFilenames.includes(f));
+
+                    console.log('Missing in database:', missingInDb);
+                    console.log('Missing on disk:', missingOnDisk);
+
+                    alert(`Debug complete:\nFiles on disk: ${diskFilenames.length}\nFiles in DB: ${dbFilenames.length}\nMissing in DB: ${missingInDb.length}\nMissing on disk: ${missingOnDisk.length}\nCheck console for details.`);
+                } else {
+                    alert('Debug failed: ' + data.error);
+                }
             });
     }
 
@@ -803,15 +871,25 @@
             .then(data => {
                 if (data.success) {
                     const stats = data.stats;
-                    document.getElementById('recordingStatus').textContent =
-                        stats.is_recording ? 'Active' : 'Inactive';
-                    document.getElementById('recordingStatus').className =
-                        stats.is_recording ? 'text-2xl font-bold text-green-600' : 'text-2xl font-bold text-gray-600';
 
-                    document.getElementById('storageStatus').textContent =
-                        `${stats.total_recordings} recordings, ${stats.total_size_gb} GB`;
+                    // Check if elements exist before updating
+                    const recordingStatusEl = document.getElementById('recordingStatus');
+                    const storageStatusEl = document.getElementById('storageStatus');
+
+                    if (recordingStatusEl) {
+                        recordingStatusEl.textContent = stats.is_recording ? 'Active' : 'Inactive';
+                        recordingStatusEl.className = stats.is_recording
+                            ? 'text-2xl font-bold text-green-600'
+                            : 'text-2xl font-bold text-gray-600';
+                    }
+
+                    if (storageStatusEl) {
+                        storageStatusEl.textContent =
+                            `${stats.total_recordings} recordings, ${stats.total_size_gb} GB`;
+                    }
                 }
-            });
+            })
+            .catch(error => console.error('Error loading recording stats:', error));
     }
 
     function cleanupRecordings() {
@@ -955,7 +1033,6 @@
             return;
         }
 
-        // Step 1: Remove duplicate entries - keep only 1-2 of the same alert type
         const deduplicatedEvents = deduplicateEvents(events);
 
         let html = '';
@@ -967,9 +1044,7 @@
                 event.trigger_type === 'authorized_face' ||
                 event.trigger_type === 'known_face';
 
-            // Determine text color based on trigger type
             let titleColor = '';
-
             if (event.trigger_type === 'authorized_face') {
                 titleColor = 'text-green-600';
             } else if (event.trigger_type === 'unauthorized_face') {
@@ -980,106 +1055,106 @@
                 titleColor = 'text-gray-800';
             }
 
-            html += `
-    <div class="bg-white shadow-sm border border-gray-200 rounded-xl p-4 mb-4 hover:shadow-md transition">
-        
-        <!-- Header -->
-        <div class="flex justify-between items-start mb-3">
-            <div>
-                <h4 class="font-semibold capitalize tracking-wide ${titleColor}">
-                    ${event.trigger_type.replace(/_/g, ' ')}
-                    ${event.person_name ? `- ${event.person_name}` : ''}
-                </h4>
-                <p class="text-sm text-gray-500">${timestamp}</p>
-                <p class="text-xs text-gray-400">Event ID: ${event.event_id}</p>
-            </div>
+            // FIX: Clean the recording path - use exactly what's in the event
+            let recordingPath = event.recording_filepath || '';
+            let cleanRecordingPath = '';
+            let videoAvailable = false;
 
-            <div class="flex flex-col gap-1 text-right">
-                <span class="px-2 py-1 rounded-md text-xs font-medium ${getStatusClass(callStatus)}">
-                    Call: ${callStatus}
-                </span>
-                <span class="px-2 py-1 rounded-md text-xs font-medium ${getReviewClass(reviewStatus)}">
-                    Review: ${reviewStatus}
-                </span>
-            </div>
+            if (recordingPath) {
+                // Replace backslashes with forward slashes
+                cleanRecordingPath = recordingPath.replace(/\\/g, '/');
+
+                // Ensure it starts with a slash for web path
+                if (!cleanRecordingPath.startsWith('/')) {
+                    cleanRecordingPath = '/' + cleanRecordingPath;
+                }
+
+                videoAvailable = true;
+
+                console.log('Recording path debug:', {
+                    original: recordingPath,
+                    cleaned: cleanRecordingPath,
+                    eventId: event.event_id
+                });
+            }
+
+            html += `
+<div class="bg-white shadow-sm border border-gray-200 rounded-xl p-4 mb-4 hover:shadow-md transition">
+    
+    <div class="flex justify-between items-start mb-3">
+        <div>
+            <h4 class="font-semibold capitalize tracking-wide ${titleColor}">
+                ${event.trigger_type.replace(/_/g, ' ')}
+                ${event.person_name ? `- ${event.person_name}` : ''}
+            </h4>
+            <p class="text-sm text-gray-500">${timestamp}</p>
+            <p class="text-xs text-gray-400">Event ID: ${event.event_id}</p>
+            ${cleanRecordingPath ? `<p class="text-xs text-blue-400 mt-1 break-all">File: ${cleanRecordingPath}</p>` : ''}
         </div>
 
-        <!-- Call Attempts -->
-        ${event.call_attempts && event.call_attempts.length > 0
+        <div class="flex flex-col gap-1 text-right">
+            <span class="px-2 py-1 rounded-md text-xs font-medium ${getStatusClass(callStatus)}">
+                Call: ${callStatus}
+            </span>
+            <span class="px-2 py-1 rounded-md text-xs font-medium ${getReviewClass(reviewStatus)}">
+                Review: ${reviewStatus}
+            </span>
+        </div>
+    </div>
+
+    ${cleanRecordingPath ? `
+        <div class="mt-2 flex items-center text-green-600 text-sm">
+            <i class="fas fa-video mr-2"></i>
+            Video recording available
+        </div>
+        
+        <!-- Quick test button -->
+        <div class="mt-2">
+            <button onclick="testFileAccess('${cleanRecordingPath}')" 
+                    class="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded">
+                Test File Access
+            </button>
+        </div>
+    ` : `
+        <div class="mt-2 flex items-center text-gray-500 text-sm">
+            <i class="fas fa-video-slash mr-2"></i>
+            No video recording
+        </div>
+    `}
+
+    <div class="mt-4 flex flex-wrap gap-2">
+        ${!isNonAlertEvent
                     ? `
-            <div class="mt-3 bg-gray-50 p-3 rounded-lg">
-                <h5 class="text-sm font-semibold mb-2 text-gray-700">Call Attempts:</h5>
-                <div class="space-y-1">
-                ${event.call_attempts
-                        .map(
-                            attempt => `
-                    <div class="text-xs text-gray-600">
-                        <span class="font-medium">Attempt ${attempt.attempt_number}</span> — 
-                        ${attempt.phone_number} —
-                        <span class="${attempt.status === 'answered'
-                                    ? 'text-green-600 font-semibold'
-                                    : 'text-red-600 font-semibold'
-                                }">${attempt.status}</span>
-                        <span class="text-gray-400">at ${new Date(
-                                    attempt.timestamp
-                                ).toLocaleTimeString()}</span>
-                    </div>
-                `
-                        )
-                        .join('')}
-                </div>
-            </div>
+            <button onclick="handleFalseAlarm('${event.event_id}')"
+                class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                <i class="fas fa-user-plus"></i> Mark as False Alarm
+            </button>
+
+            <button onclick="updateReviewStatus('${event.event_id}', 'confirmed')"
+                class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                <i class="fas fa-check"></i> Confirm
+            </button>
         `
                     : ''
                 }
 
-        <!-- Video Status -->
-        ${event.recording_filepath ? `
-            <div class="mt-2 flex items-center text-green-600 text-sm">
-                <i class="fas fa-video mr-2"></i>
-                Video recording available
-            </div>
-        ` : `
-            <div class="mt-2 flex items-center text-gray-500 text-sm">
-                <i class="fas fa-video-slash mr-2"></i>
-                No video recording
-            </div>
-        `}
-
-        <!-- Actions -->
-        <div class="mt-4 flex flex-wrap gap-2">
-            ${!isNonAlertEvent
+        ${cleanRecordingPath
                     ? `
-                <button onclick="handleFalseAlarm('${event.event_id}')"
-                    class="bg-yellow-500 hover:bg-yellow-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                    <i class="fas fa-user-plus"></i> Mark as False Alarm
-                </button>
-
-                <button onclick="updateReviewStatus('${event.event_id}', 'confirmed')"
-                    class="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                    <i class="fas fa-check"></i> Confirm
-                </button>
-            `
+            <button onclick="playRecording('${cleanRecordingPath}')"
+                class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                <i class="fas fa-play mr-1"></i> Play Video
+            </button>
+            <button onclick="verifyRecording('${cleanRecordingPath}')" 
+                    class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
+                <i class="fas fa-check-circle mr-1"></i>Verify
+            </button>
+        `
                     : ''
                 }
-
-            ${event.recording_filepath
-                    ? `
-                <button onclick="showVideoModal('${event.recording_filepath}')"
-                    class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                    <i class="fas fa-play mr-1"></i> Play Video
-                </button>
-                <button onclick="verifyRecording('${event.recording_filepath}')" 
-                        class="bg-gray-500 hover:bg-gray-600 text-white px-3 py-1.5 rounded-lg text-xs flex items-center gap-1 font-medium">
-                    <i class="fas fa-check-circle mr-1"></i>Verify
-                </button>
-            `
-                    : ''
-                }
-        </div>
-
     </div>
-    `;
+
+</div>
+`;
         });
 
         container.innerHTML = html;
@@ -1100,6 +1175,7 @@
                 const isPlayable = await checkVideoPlayability(event.recording_filepath);
                 if (isPlayable) {
                     validEvents.push(event);
+
                 }
             } else {
                 // Events without videos are still included
@@ -1507,27 +1583,7 @@
         }
     }
 
-    function verifyRecording(recordingPath) {
-        const filename = recordingPath.split('/').pop();
 
-        fetch(`/api/verify_recording/${filename}`)
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const verification = data.verification;
-                    if (verification.playable) {
-                        showNotification(`✅ Video is playable: ${verification.duration_seconds}s, ${verification.file_size_mb}MB`, 'success');
-                    } else {
-                        showNotification(`❌ Video playback issue: ${verification.error}`, 'error');
-                    }
-                } else {
-                    showNotification('❌ Verification failed: ' + data.error, 'error');
-                }
-            })
-            .catch(error => {
-                showNotification('❌ Network error during verification', 'error');
-            });
-    }
 
     function downloadRecording(recordingPath) {
         const link = document.createElement('a');
@@ -1550,23 +1606,6 @@
             closeFalseAlarmModal();
         }
     });
-
-    function loadRecordingStats() {
-        fetch('/api/recording_stats')
-            .then(response => response.json())
-            .then(data => {
-                if (data.success) {
-                    const stats = data.stats;
-                    document.getElementById('recordingStatus').textContent =
-                        stats.is_recording ? 'Active' : 'Inactive';
-                    document.getElementById('recordingStatus').className =
-                        stats.is_recording ? 'text-2xl font-bold text-green-600' : 'text-2xl font-bold text-gray-600';
-
-                    document.getElementById('storageStatus').textContent =
-                        `${stats.total_recordings} recordings, ${stats.total_size_gb} GB`;
-                }
-            });
-    }
 
     function cleanupRecordings() {
         if (confirm('Delete recordings older than 3 days?')) {
@@ -1848,42 +1887,182 @@
     function playRecording(recordingPath) {
         console.log('Playing recording from path:', recordingPath);
 
+        // First verify the file exists
+        fetch(`/api/verify_file_exists?filepath=${encodeURIComponent(recordingPath)}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success && data.file_exists) {
+                    // File exists, show video modal
+                    showVideoModal(data.web_url || data.filepath);
+                } else {
+                    // Try alternative path
+                    const filename = recordingPath.split('/').pop();
+                    const alternativePath = `static/recordings/${filename}`;
+                    console.log('Trying alternative path:', alternativePath);
+
+                    fetch(`/api/verify_file_exists?filepath=${encodeURIComponent(alternativePath)}`)
+                        .then(response => response.json())
+                        .then(data2 => {
+                            if (data2.success && data2.file_exists) {
+                                showVideoModal(data2.web_url || data2.filepath);
+                            } else {
+                                console.error('Recording file not found:', recordingPath);
+                                showNotification('❌ Recording file not found on server.', 'error');
+
+                                // Show debug button
+                                alert(`File not found.\n\nTry debugging:\n1. Open browser console (F12)\n2. Type: debugAllFiles()`);
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error checking alternative path:', error);
+                            showNotification('❌ Error checking file', 'error');
+                        });
+                }
+            })
+            .catch(error => {
+                console.error('Error verifying file:', error);
+                showNotification('❌ Error checking recording file', 'error');
+            });
+    }
+
+    function verifyRecording(recordingPath) {
+        console.log('Verifying recording:', recordingPath);
+
+        // Extract filename from path
+        const filename = recordingPath.split('/').pop();
+        console.log('Filename:', filename);
+
+        fetch(`/api/verify_recording/${filename}`)
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Verification response:', data);
+
+                if (data.success) {
+                    const verification = data.verification;
+                    if (verification.playable) {
+                        showNotification(`✅ Video is playable: ${verification.duration_seconds}s, ${verification.file_size_mb}MB`, 'success');
+                        console.log('Video URL:', verification.web_url);
+                    } else {
+                        showNotification(`❌ Video file exists but cannot be played: ${verification.error}`, 'error');
+                    }
+                } else {
+                    showNotification('❌ Verification failed: ' + data.error, 'error');
+                    console.log('Verification error details:', data);
+
+                    // If it shows available files, list them
+                    if (data.available_files) {
+                        console.log('Available files in directory:', data.available_files);
+                    }
+                }
+            })
+            .catch(error => {
+                console.error('Error verifying recording:', error);
+                showNotification('❌ Network error during verification', 'error');
+            });
+    }
+
+    function fixRecordingPaths() {
+        if (confirm('This will fix mismatched recording paths in the database. Continue?')) {
+            fetch('/api/fix_recording_paths', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: new URLSearchParams()
+            })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        showNotification(`✅ Fixed ${data.fixed_count} recording paths`, 'success');
+                        loadAlertEvents(); // Refresh the list
+                    } else {
+                        showNotification('❌ Failed to fix paths: ' + data.error, 'error');
+                    }
+                })
+                .catch(error => {
+                    showNotification('❌ Network error fixing paths', 'error');
+                });
+        }
+    }
+
+    // Add this function to test direct file access
+    function testDirectFileAccess() {
+        console.log('Testing direct file access...');
+
+        fetch('/api/debug_all_files')
+            .then(response => response.json())
+            .then(data => {
+                if (data.success && data.files_on_disk.length > 0) {
+                    const firstFile = data.files_on_disk[0];
+                    console.log('Testing access to:', firstFile.web_path);
+
+                    // Test if we can fetch the file directly
+                    fetch(firstFile.web_path)
+                        .then(response => {
+                            console.log('Direct fetch response:', response.status, response.statusText);
+                            if (response.ok) {
+                                showNotification('✅ Direct file access works!', 'success');
+                            } else {
+                                showNotification(`❌ Direct fetch failed: ${response.status}`, 'error');
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Direct fetch error:', error);
+                            showNotification('❌ Direct fetch error', 'error');
+                        });
+                }
+            });
+    }
+
+    function showVideoModal(recordingPath) {
+        console.log('Showing video modal for path:', recordingPath);
+
         // Create modal for video playback
         const modalHtml = `
-    <div id="videoModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
-        <div class="bg-white rounded-lg p-4 max-w-4xl w-full mx-4">
-            <div class="flex justify-between items-center mb-4">
-                <h3 class="text-lg font-bold">Security Recording</h3>
-                <button onclick="closeVideoModal()" class="text-gray-500 hover:text-gray-700">
-                    <i class="fas fa-times"></i>
-                </button>
-            </div>
-            <div class="bg-black rounded-lg overflow-hidden">
-                <video id="modalVideo" controls autoplay width="100%" height="auto" class="w-full max-h-96">
-                    <source src="${recordingPath}" type="video/mp4">
-                    Your browser does not support the video tag.
-                </video>
-            </div>
-            <div class="mt-4 flex justify-between items-center">
-                <button onclick="verifyRecording('${recordingPath}')" 
-                        class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">
-                    <i class="fas fa-check-circle mr-1"></i>Verify Playback
-                </button>
-                <button onclick="downloadRecording('${recordingPath}')" 
-                        class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm">
-                    <i class="fas fa-download mr-1"></i>Download
-                </button>
-                <button onclick="closeVideoModal()" 
-                        class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
-                    Close
-                </button>
-            </div>
-            <div class="mt-2 text-xs text-gray-500 break-all">
-                File: ${recordingPath}
-            </div>
+<div id="videoModal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50">
+    <div class="bg-white rounded-lg p-4 max-w-4xl w-full mx-4">
+        <div class="flex justify-between items-center mb-4">
+            <h3 class="text-lg font-bold">Security Recording</h3>
+            <button onclick="closeVideoModal()" class="text-gray-500 hover:text-gray-700">
+                <i class="fas fa-times"></i>
+            </button>
+        </div>
+        <div class="bg-black rounded-lg overflow-hidden">
+            <video id="modalVideo" controls autoplay width="100%" height="auto" class="w-full max-h-96">
+                <source src="/${recordingPath}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+        <div class="mt-4 flex justify-between items-center">
+            <button onclick="verifyRecording('${recordingPath}')" 
+                    class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm">
+                <i class="fas fa-check-circle mr-1"></i>Verify Playback
+            </button>
+            <button onclick="downloadRecording('${recordingPath}')" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-3 py-2 rounded text-sm">
+                <i class="fas fa-download mr-1"></i>Download
+            </button>
+            <button onclick="closeVideoModal()" 
+                    class="bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded text-sm">
+                Close
+            </button>
+        </div>
+        <div class="mt-2 text-xs text-gray-500 break-all">
+            File: ${recordingPath}
         </div>
     </div>
-    `;
+</div>
+`;
 
         const modal = document.createElement('div');
         modal.id = 'videoModal';

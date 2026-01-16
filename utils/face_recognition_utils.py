@@ -10,6 +10,7 @@ import uuid
 from utils.recording_manager import recording_manager
 import time
 from utils.motion_gated_tracker import MotionGatedFaceTracker
+from flask_login import current_user
 
 
 # Global variables for face recognition (Authorized Persons)
@@ -23,12 +24,16 @@ known_persons_names = []
 motion_gated_tracker = MotionGatedFaceTracker(motion_timeout=3.0, authorized_cooldown=5.0)
 
 def load_known_faces():
-    """Load all registered faces from database"""
+    """Load all registered faces from database for current user"""
     global known_face_encodings, known_face_names
     known_face_encodings = []
     known_face_names = []
     
-    faces = get_all_faces()
+    if not current_user or not current_user.is_authenticated:
+        print("⚠️ No authenticated user - cannot load faces")
+        return
+    
+    faces = get_all_faces(current_user.id)
     for face in faces:
         try:
             encoding = np.array([float(x) for x in face['encoding'].split(',')])
@@ -36,17 +41,23 @@ def load_known_faces():
             known_face_names.append(face['name'])
         except Exception as e:
             print(f"Error loading face encoding for {face['name']}: {e}")
+    
+    print(f"✅ Loaded {len(known_face_names)} authorized faces for user {current_user.username}")
 
 
 def load_known_persons():
-    """Load all known persons (non-threatening but not authorized)"""
+    """Load all known persons (non-threatening but not authorized) for current user"""
     global known_persons_encodings, known_persons_names
     known_persons_encodings = []
     known_persons_names = []
     
+    if not current_user or not current_user.is_authenticated:
+        print("⚠️ No authenticated user - cannot load known persons")
+        return
+    
     try:
         from utils.database import get_all_known_persons
-        persons = get_all_known_persons()
+        persons = get_all_known_persons(current_user.id)
         
         for person in persons:
             try:
@@ -56,22 +67,86 @@ def load_known_persons():
             except Exception as e:
                 print(f"Error loading known person encoding for {person['name']}: {e}")
         
-        print(f"✅ Loaded {len(known_persons_names)} known persons")
+        print(f"✅ Loaded {len(known_persons_names)} known persons for user {current_user.username}")
         
     except Exception as e:
         print(f"⚠️ Error loading known persons: {e}")
         # If table doesn't exist yet, just continue with empty lists
         known_persons_encodings = []
         known_persons_names = []
-            
-def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
+
+def load_known_faces_for_user(user_id):
+    """Load all registered faces from database for specific user"""
+    global known_face_encodings, known_face_names
+    known_face_encodings = []
+    known_face_names = []
+    
+    from utils.database import get_all_faces
+    faces = get_all_faces(user_id)
+    for face in faces:
+        try:
+            encoding = np.array([float(x) for x in face['encoding'].split(',')])
+            known_face_encodings.append(encoding)
+            known_face_names.append(face['name'])
+        except Exception as e:
+            print(f"Error loading face encoding for {face['name']}: {e}")
+    
+    print(f"✅ Loaded {len(known_face_names)} authorized faces for user {user_id}")
+
+
+def load_known_persons_for_user(user_id):
+    """Load all known persons (non-threatening but not authorized) for specific user"""
+    global known_persons_encodings, known_persons_names
+    known_persons_encodings = []
+    known_persons_names = []
+    
+    try:
+        from utils.database import get_all_known_persons
+        persons = get_all_known_persons(user_id)
+        
+        for person in persons:
+            try:
+                encoding = np.array([float(x) for x in person['encoding'].split(',')])
+                known_persons_encodings.append(encoding)
+                known_persons_names.append(person['name'])
+            except Exception as e:
+                print(f"Error loading known person encoding for {person['name']}: {e}")
+        
+        print(f"✅ Loaded {len(known_persons_names)} known persons for user {user_id}")
+        
+    except Exception as e:
+        print(f"⚠️ Error loading known persons: {e}")
+        known_persons_encodings = []
+        known_persons_names = []
+        
+def detect_faces_with_motion_gate(frame, motion_detector, user_id=None, scale_factor=1.0):
     """
     UPDATED: Motion-gated face detection with per-face state stabilization.
+    Now accepts user_id parameter.
     """
     global known_face_encodings, known_face_names
     global known_persons_encodings, known_persons_names
     
-    print("🎯 DEBUG: Motion-gated face detection called")
+    print(f"🎯 DEBUG: Motion-gated face detection called for user_id: {user_id}")
+    
+    # Get current user ID - use provided user_id or try to get from Flask-Login
+    if user_id is None:
+        try:
+            from flask_login import current_user
+            if current_user and current_user.is_authenticated:
+                user_id = current_user.id
+            else:
+                print("❌ No user_id provided and no authenticated user")
+                return []
+        except:
+            print("❌ Cannot access current_user - user_id must be provided")
+            return []
+    
+    print(f"🔍 DEBUG: Processing detections for user ID: {user_id}")
+    
+    # Load faces for this specific user
+    load_known_faces_for_user(user_id)  # We'll create this function
+    load_known_persons_for_user(user_id)  # We'll create this function
     
     # Get motion status - use human motion detection status
     motion_detected = motion_detector.is_human_motion_active() if motion_detector else False
@@ -305,44 +380,80 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             print(f"✅ Processed {event_type} event: {final_name} - Recording: {recording_path}")
         
         # STEP 7: Handle ONLY unauthorized faces (not known persons) for alerts
-        if not final_is_authorized and not final_is_known_person and distance_analysis['trigger_alert'] and tracker_info['should_process']:
-            print(f"🚨 DEBUG: Unauthorized face detected - should trigger alert!")
+        if distance_analysis['within_detection_range'] and tracker_info['should_process']:
+            print(f"📝 DEBUG: Logging {event_type} to detections table")
             
-            # ✅ UPDATED: Pass Twilio state to trigger_security_alert
-            event_id = trigger_security_alert(
-                "Unauthorized Face", 
-                "Unauthorized Person", 
-                confidence, 
-                frame,
-                face_encoding,
-                twilio_enabled
-            )
-            
-            if event_id:
-                status_text = "CALL TRIGGERED" if twilio_enabled else "CALL BLOCKED"
-                print(f"🚨 Alert {status_text} for unauthorized face: {event_id}")
+            # Determine person_name for detections table
+            if final_is_authorized:
+                detection_person_name = f"Authorized: {final_name}"
+                detection_type = "face_detection"
+                alert_level = 1  # Low alert level for authorized
+            elif final_is_known_person:
+                detection_person_name = f"Known: {final_name}"
+                detection_type = "face_detection"
+                alert_level = 1  # Low alert level for known
             else:
-                if not twilio_enabled:
-                    print(f"🔕 Alert skipped - Twilio disabled")
-                else:
-                    print(f"🔄 Alert skipped - face already alerted recently")
+                detection_person_name = f"Unauthorized ({distance_analysis['distance_meters']}m)"
+                detection_type = "face_detection"
+                alert_level = distance_analysis['alert_level']
             
-            # Update detection time for ongoing recording
-            recording_manager.update_detection_time()
+            # Log detection to database for ALL face types
+            try:
+                add_detection(
+                    user_id=user_id,
+                    detection_type=detection_type, 
+                    person_name=detection_person_name, 
+                    confidence=float(confidence), 
+                    screenshot_path=screenshot_path, 
+                    alert_level=alert_level
+                )
+                print(f"📝 DEBUG: Detection logged for {detection_person_name}")
+                
+            except Exception as e:
+                print(f"❌ Error logging detection: {e}")
+            
+            # Handle alerts for unauthorized faces only
+            if not final_is_authorized and not final_is_known_person and distance_analysis['trigger_alert']:
+                print(f"🚨 DEBUG: Unauthorized face detected - should trigger alert!")
+                
+                # ✅ UPDATED: Pass Twilio state to trigger_security_alert
+                event_id = trigger_security_alert(
+                    "Unauthorized Face", 
+                    "Unauthorized Person", 
+                    confidence, 
+                    frame,
+                    face_encoding,
+                    twilio_enabled,
+                    user_id=user_id  # ADD THIS
+                )
+                
+                if event_id:
+                    status_text = "CALL TRIGGERED" if twilio_enabled else "CALL BLOCKED"
+                    print(f"🚨 Alert {status_text} for unauthorized face: {event_id}")
+                else:
+                    if not twilio_enabled:
+                        print(f"🔕 Alert skipped - Twilio disabled")
+                    else:
+                        print(f"🔄 Alert skipped - face already alerted recently")
+                
+                # Update detection time for ongoing recording
+                recording_manager.update_detection_time()
+
             
             # Log detection to database (this is separate from alert_events)
             try:
                 alert_level = distance_analysis['alert_level']
                 
-                # Add detection to detections table
+                # Add detection to detections table - FIXED with user_id
                 add_detection(
-                    "face_detection", 
-                    f"Unauthorized ({distance_analysis['distance_meters']}m)", 
-                    float(confidence), 
-                    screenshot_path, 
-                    alert_level
+                    user_id=user_id,  # Use the user_id variable we defined
+                    detection_type="face_detection", 
+                    person_name=f"Unauthorized ({distance_analysis['distance_meters']}m)", 
+                    confidence=float(confidence), 
+                    screenshot_path=screenshot_path, 
+                    alert_level=alert_level
                 )
-                print(f"📝 DEBUG: Detection logged to database")
+                print(f"📝 DEBUG: Detection logged to database for user {user_id}")
                 
             except Exception as e:
                 print(f"❌ Error logging detection: {e}")
@@ -352,15 +463,22 @@ def detect_faces_with_motion_gate(frame, motion_detector, scale_factor=1.0):
             print(f"  - is_known_person: {final_is_known_person}") 
             print(f"  - trigger_alert: {distance_analysis.get('trigger_alert', False)}")
             print(f"  - should_process: {tracker_info.get('should_process', False)}")
-    
-    return results
+        
+        return results
 
-def save_to_alert_events(event_type, person_name, confidence, screenshot_path, recording_path, distance_meters, is_authorized=False, is_known_person=False):
-    """Save face detection event to alert_events table for ALL face types with duplicate prevention"""
+
+def save_to_alert_events(event_id, event_type, person_name, confidence, screenshot_path, recording_path, distance_meters, is_authorized=False, is_known_person=False):
+    """Save face detection event to alert_events table for current user"""
     try:
         from utils.database import get_db_connection
         import uuid
-        import time
+        from flask_login import current_user
+        
+        if not current_user.is_authenticated:
+            print("❌ User not authenticated, cannot save to alert_events")
+            return None
+            
+        user_id = current_user.id
         
         conn = get_db_connection()
         
@@ -370,50 +488,54 @@ def save_to_alert_events(event_type, person_name, confidence, screenshot_path, r
         # Check for recent duplicate events (within 30 seconds for the same person and type)
         recent_duplicate = conn.execute('''
             SELECT event_id FROM alert_events 
-            WHERE person_name = ? AND trigger_type = ? 
+            WHERE user_id = ? AND person_name = ? AND trigger_type = ? 
             AND timestamp > datetime(?, '-30 seconds')
             LIMIT 1
-        ''', (person_name, event_type, current_time)).fetchone()
+        ''', (user_id, person_name, event_type, current_time)).fetchone()
         
         if recent_duplicate:
-            print(f"⏳ Skipping duplicate {event_type} event for {person_name} (within 30s cooldown)")
+            print(f"⏳ Skipping duplicate {event_type} event for user {user_id}, {person_name} (within 30s cooldown)")
             conn.close()
             return None
         
-        # Generate unique event ID
-        event_id = str(uuid.uuid4())
-        
-        # Determine review status based on face type
-        if is_authorized:
-            review_status = "authorized"
-            call_status = "not_required"
-        elif is_known_person:
-            review_status = "known_person" 
-            call_status = "not_required"
-        else:
-            review_status = "pending"
-            call_status = "pending"
-        
-        # Ensure recording_path is properly formatted
+        # FIX: Ensure recording_path matches the event_id
+        web_recording_path = None
         if recording_path and isinstance(recording_path, str):
-            # Make sure it starts with static/recordings/
-            if not recording_path.startswith('static/recordings/'):
-                recording_path = f"static/recordings/{os.path.basename(recording_path)}"
-        else:
-            recording_path = None
+            # Convert backslashes to forward slashes
+            recording_path = recording_path.replace('\\', '/')
+            
+            # Extract filename
+            filename = recording_path.split('/')[-1]
+            
+            # Create filename based on event_id to ensure consistency
+            expected_filename = f"recording_{event_type.replace('_', '_')}_{event_id.replace('-', '_')}.mp4"
+            
+            print(f"📁 DEBUG: Original filename: {filename}")
+            print(f"📁 DEBUG: Expected filename: {expected_filename}")
+            print(f"📁 DEBUG: Event ID: {event_id}")
+            
+            if filename != expected_filename:
+                print(f"⚠️ WARNING: Filename mismatch! Actual: {filename}, Expected: {expected_filename}")
+                # Use the actual filename that was saved
+                web_recording_path = f"static/recordings/{filename}"
+            else:
+                web_recording_path = recording_path
+        
+        print(f"📁 DEBUG: Saving to database - recording_filepath: {web_recording_path}")
         
         # Insert into alert_events table with explicit timestamp
         conn.execute('''
             INSERT INTO alert_events 
-            (event_id, timestamp, trigger_type, recording_filepath, review_status, call_status, person_name, confidence, distance_meters, is_authorized, is_known_person)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            (event_id, user_id, timestamp, trigger_type, recording_filepath, review_status, call_status, person_name, confidence, distance_meters, is_authorized, is_known_person)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             event_id, 
-            current_time,  # Use Python datetime instead of CURRENT_TIMESTAMP
+            user_id,
+            current_time,
             event_type, 
-            recording_path, 
-            review_status, 
-            call_status,
+            web_recording_path,  # Use the properly formatted path
+            "authorized" if is_authorized else "known_person" if is_known_person else "pending",
+            "not_required" if is_authorized or is_known_person else "pending",
             person_name,
             float(confidence),
             float(distance_meters),
@@ -424,13 +546,14 @@ def save_to_alert_events(event_type, person_name, confidence, screenshot_path, r
         conn.commit()
         conn.close()
         
-        print(f"✅ Saved to alert_events: {event_type} - {person_name} at {distance_meters}m - Time: {current_time} - Recording: {recording_path}")
+        print(f"✅ Saved to alert_events for user {user_id}: {event_type} - {person_name} at {distance_meters}m - Recording: {web_recording_path}")
         return event_id
         
     except Exception as e:
         print(f"❌ Error saving to alert_events: {e}")
+        import traceback
+        traceback.print_exc()
         return None
-
 
 def estimate_distance_from_area(self, motion_area):
     """
@@ -497,6 +620,13 @@ def detect_motion_without_faces(frame, motion_detector, distance_estimator):
     try:
         print(f"🟡 DEBUG: detect_motion_without_faces called - checking for motion without faces")
         
+        # Get current user ID
+        if not current_user.is_authenticated:
+            print("❌ User not authenticated, cannot save motion detection")
+            return None
+            
+        user_id = current_user.id
+        
         # Use the motion detector to check for human motion
         motion_detected, detections, fg_mask, human_detected = motion_detector.detect_motion(frame)
         
@@ -549,6 +679,30 @@ def detect_motion_without_faces(frame, motion_detector, distance_estimator):
         
         print(f"✅ DEBUG: Motion-only detection created: trigger_alert={result['trigger_alert']}, distance={result['distance_meters']}m, zone={result['zone']}")
         
+        # Save screenshot if alert should be triggered
+        if trigger_alert:
+            try:
+                screenshot_path = save_screenshot(
+                    frame, 
+                    f"motion_no_face_{result['distance_meters']}m"
+                )
+                
+                # Save to database
+                from utils.database import add_detection
+                add_detection(
+                    user_id=user_id,  # ADD THIS
+                    detection_type="motion_detection", 
+                    person_name=result['person_name'],
+                    confidence=float(result['confidence']), 
+                    screenshot_path=screenshot_path, 
+                    alert_level=result['alert_level']
+                )
+                
+                print(f"✅ Motion detection saved to database for user {user_id}")
+                
+            except Exception as e:
+                print(f"❌ Error saving motion detection: {e}")
+        
         return result
         
     except Exception as e:
@@ -576,63 +730,31 @@ def trigger_event_recording(event_id, event_type, frame, confidence=0.0, distanc
                 f"{event_type}_{distance}m_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}"
             )
             
-            # Determine alert level and detection type based on event type
-            if event_type == 'unauthorized_face':
-                alert_level = 3
-                person_name = "Unauthorized Person"
-                detection_type = "face_detection"
-            elif event_type == 'motion_detection':
-                alert_level = 2
-                person_name = "Motion Detected, Unauthorized Person"
-                detection_type = "motion_detection"
-            elif event_type == 'authorized_face':
-                alert_level = 1
-                person_name = "Authorized Person"
-                detection_type = "face_detection"
-            elif event_type == 'known_face':
-                alert_level = 1
-                person_name = "Known Person"
-                detection_type = "face_detection"
+            print(f"✅ Recording and screenshot saved for {event_type}")
+            
+            # FIX: Convert backslashes to forward slashes
+            recording_path = recording_path.replace('\\', '/')
+            
+            # Return just the web path portion (static/recordings/filename.mp4)
+            if recording_path.startswith('static/recordings/'):
+                return recording_path
+            elif '/' in recording_path:
+                # Extract just the filename and rebuild path
+                filename = recording_path.split('/')[-1]
+                return f"static/recordings/{filename}"
             else:
-                alert_level = 1
-                person_name = f"{event_type.capitalize()} Person"
-                detection_type = "face_detection"
-            
-            print(f"📝 Creating detection for {person_name} (type: {detection_type})")
-            
-            # Add to database and get the detection ID
-            from utils.database import add_detection, get_db_connection
-            detection_id = add_detection(
-                detection_type,
-                person_name,
-                float(confidence), 
-                screenshot_path, 
-                alert_level
-            )
-            
-            # Link recording to detection
-            if detection_id and recording_path:
-                conn = get_db_connection()
-                # Update the recording with detection_id
-                conn.execute(
-                    'UPDATE recordings SET detection_id = ? WHERE file_path LIKE ?',
-                    (detection_id, f'%{event_id}%')
-                )
-                conn.commit()
-                conn.close()
-                print(f"🔗 Linked recording to detection ID: {detection_id}")
-            
-            print(f"✅ Recording and detection saved for {event_type} (Detection ID: {detection_id})")
-            return recording_path
-        else:
-            print(f"⏳ Recording not started for {event_type} (may be in cooldown)")
-            return None
+                return f"static/recordings/{recording_path}"
+        
+        print(f"⏳ Recording not started for {event_type} (may be in cooldown)")
+        return None
         
     except Exception as e:
         print(f"❌ Error triggering recording for {event_type}: {e}")
+        import traceback
+        traceback.print_exc()
         return None
 
-def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
+def detect_faces_in_frame_optimized(frame, user_id=None, scale_factor=1.0):
     """
     OPTIMIZED VERSION with DISTANCE ESTIMATION
     Detect and recognize faces, estimate distance, and only alert for close unauthorized persons
@@ -645,6 +767,10 @@ def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
         List of detected faces with locations, info, and distance
     """
     global known_face_encodings, known_face_names
+    
+    # Load faces for this specific user
+    if user_id:
+        load_known_faces_for_user(user_id)
     
     # Get distance estimator
     distance_estimator = get_distance_estimator()
@@ -763,14 +889,22 @@ def detect_faces_in_frame_optimized(frame, scale_factor=1.0):
                 
                 alert_level = distance_analysis['alert_level']
                 
-                # Add detection to database
-                add_detection(
-                    "face_detection", 
-                    f"Unauthorized ({distance_analysis['distance_meters']}m)", 
-                    float(confidence), 
-                    screenshot_path, 
-                    alert_level
-                )
+                # Add detection to database - FIXED: Add user_id
+                from flask_login import current_user
+                from utils.database import add_detection
+                
+                if current_user.is_authenticated:
+                    user_id = current_user.id
+                    add_detection(
+                        user_id=user_id,  # Use the passed user_id
+                        detection_type="face_detection", 
+                        person_name=f"Unauthorized ({distance_analysis['distance_meters']}m)", 
+                        confidence=float(confidence), 
+                        screenshot_path=screenshot_path, 
+                        alert_level=alert_level
+                    )
+                else:
+                    print(f"❌ User not authenticated, cannot log detection")
                 
                 # Send alert in background
                 import threading
@@ -1043,8 +1177,21 @@ def create_privacy_thumbnail(image_path, blur_faces=True):
         print(f"Error creating privacy thumbnail: {e}")
         return None
     
-def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=0.0, frame=None, face_encoding=None, twilio_enabled=True):
+def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=0.0, frame=None, face_encoding=None, twilio_enabled=True, user_id=None):
     """Trigger security alert with Twilio calls and recording - WITH FACE TRACKING AND TWILIO CONTROL"""
+        
+    if user_id is None:
+        try:
+            from flask_login import current_user
+            if current_user and current_user.is_authenticated:
+                user_id = current_user.id
+            else:
+                print(f"❌ User not authenticated and no user_id provided, skipping alert")
+                return None
+        except:
+            print(f"❌ Cannot access current_user and no user_id provided")
+            return None
+        
     from utils.twilio_alert_system import twilio_alert_system
     
     print(f"🔍 DEBUG: trigger_security_alert called with:")
@@ -1053,6 +1200,15 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
     print(f"  - confidence: {confidence}")
     print(f"  - twilio_enabled: {twilio_enabled}")
     print(f"  - face_encoding: {'Provided' if face_encoding is not None else 'None'}")
+
+    
+    # Get current user ID from Flask-Login
+    from flask_login import current_user
+    if not current_user.is_authenticated:
+        print(f"❌ User not authenticated, skipping alert")
+        return None
+    
+    user_id = current_user.id
     
     # ✅ Check if Twilio is enabled
     if not twilio_enabled:
@@ -1060,17 +1216,18 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
         # Still log the event but don't call
         from utils.database import add_detection
         add_detection(
-            trigger_type.lower().replace(' ', '_'),
-            person_name,
-            confidence,
-            None,  # No screenshot for blocked calls
+            user_id=user_id,  # ADD THIS
+            detection_type=trigger_type.lower().replace(' ', '_'),
+            person_name=person_name,
+            confidence=confidence,
+            screenshot_path=None,  # No screenshot for blocked calls
             alert_level=3
         )
         return None
     
     # ✅ Check if we should trigger alert for this face
     if face_encoding is not None:
-        should_alert = twilio_alert_system.should_trigger_alert_for_face(face_encoding)
+        should_alert = twilio_alert_system.should_trigger_alert_for_face(user_id, face_encoding)
         print(f"🔍 DEBUG: should_trigger_alert_for_face returned: {should_alert}")
         
         if not should_alert:
@@ -1098,9 +1255,10 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
         screenshot_path = save_screenshot(frame, f"unauthorized_{event_id}")
         print(f"🔍 DEBUG: Screenshot saved: {screenshot_path}")
     
-    # ✅ UPDATED: Trigger escalation WITH face encoding
+    # ✅ UPDATED: Trigger escalation WITH face encoding and user_id
     print(f"🔍 DEBUG: Calling trigger_alert_escalation...")
     alert_result = twilio_alert_system.trigger_alert_escalation(
+        user_id,
         event_id, 
         trigger_type, 
         final_mp4_path,
@@ -1111,20 +1269,21 @@ def trigger_security_alert(trigger_type, person_name="Unauthorized", confidence=
     
     # Log the result
     if alert_result.get('status') == 'escalation_started':
-        print(f"🚨 Alert escalation started for event: {event_id}")
+        print(f"🚨 Alert escalation started for user {user_id}, event: {event_id}")
     elif alert_result.get('status') == 'error':
         print(f"❌ Alert failed: {alert_result.get('error')}")
     
     # Log to database
     from utils.database import add_detection
     add_detection(
-        trigger_type.lower().replace(' ', '_'),
-        person_name,
-        confidence,
-        screenshot_path,
+        user_id=user_id,  # ADD THIS
+        detection_type=trigger_type.lower().replace(' ', '_'),
+        person_name=person_name,
+        confidence=confidence,
+        screenshot_path=screenshot_path,
         alert_level=3
     )
     
-    print(f"✅ Detection logged to database for event: {event_id}")
+    print(f"✅ Detection logged to database for user {user_id}, event: {event_id}")
     
     return event_id
