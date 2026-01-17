@@ -565,45 +565,34 @@ def update_authorized_cooldown():
         return jsonify({'success': False, 'error': str(e)})
 
 @app.route('/api/get_detection_logs_simple')
-@login_required  # ADD THIS DECORATOR
+@login_required 
 def get_detection_logs_simple():
-    """Simple version - just filter by detection_type and person_name patterns - NOW USER-SPECIFIC"""
+    """
+    Fixed version: Retrieves ALL detections for the user without strict name filtering.
+    """
     try:
         from utils.database import get_db_connection
         conn = get_db_connection()
         
-        print(f"🔍 DEBUG: Fetching logs for user_id: {current_user.id}")
-        
-        # UPDATED QUERY: Added WHERE user_id = ? clause
+        # FIXED QUERY: Removed the strict AND clauses that were filtering out valid data
         query = '''
             SELECT * FROM detections 
-            WHERE user_id = ?  -- ADD THIS FILTER
-            AND (detection_type IN ('face_detection', 'unauthorized_face'))
-            AND (
-                person_name LIKE '%Authorized%' OR
-                person_name LIKE '%Known%' OR
-                person_name LIKE '%Unauthorized%' OR
-                person_name = 'Authorized Person' OR
-                person_name = 'Known Person' OR
-                person_name = 'Unauthorized Person'
-            )
-            AND person_name NOT LIKE 'Unauthorized (%'  -- Exclude distance entries
+            WHERE user_id = ? 
             ORDER BY timestamp DESC 
             LIMIT 200
         '''
         
-        detections = conn.execute(query, (current_user.id,)).fetchall()  # ADD PARAMETER
-        print(f"📊 Found {len(detections)} matching detections for user {current_user.id}")
+        detections = conn.execute(query, (current_user.id,)).fetchall()
         
         logs_list = []
-        # Dictionary to track last seen timestamp for each person_name
         last_seen = {}
         
         for detection in detections:
-            person_name = detection['person_name']
+            person_name = detection['person_name'] or 'Unknown'
+            detection_type_db = detection['detection_type']
             timestamp_str = detection['timestamp']
             
-            # Parse timestamp
+            # --- Timestamp Parsing ---
             try:
                 timestamp_obj = datetime.datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
             except:
@@ -612,40 +601,38 @@ def get_detection_logs_simple():
                 except:
                     timestamp_obj = datetime.datetime.now()
             
-            # Check if we've seen this person recently (within 5 seconds)
+            # --- De-duplication Logic (Optional: Keep duplicate logs if they are > 5s apart) ---
             if person_name in last_seen:
                 last_time = last_seen[person_name]
                 time_diff = abs((timestamp_obj - last_time).total_seconds())
-                
-                # Skip if within 5 seconds of last detection
                 if time_diff <= 5:
-                    print(f"⏭️ Skipping duplicate '{person_name}' at {timestamp_str} (diff: {time_diff:.1f}s)")
                     continue
-            
-            # Update last seen time
             last_seen[person_name] = timestamp_obj
             
-            # Determine person type
+            # --- FIXED CLASSIFICATION LOGIC ---
+            # Instead of skipping (continue), we assign a type based on content
+            
             if 'Authorized' in person_name or person_name == 'Authorized Person':
                 person_type = 'Authorized Person'
-                detection_type = 'face_detection'
             elif 'Known' in person_name or person_name == 'Known Person':
                 person_type = 'Known Person'
-                detection_type = 'face_detection'
-            elif 'Unauthorized' in person_name or detection['detection_type'] == 'unauthorized_face':
-                # Double-check for distance entries (should already be filtered by query)
-                if 'Unauthorized (' in person_name:
-                    print(f"⏭️ Skipping distance entry: '{person_name}'")
-                    continue
-                person_type = 'Unauthorized Face'
-                detection_type = 'face_detection'
+            elif 'Unauthorized' in person_name or detection_type_db == 'unauthorized_face':
+                # Filter out distance debug entries if preferred
+                if 'Unauthorized (' in person_name: 
+                    # Optional: Rename it to look cleaner
+                    person_type = 'Unauthorized Face'
+                else:
+                    person_type = 'Unauthorized Face'
+            elif detection_type_db == 'motion_detection':
+                person_type = 'Motion Detected'
             else:
-                continue
+                # FALLBACK: If it's a specific name (e.g. "John") without "Authorized" prefix
+                person_type = 'Identified Person' 
             
             log_data = {
                 'id': detection['id'],
                 'timestamp': timestamp_str,
-                'detection_type': detection_type,
+                'detection_type': detection_type_db,
                 'person_type': person_type,
                 'person_name': person_name,
                 'confidence': float(detection['confidence']) if detection['confidence'] else 0,
@@ -653,13 +640,8 @@ def get_detection_logs_simple():
                 'alert_level': detection['alert_level']
             }
             logs_list.append(log_data)
-            
-            print(f"✅ Added: {person_type} - '{person_name}' at {timestamp_str}")
         
         conn.close()
-        
-        print(f"📊 Returning {len(logs_list)} unique logs for user {current_user.id}")
-        
         return jsonify({'success': True, 'logs': logs_list})
         
     except Exception as e:

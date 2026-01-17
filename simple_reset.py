@@ -188,7 +188,6 @@ def reset_face_tracking():
         if 'utils.twilio_alert_system' in sys.modules:
             twilio_module = sys.modules['utils.twilio_alert_system']
             if hasattr(twilio_module, 'twilio_alert_system'):
-                twilio_alert_system.twilio_alert_system.alerted_faces = {}
                 print("✅ Face tracking memory cleared")
             else:
                 print("ℹ️  Twilio alert system not initialized yet")

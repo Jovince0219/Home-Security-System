@@ -270,22 +270,25 @@
 
             // Determine styling based on person type
             let typeClass, typeIcon;
-            switch (log.person_type) {
-                case 'Authorized Person':
-                    typeClass = 'bg-green-100 text-black-800 border border-green-300';
-                    typeIcon = '<i class="fas fa-user-check text-green-600"></i>';
-                    break;
-                case 'Known Person':
-                    typeClass = 'bg-yellow-100 text-black-800 border border-yellow-300';
-                    typeIcon = '<i class="fas fa-user-tag text-yellow-600"></i>';
-                    break;
-                case 'Unauthorized Face':
-                    typeClass = 'bg-red-100 text-black-800 border border-red-300';
-                    typeIcon = '<i class="fas fa-user-times text-red-600"></i>';
-                    break;
-                default:
-                    typeClass = 'bg-gray-100 text-black-800 border border-gray-300';
-                    typeIcon = '<i class="fas fa-user text-gray-600"></i>';
+            // Normalized check to handle case variations
+            const pType = log.person_type || 'Unknown';
+
+            if (pType.includes('Authorized')) {
+                typeClass = 'bg-green-100 text-black-800 border border-green-300';
+                typeIcon = '<i class="fas fa-user-check text-green-600"></i>';
+            } else if (pType.includes('Known')) {
+                typeClass = 'bg-yellow-100 text-black-800 border border-yellow-300';
+                typeIcon = '<i class="fas fa-user-tag text-yellow-600"></i>';
+            } else if (pType.includes('Unauthorized')) {
+                typeClass = 'bg-red-100 text-black-800 border border-red-300';
+                typeIcon = '<i class="fas fa-user-times text-red-600"></i>';
+            } else if (pType.includes('Motion')) {
+                typeClass = 'bg-blue-100 text-black-800 border border-blue-300';
+                typeIcon = '<i class="fas fa-running text-blue-600"></i>';
+            } else {
+                // Default case for specific names or other types
+                typeClass = 'bg-gray-100 text-black-800 border border-gray-300';
+                typeIcon = '<i class="fas fa-user text-gray-600"></i>';
             }
 
             // Determine alert level styling
