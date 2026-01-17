@@ -480,27 +480,6 @@ def get_alert_settings(user_id):
     finally:
         conn.close()
 
-def get_alert_settings(user_id):
-    """Enhanced alert settings retrieval with better error handling - UPDATED with user_id"""
-    conn = get_db_connection()
-    try:
-        settings = conn.execute('SELECT * FROM alert_settings WHERE user_id = ?', (user_id,)).fetchone()
-        
-        if settings:
-            settings_dict = dict(settings)
-            # Ensure boolean fields are properly converted
-            settings_dict['enable_email'] = bool(settings_dict['enable_email'])
-            settings_dict['enable_police_alerts'] = bool(settings_dict['enable_police_alerts'])
-            return settings_dict
-        else:
-            return None
-            
-    except Exception as e:
-        print(f"Error retrieving alert settings: {e}")
-        return None
-    finally:
-        conn.close()
-
 def add_alert(user_id, alert_type, message, recipient=None):
     conn = get_db_connection()
     conn.execute(

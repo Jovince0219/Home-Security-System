@@ -367,6 +367,7 @@ def detect_faces_with_motion_gate(frame, motion_detector, user_id=None, scale_fa
             
             # Save to alert_events table for ALL face types
             save_to_alert_events(
+                event_id=detection_event_id, 
                 event_type=event_type,
                 person_name=final_name,
                 confidence=confidence,

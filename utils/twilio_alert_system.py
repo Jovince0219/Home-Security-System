@@ -382,20 +382,28 @@ class TwilioAlertSystem:
         return cleaned
             
     def trigger_alert_escalation(self, user_id, event_id, trigger_type, recording_filepath=None, face_encoding=None):
-        """Trigger voice call escalation with face tracking for specific user"""
-        # ✅ FIX: Check if we have any active phone numbers for this user
-        active_numbers = self.get_active_phone_numbers(user_id)
-        if not active_numbers:
-            return {'status': 'error', 'error': 'No phone numbers configured for this user'}
+            """Trigger voice call escalation with face tracking for specific user"""
             
-        self.log_event(user_id, event_id, trigger_type, recording_filepath)
-        
-        # Start in background
-        thread = Thread(target=self._execute_escalation, args=(user_id, event_id, face_encoding))
-        thread.daemon = True
-        thread.start()
-        
-        return {'status': 'escalation_started', 'event_id': event_id}
+            # Check if we have any active phone numbers for this user
+            active_numbers = self.get_active_phone_numbers(user_id)
+            
+            if not active_numbers:
+                # Try reloading just in case
+                self.load_phone_numbers(user_id)
+                active_numbers = self.get_active_phone_numbers(user_id)
+                
+                if not active_numbers:
+                    print(f"❌ ERROR: No active phone numbers found for user {user_id}. Call aborted.")
+                    return {'status': 'error', 'error': 'No phone numbers configured'}
+                
+            self.log_event(user_id, event_id, trigger_type, recording_filepath)
+            
+            # Start in background
+            thread = Thread(target=self._execute_escalation, args=(user_id, event_id, face_encoding))
+            thread.daemon = True
+            thread.start()
+            
+            return {'status': 'escalation_started', 'event_id': event_id}
         
     def _execute_escalation(self, user_id, event_id, face_encoding=None):
         """Execute escalation logic with multiple numbers for specific user"""
